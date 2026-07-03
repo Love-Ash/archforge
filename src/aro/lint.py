@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-jangpyo(장표): 빌드된 .pptx를 받아 반복 결함을 기계로 차단하는 한글 특화 품질 린터.
+aro(아로): 빌드된 .pptx를 받아 반복 결함을 기계로 차단하는 한글 특화 품질 린터.
 
 존재 이유: 규칙을 문서에 적어둬도 만들 때마다 같은 실수가 반복된다. 기계로 검사 가능한 결함은
 사람 눈이 아니라 이 린터가 막는다. 한글 덱이 조용히 깨지는 지점(라틴 전용 폰트로의 폴백, CJK 자간,
@@ -36,7 +36,7 @@ wrap=none(word_wrap=False, python-pptx add_textbox 기본) 한 줄 실폭, autof
 회전 텍스트는 스킵), 그림 srcRect 크롭·flipH/V·P모드 tRNS 투명, W17은 사진-캡션 사이 솔리드
 카드(z순서)를 억제. 남은 한계: 플레이스홀더의 레이아웃 lstStyle 정렬 상속은 좌정렬로 후퇴.
 
-사용: jangpyo <built.pptx> [--hard-min 5.0] [--body-min 9.0] [--strict] [--render <pages>] [--ghost] [--json]
+사용: aro <built.pptx> [--hard-min 5.0] [--body-min 9.0] [--strict] [--render <pages>] [--ghost] [--json]
   --strict: WARN도 exit 1로 취급. --render: W7 활성화. --ghost: 타이틀 나열(수평 논리 눈검수).
 반환: ERROR가 하나라도 있으면 exit 1, 아니면 0.
 """
@@ -1087,7 +1087,7 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8")
     except Exception:
         pass
-    ap = argparse.ArgumentParser(prog="jangpyo",
+    ap = argparse.ArgumentParser(prog="aro",
                                  description="빌드된 .pptx를 배포 전에 기계로 검사하는 한글 특화 품질 린터")
     ap.add_argument("pptx")
     ap.add_argument("--hard-min", type=float, default=5.0)
@@ -1100,14 +1100,14 @@ def main():
     a = ap.parse_args()
 
     if not os.path.exists(a.pptx):
-        print("jangpyo: 파일을 찾을 수 없습니다: %s" % a.pptx, file=sys.stderr)
+        print("aro: 파일을 찾을 수 없습니다: %s" % a.pptx, file=sys.stderr)
         sys.exit(2)
 
     ghost = [] if (a.ghost or a.json) else None
     try:
         errors, warns = lint(a.pptx, a.hard_min, a.body_min, a.small_min, render_dir=a.render, ghost=ghost)
     except Exception as e:
-        print("jangpyo: pptx 를 열 수 없습니다(유효한 .pptx 인지 확인): %s (%s)"
+        print("aro: pptx 를 열 수 없습니다(유효한 .pptx 인지 확인): %s (%s)"
               % (a.pptx, type(e).__name__), file=sys.stderr)
         sys.exit(2)
 
@@ -1124,7 +1124,7 @@ def main():
         print(json.dumps(doc, ensure_ascii=False, indent=2))
         sys.exit(1 if (errors or (a.strict and warns)) else 0)
 
-    print("=== JANGPYO LINT: %s ===" % a.pptx)
+    print("=== ARO LINT: %s ===" % a.pptx)
     if ghost:
         print("--- ghost deck (제목만 읽기: 주장이 이야기로 흐르는가) ---")
         for si, txt in ghost:

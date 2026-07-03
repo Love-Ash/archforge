@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""jangpyo 게이트 회귀: 양성(결함을 심은 pptx가 잡히는가)과 음성(클린·의도 연출이
+"""aro 게이트 회귀: 양성(결함을 심은 pptx가 잡히는가)과 음성(클린·의도 연출이
 오탐 없이 통과하는가)을 게이트별 픽스처로 고정한다.
 
 긴 대시 등 린터가 차단하는 문자는 소스에 리터럴로 두지 않고 chr(코드포인트)로 만든다:
@@ -18,7 +18,7 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.shapes import MSO_CONNECTOR
 from pptx.oxml.ns import qn
 
-import jangpyo.lint as jl
+import aro.lint as jl
 
 
 # ---------------------------------------------------------------- helpers
@@ -384,7 +384,7 @@ def test_cli_json_and_exit_codes(tmp_path):
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
     bad = save(p, tmp_path, "bad.pptx")
     # stdin=DEVNULL: pytest 캡처 하의 Windows 핸들 상속 실패(WinError 6) 회피
-    r = subprocess.run([sys.executable, "-m", "jangpyo.lint", bad, "--json"],
+    r = subprocess.run([sys.executable, "-m", "aro.lint", bad, "--json"],
                        capture_output=True, text=True, encoding="utf-8",
                        stdin=subprocess.DEVNULL)
     doc = json.loads(r.stdout)
@@ -396,7 +396,7 @@ def test_cli_json_and_exit_codes(tmp_path):
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.6, "clean page", font="Wanted Sans", size=20)
     good = save(p, tmp_path, "good.pptx")
-    r = subprocess.run([sys.executable, "-m", "jangpyo.lint", good, "--json"],
+    r = subprocess.run([sys.executable, "-m", "aro.lint", good, "--json"],
                        capture_output=True, text=True, encoding="utf-8",
                        stdin=subprocess.DEVNULL)
     doc = json.loads(r.stdout)

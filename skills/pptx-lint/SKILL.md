@@ -1,11 +1,11 @@
 ---
-name: jangpyo-pptx-lint
-description: Use when building, editing, or reviewing .pptx files (especially Korean/CJK decks) - run the jangpyo linter on the built file before delivery, read its gate codes, fix defects, and re-lint until clean. Catches silent Korean font fallback, CJK tracking damage, unreadable sizes, text collisions, off-canvas bleed, and AI-generated deck tells that are invisible in code review.
+name: aro-pptx-lint
+description: Use when building, editing, or reviewing .pptx files (especially Korean/CJK decks) - run the aro linter on the built file before delivery, read its gate codes, fix defects, and re-lint until clean. Catches silent Korean font fallback, CJK tracking damage, unreadable sizes, text collisions, off-canvas bleed, and AI-generated deck tells that are invisible in code review.
 ---
 
-# jangpyo: PPTX quality gate for agents
+# aro: PPTX quality gate for agents
 
-jangpyo (장표) is a CLI linter for built `.pptx` files. It inspects the file itself
+aro (아로) is a CLI linter for built `.pptx` files. It inspects the file itself
 (no PowerPoint needed), so it works in any headless environment. Korean typography
 is a first-class concern: the most damaging pptx defects for Korean decks are
 silent (fonts fall back to Malgun without any error; tracking quietly wrecks
@@ -23,11 +23,11 @@ Run it EVERY time, not just when something looks wrong:
 
 ```
 pip install -e <repo-path>     # from the repo (not yet on PyPI)
-jangpyo deck.pptx              # human-readable report, exit 1 if any ERROR
-jangpyo deck.pptx --json       # machine-readable (recommended for agents)
-jangpyo deck.pptx --strict     # WARNs also fail the exit code
-jangpyo deck.pptx --ghost      # per-page title list (horizontal-logic review)
-jangpyo deck.pptx --render pages/   # + on-image contrast check (W7); needs p01.png/p02.png-named PNGs
+aro deck.pptx              # human-readable report, exit 1 if any ERROR
+aro deck.pptx --json       # machine-readable (recommended for agents)
+aro deck.pptx --strict     # WARNs also fail the exit code
+aro deck.pptx --ghost      # per-page title list (horizontal-logic review)
+aro deck.pptx --render pages/   # + on-image contrast check (W7); needs p01.png/p02.png-named PNGs
 ```
 
 `--json` output shape:
@@ -82,7 +82,7 @@ says so. Most are approximation-based, calibrated against rendered output.
 ```
 build deck.pptx
 loop:
-    result = jangpyo deck.pptx --json
+    result = aro deck.pptx --json
     if result.summary.error_count == 0: break
     fix the listed defects (smallest page number first)
     rebuild
