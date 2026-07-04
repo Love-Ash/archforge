@@ -170,6 +170,22 @@ def test_w7_low_contrast_needs_render(tmp_path):
     assert "W7" in codes(warns)
 
 
+def test_render_on_textonly_deck_no_crash(tmp_path):
+    """이미지가 한 장도 없는 텍스트 전용 덱을 --render로 린트해도 크래시하지 않아야 한다.
+    회귀: glob 이 contrast_check 지역 import 로만 있던 시절, render_png_hits==0 분기의
+    glob.glob 이 NameError 로 죽고 그게 'pptx 못 엶'으로 오라벨됐다(2026-07-04)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 0.8, 9, 0.8, "제목만 있는 페이지", font="Wanted Sans", size=28)
+    tb(s, 1, 2.2, 10, 3, "본문 텍스트, 이미지는 없다.", font="Wanted Sans", size=13)
+    pages = os.path.join(str(tmp_path), "pages")
+    os.makedirs(pages)
+    from PIL import Image
+    Image.new("RGB", (1600, 900), (240, 240, 240)).save(os.path.join(pages, "slide-1.png"))  # 규약과 다른 이름
+    errors, warns = jl.lint(save(p, tmp_path, "fx.pptx"), render_dir=pages)  # NameError 나면 실패
+    assert isinstance(errors, list) and isinstance(warns, list)
+
+
 def test_w9_accent_vbars(tmp_path):
     p = new_prs()
     s = add_slide(p)

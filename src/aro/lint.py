@@ -42,6 +42,7 @@ wrap=none(word_wrap=False, python-pptx add_textbox 기본) 한 줄 실폭, autof
 """
 import os
 import sys
+import glob
 import argparse
 import colorsys
 from collections import Counter
@@ -848,7 +849,6 @@ def _run_rgb(run):
 
 def contrast_check(slide, si, sw, sh, render_dir, warns):
     """이미지 위 텍스트 저대비 감지(렌더 PNG 근사). picture와 겹치는 텍스트 프레임만, 슬라이드당 1회."""
-    import glob
     from PIL import Image
     pics = []
     for sp in iter_shapes(slide.shapes):
