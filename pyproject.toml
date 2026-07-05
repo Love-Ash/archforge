@@ -24,7 +24,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Love-Ash/Archforge"
+Homepage = "https://github.com/Love-Ash/archforge"
 
 [project.scripts]
 archforge = "archforge.lint:main"
