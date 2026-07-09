@@ -22,7 +22,8 @@ Run it EVERY time, not just when something looks wrong:
 ## Install and run
 
 ```
-pip install -e <repo-path>     # from the repo (not yet on PyPI)
+pip install archforge            # from PyPI
+pip install -e <repo-path>       # or from the repo, for development
 archforge deck.pptx              # human-readable report, exit 1 if any ERROR
 archforge deck.pptx --json       # machine-readable (recommended for agents)
 archforge deck.pptx --strict     # WARNs also fail the exit code

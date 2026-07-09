@@ -32,9 +32,11 @@
 ## 설치
 
 ```bash
-pip install archforge          # 배포 전이면
-pip install -e .               # 리포에서 직접
+pip install archforge          # PyPI
+pip install -e .               # 리포에서 직접(개발용)
 ```
+
+파이썬 3.9 이상이면 되고, python-pptx와 Pillow만 딸려 옵니다. 파워포인트는 필요 없습니다.
 
 ## 사용
 
