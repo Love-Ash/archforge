@@ -6,3 +6,11 @@ build/
 .pytest_cache/
 .venv/
 *.pptx
+
+Trash Can/
+out.txt
+dist/
+build/
+*.egg-info/
+__pycache__/
+.pytest_cache/

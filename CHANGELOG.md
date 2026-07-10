@@ -1,0 +1,100 @@
+# Changelog
+
+## 0.2.0 (2026-07-10)
+
+외부 심층 리뷰(6관점 + 적대 재검증)의 지적 전량을 반영하고, 반영분 자체를 다시
+자체 적대 패널(8관점 리뷰 + 발견별 반박 검증, 22에이전트)에 통과시켜 확정 11건을
+추가 수정한 릴리스입니다.
+
+### 자체 적대 패널 라운드에서 추가된 것
+
+- W18 신설: 가드가 삼킨 검사 불능 구간(손상·비정형 속성)을 stderr만이 아니라
+  JSON·텍스트 출력에 경고로 표면화. `summary.pass`만 보는 CI가 불완전 검사를 완전
+  통과로 오독하던 침묵 저하의 교정. `--strict`에선 exit 1로 승격.
+- 코어 라인 게이트 가드를 프레임 단위에서 run 단위로: 한 run의 쓰레기 속성이 같은
+  프레임 이웃 run의 진짜 E1 위반까지 삼켜 거짓 clean을 만들던 것 교정.
+- 기하 캐시 디커플링: 글리프 박스 계산 실패가 무관한 그림 W16까지 침묵시키던 공유
+  게이트 제거(실패한 축만 후퇴, 살아있는 축은 계속 검사).
+- E2 숫자 맥락 예외를 문단 컨텍스트로 판정: run 경계로 쪼개진 연도 범위("2020" +
+  "(U+2013)2024")가 오탐되던 것 교정(PowerPoint는 철자검사·서식 경계로 run을 흔히 쪼갬).
+- OOXML 테마 토큰("+mn-lt"/"+mj-ea" 류)을 실폰트로 해석 후 E1 판정: 토큰을 문자
+  그대로 블록리스트에 대조해 라틴 전용 테마 폰트 폴백이 미탐되던 것 교정.
+- W6용 슬라이드 시그니처의 이중 append 경로 제거(sig와 tokens를 각자 가드): 토큰
+  수집 실패 시 W6 페이지 번호가 밀리던 것 교정.
+- SizeResolver: placeholder 순회 가드를 루프 전체에서 항목 단위로(손상 placeholder
+  하나가 검색을 통째로 중단시키던 것), layout/master 조회 메모이제이션 추가.
+- `archforge skill` 실행 시 현재 폴더에 "skill" 파일이 있으면 stderr 안내(그 파일을
+  린트하려면 `archforge ./skill`).
+- 테마 파싱 실패 마스터가 있으면 stderr로 후퇴 사실 고지(파스 실패와 빈 슬롯 구분
+  소실 지점의 신호 보존).
+
+### E1: 폰트 판정 재설계 (실측 렌더 모델)
+
+- PowerPoint COM 프로브로 CJK 폰트 해석 우선순위를 실측 확정: run `a:ea` > 비어있지 않은
+  테마 minorFont `a:ea`(run `a:latin`보다 우선) > 빈 테마일 때만 run `a:latin` > OS 폴백.
+  기록은 `docs/CALIBRATION.md`.
+- 구버전 `ea or latin` 대용 판정 폐기. 이로써 (1) 빈 테마에서 라틴 전용 latin 폰트가
+  만들던 미탐과 (2) 비어있지 않은 한글 테마 ea가 렌더를 받는데도 latin만 보고 내던 오탐이
+  함께 사라짐.
+- 블록리스트를 덱 상용 라틴 패밀리 60여 종으로 확장(Inter, Arial, Calibri, Segoe UI,
+  Roboto, IBM Plex Sans, Noto Sans 등). 한글 완비 변형 접두 오탐은 예외 목록으로 차단
+  (Arial Unicode, IBM Plex Sans KR, Noto Sans/Serif KR·CJK).
+- NanumGothicCoding을 블록리스트에서 제거(한글 완비 고정폭 폰트를 라틴 전용으로 오분류).
+- 테마 `a:ea`를 슬라이드 → 마스터 → 테마 관계(rels)로 마스터별 해석. 멀티마스터 덱에서
+  무관한 첫 테마 파트로 E1을 오발화하던 것 교정. byte 정규식 대신 XML 파싱.
+
+### E2: 정당 타이포 예외
+
+- 숫자 사이 en dash(U+2013 범위 표기)와 숫자 앞 수학 마이너스(U+2212 음수)는 기본 모드
+  통과. `--strict`는 예외 없이 전부 차단(기존 전면 차단 규율 유지용).
+
+### 크기 게이트: 상속 체인 해석
+
+- 실효 크기가 run > 문단 > 도형 lstStyle > 레이아웃 placeholder > 마스터
+  placeholder·txStyles > `defaultTextStyle`을 해석. placeholder·템플릿 덱에서 E3/W1/W8이
+  실제로 돌게 됨. W5는 체인 전체가 침묵할 때만 발화.
+
+### 견고성
+
+- 코어 라인 게이트(E1~E4)와 W6/W10 클러스터링에 프레임·블록 단위 가드. 외부 생성기의
+  쓰레기 속성 하나가 lint 전체를 죽여 exit 2("못 엶")로 오라벨되던 것 교정.
+- `spc` 트래킹이 OOXML universal measure("1.5pt")와 쓰레기값을 흡수(autofit 퍼센트
+  유니언과 같은 함정의 spc 판).
+- 완전 클론 슬라이드의 코사인이 부동소수점상 1.0을 넘던 것 클램프.
+
+### 장르·튜닝
+
+- `--skip CODES`: 장르에 안 맞는 경고 선택 억제(에디토리얼 덱의 W14 등).
+- `--w6-sim` / `--w6-cluster`: W6 골격 반복 임계 튜너블.
+- W14가 숫자+단위 타이틀("매출 3배 성장")을 주장형으로 인정.
+
+### 패키징·배포
+
+- 스킬팩을 wheel에 동봉(`src/archforge/skills/`, package-data). 0.1.0은 pip 사용자가
+  SKILL.md를 받을 방법이 없었음.
+- `archforge skill` 서브커맨드 신설: 출력 / `--install [DIR]` 설치 / `--path`.
+- 스킬 디렉터리명을 frontmatter name과 일치하도록 `archforge-pptx-lint/`로 변경
+  (Agent Skills 규격). 루트 `skills/` 사본과 패키지 정본의 동일성은 테스트로 고정.
+- GitHub Actions CI 신설: ubuntu 3.9/3.12/3.13 + windows 3.12 매트릭스, wheel 동봉·설치
+  스모크 잡. `[project.optional-dependencies] test` 선언.
+
+### 성능·아키텍처
+
+- 슬라이드당 글리프·그림 잉크 bbox를 1회만 계산해 W15~W17에 주입(기존 텍스트 3회,
+  그림 PIL 디코드 2회 재계산).
+- E1 판정을 `e1_violation()`으로, E2를 `dash_violations()`으로 추출(단위 테스트 가능).
+  기하 박스는 매직 인덱스 튜플 대신 `GlyphBox` NamedTuple. 주요 공개 함수에 타입 힌트.
+
+### 문서·테스트
+
+- `docs/CALIBRATION.md` 신설: 코퍼스 구성·방법, E1 실측 표, 게이트별 임계 근거, 재보정
+  손잡이.
+- README·SKILL.md를 0.2.0 동작으로 갱신(JSON `ghost` 필드, 튜너블 플래그, E2 예외,
+  E1 모델, 스킬 설치 경로).
+- 테스트 18 → 42개: E1 모델 매트릭스, 테마 관계, E2 맥락·strict, spc 방어, 부분 생존,
+  placeholder 상속(E3/W1), defaultTextStyle 제거 시 W5, 표 셀 E1, exit 2 경로, 텍스트
+  출력, `--ghost`, `--skip`, W6 튜너블, W14 숫자 주장, 스킬 동기화·frontmatter·서브커맨드.
+
+## 0.1.0 (2026-07-10)
+
+최초 공개. E1~E4 / W1~W17 게이트, `--json`, Agent Skills 스킬팩(리포 내), pytest 18개.

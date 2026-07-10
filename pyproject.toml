@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "archforge"
-version = "0.1.0"
+version = "0.2.0"
 description = "PPTX quality linter with Korean-typography awareness: catches silent font fallback, tracking damage, text collisions, off-canvas bleed, and AI-generated deck tells in built .pptx files"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -23,6 +23,9 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
 [project.urls]
 Homepage = "https://github.com/Love-Ash/archforge"
 
@@ -31,3 +34,9 @@ archforge = "archforge.lint:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# 스킬팩을 wheel에 동봉한다. skills/가 src/ 밖에만 있어 pip 사용자에게 SKILL.md가
+# 안 딸려가던 배포 구멍의 교정(2026-07-10). 리포 루트 skills/는 발견용 사본이며
+# 정본은 src/archforge/skills/(테스트가 두 파일 동일성을 회귀로 고정).
+[tool.setuptools.package-data]
+archforge = ["skills/archforge-pptx-lint/*.md"]

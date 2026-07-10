@@ -11,4 +11,4 @@ from . import lint as _lint_module  # noqa: F401  (서브모듈 로드 보장)
 from .lint import lint as lint_pptx  # noqa: F401
 from .lint import frame_autofit, frame_font_scale, main  # noqa: F401
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

@@ -26,10 +26,17 @@ pip install archforge            # from PyPI
 pip install -e <repo-path>       # or from the repo, for development
 archforge deck.pptx              # human-readable report, exit 1 if any ERROR
 archforge deck.pptx --json       # machine-readable (recommended for agents)
-archforge deck.pptx --strict     # WARNs also fail the exit code
+archforge deck.pptx --strict     # WARNs also fail + numeric-dash exemptions off
 archforge deck.pptx --ghost      # per-page title list (horizontal-logic review)
 archforge deck.pptx --render pages/   # + on-image contrast check (W7); needs p01.png/p02.png-named PNGs
+archforge deck.pptx --skip W14,W6     # suppress genre-mismatched warnings (editorial decks)
+archforge deck.pptx --w6-sim 0.95 --w6-cluster 5   # loosen W6 for template-driven houses
+archforge skill --install        # install this skill pack into ./.claude/skills
 ```
+
+This skill pack ships inside the wheel: after `pip install archforge`, run
+`archforge skill` to print it or `archforge skill --install [DIR]` to install it.
+No repo clone needed.
 
 `--json` output shape:
 
@@ -53,19 +60,20 @@ ERROR = ship-blockers. Fix, rebuild, re-lint. Never deliver with ERROR > 0.
 
 | Code | Meaning | Fix |
 |------|---------|-----|
-| E1 | CJK text will render through a Latin-only font slot (e.g. IBM Plex Mono, Consolas) or an empty theme `a:ea` slot: silent Malgun fallback | Give Korean runs a CJK-capable font (Gothic/Myeongjo family). Keep mono fonts for ASCII-only labels. Patch the theme `a:ea` slot if fonts are unset |
-| E2 | A dash-family character in rendered text: em/en/figure dash, and also the math minus (U+2212), fullwidth hyphen (U+FF0D), box-drawing line (U+2500) | For dashes, use a colon, comma, parentheses, or line break. For a minus sign (common in copied financial data, e.g. −3.2%), use an ASCII hyphen `-` |
-| E3 | Effective font size below 5pt (autofit scale and inheritance included): unreadable | Redesign, don't just bump the number: fewer items, one representative element bigger |
+| E1 | The font that will actually render the CJK text is Latin-only (no Hangul glyphs), so Hangul silently falls back to Malgun. Effective font follows the measured PowerPoint model: run `a:ea` > non-empty theme minorFont `a:ea` (beats run `a:latin`) > run `a:latin` only when the theme ea slot is empty > OS fallback | Give Korean runs a CJK-capable font. Setting only `font.name` (= `a:latin`) with a Korean font works when the theme ea slot is empty, but setting `a:ea` explicitly is the robust fix. Keep mono/Latin display fonts for ASCII-only labels |
+| E2 | A dash-family character in rendered text: em dash U+2014, en dash U+2013, figure dash U+2012, horizontal bar U+2015, 2/3-em dashes U+2E3A/U+2E3B, math minus U+2212, fullwidth hyphen U+FF0D, box-drawing line U+2500. Two legitimate-typography exemptions pass by default: en dash between digits (2020-2024 style ranges) and minus directly before a digit (negative numbers) | For prose dashes, use a colon, comma, parentheses, or line break. Digit ranges and negative numbers are fine by default; under `--strict`, use `~` for ranges and ASCII hyphen for minus |
+| E3 | Effective font size below 5pt (autofit scale, paragraph AND placeholder/layout/master/defaultTextStyle inheritance included): unreadable | Redesign, don't just bump the number: fewer items, one representative element bigger |
 | E4 | Positive letter-spacing (tracking) on consecutive CJK characters: Hangul spacing breaks | Set tracking to 0 on CJK runs. Track ASCII-only labels only |
 
 WARN = advisory. Read each one; confirm on a rendered page image when the message
-says so. Most are approximation-based, calibrated against rendered output.
+says so. Most are approximation-based, calibrated against rendered output
+(see `docs/CALIBRATION.md` in the repo for thresholds and method).
 
 | Code | Meaning | Typical action |
 |------|---------|----------------|
 | W1 | Body-class frame below 9pt | Ignore for sources/captions; raise otherwise |
-| W5 | Font size not found on run/paragraph | Set sizes explicitly so gates can measure |
-| W6 | Same layout skeleton repeated on 4+ pages | Vary the grid per page |
+| W5 | Font size not found anywhere in the inheritance chain (run, paragraph, placeholder, master, defaultTextStyle) | Set sizes explicitly so gates can measure |
+| W6 | Same layout skeleton repeated on 4+ pages (tunable via `--w6-sim`/`--w6-cluster`) | Vary the grid per page; if the repetition is an intentional template system, tune or `--skip W6` |
 | W7 | Text over image with contrast < 2.5 (needs `--render`) | Add scrim/darken image side |
 | W8 | Small CJK (5-7.5pt) in a narrow frame (<=4in wide; device mockups, cards) | Move labels out of the mockup into callouts |
 | W9 | Accent vertical bars repeated as list markers | Use dots or type hierarchy instead of colored bars |
@@ -73,10 +81,11 @@ says so. Most are approximation-based, calibrated against rendered output.
 | W11 | AI-tell copy: buzzwords, stock openings | Rewrite in the deck's own voice |
 | W12 | Footer baseline drifts from the dominant baseline | Align footers to one baseline |
 | W13 | Native PowerPoint shadow/glow/3D effects | Remove; they read as dated |
-| W14 | Most titles are noun phrases, not claims | Rewrite as action titles (the `--ghost` list should read as a story) |
+| W14 | Most titles are noun phrases, not claims (titles with figures count as claims) | Rewrite as action titles (the `--ghost` list should read as a story). Editorial/portfolio decks: `--skip W14` |
 | W15 | Two text frames' estimated glyph areas overlap >45% | Check the rendered page; move/shrink one. Drop caps and echo typography are auto-excluded |
 | W16 | Text glyphs or picture ink extend past the canvas edge | Pull content inside; decorative shape bleed is auto-excluded |
 | W17 | Text straddles a picture's ink edge (25-75% inside) | Move the caption fully on or off the image; captions on solid cards are auto-excluded |
+| W18 | Some spans on this page could not be checked (malformed/atypical attributes swallowed by guards): results for the page may be incomplete | Treat the page as unverified: inspect stderr for what was skipped, fix the malformed source, re-lint. Under `--strict` this fails the build |
 
 ## Agent workflow
 
@@ -102,6 +111,13 @@ Two rules of thumb learned the hard way:
 
 ## Notes on internals (for debugging surprising results)
 
+- The E1 font-resolution model is not guessed from the spec; it was measured by
+  rendering probe decks in PowerPoint via COM (2026-07-10) and pinned as fixtures.
+  Theme `a:ea` is resolved per slide through its layout's master relationship, so
+  multi-master decks are judged against the theme they actually use.
+- Effective sizes resolve the full inheritance chain: run > paragraph > shape
+  lstStyle > layout placeholder lstStyle > master placeholder / txStyles >
+  presentation defaultTextStyle. W5 only fires when the entire chain is silent.
 - Text geometry is estimated per paragraph from per-run font sizes, real line
   spacing, autofit (`fontScale` including percent-string form, `lnSpcReduction`),
   wrap mode (`wrap="none"` frames are measured as one long line, which is what
@@ -109,6 +125,15 @@ Two rules of thumb learned the hard way:
   and alignment. Rotated text frames are skipped.
 - Picture "ink" boxes are alpha-trimmed (transparent chart margins don't count),
   crop- and flip-aware, and palette+tRNS transparent PNGs are handled.
+- One malformed attribute never kills the whole report: guards are per-run (a
+  corrupt run cannot swallow a sibling run's real violation) and per-slide, and
+  anything a guard skips is surfaced as a W18 warning in the JSON/text output,
+  not just stderr, so CI reading only `summary.pass` can't mistake a partially
+  checked deck for a fully clean one.
+- E2's numeric-context exemptions are evaluated against the full paragraph text,
+  so ranges split across run boundaries (PowerPoint does this via spellcheck and
+  formatting seams) don't false-positive. Theme font tokens ("+mn-lt" etc.) in
+  run properties are resolved to the actual theme fonts before E1 judgment.
 - Known limit: placeholders inheriting alignment from a layout's list style are
   measured as left-aligned. If W15/W16 flags look wrong on template placeholders,
   verify on the render before acting.

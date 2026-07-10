@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.9", "3.12", "3.13"]
+        include:
+          - os: windows-latest
+            python: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install
+        run: python -m pip install -e ".[test]"
+      - name: Test
+        run: python -m pytest tests -q
+
+  package:
+    # 배포 회귀 게이트: wheel에 스킬팩이 실제로 동봉되고, 설치본에서 skill 서브커맨드와
+    # 린트 스모크가 도는지 확인한다(0.1.0에서 pip 사용자에게 SKILL.md가 안 딸려가던 구멍).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          python -m pip install build
+          python -m build
+      - name: Wheel contains skill pack
+        run: |
+          python - <<'EOF'
+          import glob, zipfile
+          whl = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(whl).namelist()
+          target = "archforge/skills/archforge-pptx-lint/SKILL.md"
+          assert target in names, "%s not in wheel: %s" % (target, names)
+          print("ok:", whl)
+          EOF
+      - name: Install wheel and smoke
+        run: |
+          python -m pip install dist/*.whl python-pptx
+          archforge skill --path
+          archforge skill > /tmp/skill.md
+          grep -q "archforge-pptx-lint" /tmp/skill.md
+          python - <<'EOF'
+          from pptx import Presentation
+          from pptx.util import Inches, Pt
+          p = Presentation()
+          s = p.slides.add_slide(p.slide_layouts[6])
+          box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(5), Inches(1))
+          r = box.text_frame.paragraphs[0].add_run()
+          r.text = "smoke"
+          r.font.size = Pt(20)
+          p.save("/tmp/smoke.pptx")
+          EOF
+          archforge /tmp/smoke.pptx --json > /tmp/out.json
+          python -c "import json; d=json.load(open('/tmp/out.json')); assert d['summary']['pass']"
