@@ -41,11 +41,13 @@ _T = {
     },
     "en": {
         "title1": "Q3 Results Summary",
-        "e1": "한국어 요약: 구독 매출이 성장을 견인",   # 이중언어 요약 라인이 E1
+        # E1/E4는 한글에서만 존재하는 결함이라 한글 페이로드가 필수. 영어 라벨로 시작해
+        # 글로벌 독자가 "한글 샘플이 검사 대상"임을 바로 읽게 한다(사용자 피드백 반영).
+        "e1": "Korean summary: 구독 매출이 성장을 견인했습니다",
         "e2": "Key metrics improved quarter over quarter" + EM_DASH + "subscriptions led the growth",
         "e2_fixed": "Key metrics improved quarter over quarter: subscriptions led the growth",
-        "e4": "자간이 벌어진 한글 라벨",
-        "e4_fixed": "자간을 되돌린 한글 라벨",
+        "e4": "Hangul label with tracking: 자간 데모",
+        "e4_fixed": "Hangul label without tracking: 자간 데모",
         "e3": "Source: internal management accounts, 2026-06",
         "title2": "Key metrics this quarter",
         "kpi1": "Revenue growth +18%",
