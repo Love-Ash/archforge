@@ -3,6 +3,12 @@
 Thanks for taking the time. Archforge is small on purpose; the bar for a change
 is that it makes the linter's verdicts more *true*, not just bigger.
 
+> Current phase: development is fast and maintainer-led. To avoid duplicating work,
+> **comment to claim an issue before starting substantial code, and it will be held
+> for you.** Issues labeled `roadmap` are maintainer-led tracking, not up-for-grabs.
+> The single most valuable contribution regardless of phase is a false-positive
+> reproduction deck (see below) - those are never at risk of collision.
+
 ## The one rule that shapes everything
 
 Gates are calibrated against **rendered output**, not the OOXML spec. If your

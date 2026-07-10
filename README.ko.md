@@ -137,7 +137,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Love-Ash/archforge@v0.6.0
+      - uses: Love-Ash/archforge@v0.6.1
         with:
           files: |
             decks/
@@ -154,7 +154,7 @@ pre-commit:
 ```yaml
 repos:
   - repo: https://github.com/Love-Ash/archforge
-    rev: v0.6.0
+    rev: v0.6.1
     hooks:
       - id: archforge
         # args: [--profile, full]
@@ -200,49 +200,25 @@ repos:
 ## 작동 방식
 
 `E1`의 폰트 해석은 규격 추정이 아니라 실측입니다. PowerPoint COM으로 프로브 덱을 렌더해
-확정한 우선순위: run `a:ea` > 문단 `pPr/defRPr` > lstStyle 상속 체인(도형 > 레이아웃 ph >
-마스터 ph > 마스터 txStyles > defaultTextStyle) > 테마 ea(제목 placeholder는 majorFont,
-그 외 minorFont; 비어있지 않으면 run `a:latin`보다 우선) > 빈 테마일 때만 run `a:latin` >
-OS 폴백.
-기록은 [docs/CALIBRATION.md](docs/CALIBRATION.md)에 있고, 테마는 슬라이드가 실제로 쓰는
-마스터의 관계로 해석하므로 멀티마스터 덱에서도 엉뚱한 테마로 판정하지 않습니다.
+우선순위를 확정했습니다(run `a:ea` > 문단 defRPr > lstStyle 체인 > 테마 ea > 빈 테마일 때만
+`a:latin` > OS 폴백). 실효 크기도 같은 체인을 해석하고, 기하는 인셋·그룹 변환·병합 셀까지
+반영해 실효 글리프·잉크 영역을 근사합니다. 검사 불완전성은 일급 출력이라(`W18` /
+`summary.incomplete`), `--fail-incomplete` 하의 `summary.pass`가 정직한 게이트입니다. 폰트
+커버리지는 한글 심층·CJK 인지 수준이고 다른 스크립트는 오탐하지 않으며, 타겟 렌더러는
+PowerPoint for Windows입니다.
 
-실효 크기도 같은 상속 체인을 해석해서, 명시 크기 없는 템플릿·placeholder 덱에서도
-`E3`/`W1`/`W8`이 실제로 돕습니다. 자동 필드(`a:fld`: 슬라이드 번호·날짜)의 텍스트도
-일반 run과 같은 게이트를 지나고, 줄바꿈(`a:br`)은 문장부호 문맥에서 줄바꿈으로
-취급됩니다.
-
-`W15`~`W17`은 프레임 박스가 아니라 실효 글리프·잉크 영역을 근사해서 봅니다. run별 크기,
-실제 행간, autofit(퍼센트 문자열 포함), wrap 모드, 그룹 좌표 변환, 정렬, 이미지 알파
-트림·크롭·flip까지 반영하고, 드롭캡·잔상 타이포·장식 블리드·카드 위 캡션 같은 의도적
-연출은 제외합니다.
-
-임계값은 취향이 아니라 캘리브레이션 결과입니다. 실덱 코퍼스 50여 개를 전수 스캔해 렌더와
-대조하고, 적대적 검증(오탐을 공격하는 재현 pptx)으로 회귀 픽스처를 고정했습니다. 게이트별
-임계와 근거, 실측 기록은 [docs/CALIBRATION.md](docs/CALIBRATION.md)에 있습니다.
-
-임의 pptx가 들어와도 리포트는 살아남습니다. run·슬라이드 단위 가드가 쓰레기 속성을
-흡수하고, 가드가 삼킨 구간은 `W18`과 기계 판독용 `summary.incomplete` 플래그로
-표면화됩니다. `summary.pass`는 활성 실패 정책(`summary.policy`에 기록)을 반영합니다.
-기본값에선 ERROR만 보므로, CI는 `--fail-incomplete`를 켜고(GitHub Action은 기본으로
-켭니다) `summary.pass`를 기준으로 게이트하세요.
-
-> 범위에 대한 정직한 주석. 폰트 커버리지 지식(E1/E4)은 현재 한글 심층입니다. 다른
-> 스크립트로 쓰인 런은 절대 오탐하지 않고(런 단위 유니코드 스크립트 판별), 일본어·중국어
-> 심층 지원은 스크립트별 커버리지 표를 추가하는 방식으로 확장합니다. 세로쓰기와
-> RTL·복잡 조판 스크립트의 기하 추정은 추측하지 않고 스킵 후 W18로 알립니다. 회전된
-> 텍스트 프레임은 기하 검사에서 의도적으로 범위 밖이며(회전은 압도적으로 장식 관행)
-> 불완전 표시도 하지 않습니다. 렌더 모델의 타겟은 PowerPoint for Windows입니다
-> (Mac·웹·LibreOffice는 폰트 해석이 다를 수 있음).
+전체 모델·캘리브레이션 방법·렌더러 매트릭스·범위:
+**[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)**,
+[docs/CALIBRATION.md](docs/CALIBRATION.md). 1.0까지 로드맵:
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## 에이전트 연동
 
 LLM 에이전트가 python-pptx 류로 덱을 만드는 워크플로를 일차 사용자로 설계했습니다.
 
 ```
-빌드 → archforge --profile full --json (기계 생성 덱은 AI 티 규칙까지)
-→ error_count 0 그리고 incomplete false 될 때까지 수정
-  (location 페이로드가 도형·run 단위로 수정 지점을 특정)
+빌드 → archforge --profile full --fail-incomplete --json (기계 생성 덱은 AI 티 규칙까지)
+→ summary.pass 될 때까지 수정 (location 페이로드가 도형·run 단위로 수정 지점을 특정)
 → WARN은 렌더 보고 판단
 ```
 

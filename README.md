@@ -144,7 +144,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Love-Ash/archforge@v0.6.0
+      - uses: Love-Ash/archforge@v0.6.1
         with:
           files: |
             decks/
@@ -161,7 +161,7 @@ pre-commit:
 ```yaml
 repos:
   - repo: https://github.com/Love-Ash/archforge
-    rev: v0.6.0
+    rev: v0.6.1
     hooks:
       - id: archforge
         # args: [--profile, full]
@@ -208,43 +208,19 @@ bypassed.
 
 ## How it works
 
-The E1 font-resolution model is measured, not guessed from the OOXML spec. Probe decks
-rendered through PowerPoint COM (pixel-compared, serif vs sans) established the actual
-priority: run `a:ea` > paragraph `pPr/defRPr` > lstStyle inheritance chain (shape >
-layout placeholder > master placeholder > master txStyles > defaultTextStyle) > theme
-ea (majorFont for title placeholders, minorFont otherwise; a non-empty theme ea beats
-run `a:latin`) > run `a:latin` only when the theme ea slot is empty > OS fallback. The record lives in
-[docs/CALIBRATION.md](docs/CALIBRATION.md). Themes resolve per slide master, so
-multi-master decks are judged against the theme they actually use.
+The E1 font-resolution model is measured, not guessed from the OOXML spec: probe decks
+rendered through PowerPoint COM pinned the actual priority (run `a:ea` > paragraph
+defRPr > lstStyle chain > theme ea > `a:latin` on an empty theme slot > OS fallback).
+Effective sizes walk the same chain; geometry approximates real glyph and image-ink
+areas with insets, group transforms, and merged cells; incompleteness is a first-class
+output (`W18` / `summary.incomplete`), so `summary.pass` under `--fail-incomplete` is
+the honest gate. Font-coverage knowledge is Hangul-deep and CJK-aware; other scripts are
+never falsely flagged; the target renderer is PowerPoint for Windows.
 
-Effective sizes walk the same inheritance chain down to `defaultTextStyle`, so size gates
-work on template/placeholder decks where nothing sets explicit sizes. Text in auto
-fields (`a:fld`: slide numbers, dates) passes the same gates as regular runs, and line
-breaks (`a:br`) count as line breaks in punctuation context.
-
-Geometry checks (W15-W17) approximate effective glyph and image-ink areas: per-run sizes,
-real line spacing, autofit (including percent-string form), wrap mode, group transforms,
-alignment, image alpha trim, crop and flip. Intentional composition (drop caps, echo
-typography, decorative bleed, captions on cards) is excluded.
-
-Thresholds are calibrated against rendered output of a ~50-deck real corpus and hardened
-with adversarial reproduction fixtures. Methods and per-gate rationale:
-[docs/CALIBRATION.md](docs/CALIBRATION.md).
-
-Malformed input never dies silently: guards are per-run and per-slide, and anything a
-guard skips surfaces as `W18` in the JSON output plus a machine-readable
-`summary.incomplete` flag. `summary.pass` reflects the active failure policy (recorded
-in `summary.policy`): with the defaults it covers ERRORs only, so gate CI with
-`--fail-incomplete` (the GitHub Action does this for you) and key on `summary.pass`.
-
-> Scope notes. Font-coverage knowledge (E1/E4) is currently Hangul-deep: runs written in
-> other scripts are never falsely flagged (script detection is per text run, via Unicode
-> code points), and per-script coverage tables are the extension path for JP/CN depth.
-> Geometry estimation skips vertical text and RTL/complex scripts honestly (W18) instead
-> of guessing. Rotated text frames are out of scope for geometry by design (rotation is
-> overwhelmingly decorative practice) and do not mark the result incomplete. The render
-> model targets PowerPoint for Windows; other renderers (Mac/web/LibreOffice) may
-> resolve fonts differently.
+Full model, calibration method, renderer-coverage matrix, and scope:
+**[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)** and
+[docs/CALIBRATION.md](docs/CALIBRATION.md). Roadmap to 1.0:
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Agent integration
 
@@ -253,8 +229,8 @@ Designed for LLM-agent build-lint-fix loops:
 ```
 build deck.pptx
 loop:
-    result = archforge deck.pptx --profile full --json   # machine-made decks: AI-tell rules on
-    if result.summary.error_count == 0 and not result.summary.incomplete: break
+    result = archforge deck.pptx --profile full --fail-incomplete --json   # machine-made decks
+    if result.summary.pass: break   # pass reflects the active policy (summary.policy)
     fix listed defects (location payloads point at the exact shape/run), rebuild
 review WARNs against renders
 ```
