@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E1": 1
+  },
+  "ground_truth": "by construction + XML inspection: PptxGenJS fontFace writes a:latin (and no a:ea), and its default theme carries an empty ea slot, so the measured model resolves Arial for the Hangul run",
+  "notes": "the cross-generator twin of python-pptx e1_arial_hangul",
+  "generator": "pptxgenjs",
+  "profile": "full"
+}

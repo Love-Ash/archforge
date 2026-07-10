@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E1": 1
+  },
+  "notes": "Hangul on a Latin-only a:latin with the default theme's empty ea slot | re-saved by PowerPoint's own writer: same content, native XML normalization",
+  "generator": "powerpoint-windows (native re-save of python-pptx/e1_arial_hangul)",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

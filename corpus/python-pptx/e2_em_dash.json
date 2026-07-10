@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E2": 1
+  },
+  "notes": "word-to-word em dash; numeric ranges would pass",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

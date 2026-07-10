@@ -8,6 +8,17 @@
   WARN findings in system-out unless a warn-failing policy is active, and an
   unreadable file as an error testcase. The implementation follows the design
   discussed with @siddhanttiwari19 in issue #2.
+- Public seed corpus under `corpus/`: decks from three generators (python-pptx,
+  PptxGenJS, PowerPoint native re-save) plus a malformed set, each committed with a
+  manifest of expected findings. `corpus/run_corpus.py` enforces the match and runs in
+  CI. This is the externally reproducible accuracy record that the private real-deck
+  calibration corpus could not be.
+- Property-based tests and a deterministic structured fuzzer (`tests/test_properties.py`,
+  hypothesis): determinism, translation invariance of which rules fire, E3 size
+  monotonicity, and a no-unhandled-crash guarantee under random attribute mutation.
+- `--timeout SECONDS`: a wall-clock limit for the whole run, isolated in a child
+  process (portable to Windows, unlike signal.alarm), exit 124 on timeout. Keeps a
+  hostile or pathological deck from hanging CI.
 
 ## 0.6.1 (2026-07-11)
 

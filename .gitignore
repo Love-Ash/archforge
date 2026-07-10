@@ -17,3 +17,8 @@ __pycache__/
 
 dist_rc/
 !examples/*.pptx
+
+!corpus/**/*.pptx
+corpus/node_modules/
+corpus/package-lock.json
+corpus/package.json

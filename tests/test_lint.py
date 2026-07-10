@@ -2270,6 +2270,21 @@ def test_w15_loc_carries_paragraph_and_cell_fields(tmp_path):
     assert w15 and "paragraph" in w15[0].loc, w15[0].loc if w15 else warns
 
 
+def test_timeout_flag(tmp_path):
+    """--timeout runs in a child process and returns a normal result under budget; a
+    zero/negative value is a usage error. (The hang path is not exercised here to keep
+    the suite fast; the mechanism is subprocess.call(timeout=...).)"""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    deck = save(p, tmp_path, "t.pptx")
+    r = run_cli([deck, "--timeout", "60", "--json"])
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["summary"]["pass"] is True
+    r = run_cli([deck, "--timeout", "0"])
+    assert r.returncode == 2
+
+
 def test_junit_reporter(tmp_path):
     """JUnit mapping contract: a testcase per executed rule (skipped = excluded by
     profile), ERROR findings as <failure>, WARN findings in <system-out> unless a

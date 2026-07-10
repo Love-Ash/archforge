@@ -1,0 +1,5 @@
+{
+  "generator": "byte-truncated python-pptx output",
+  "expect_exit2": true,
+  "notes": "must be a controlled usage error, never a traceback"
+}

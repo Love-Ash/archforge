@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E4": 1
+  },
+  "generator": "powerpoint-windows (native re-save of python-pptx/e4_tracked_hangul)",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)",
+  "notes": "re-saved by PowerPoint's own writer: same content, native XML normalization"
+}

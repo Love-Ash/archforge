@@ -1,0 +1,7 @@
+{
+  "expected": {
+    "E2": 1
+  },
+  "generator": "pptxgenjs",
+  "profile": "full"
+}

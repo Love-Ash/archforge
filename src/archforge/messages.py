@@ -307,6 +307,14 @@ MESSAGES = {
         "ko": "JUnit XML 결과를 이 경로에 기록(Jenkins·GitLab 등 테스트 리포트 UI 연동)",
         "en": "write JUnit XML results to this path (Jenkins/GitLab test-report UIs)",
     },
+    "help_timeout": {
+        "ko": "전체 실행에 초 단위 벽시계 제한. 자식 프로세스로 격리해 시간 초과 시 exit 124(악성·병적 덱이 CI를 멈추는 것 방지)",
+        "en": "wall-clock limit in seconds for the whole run, isolated in a child process; exit 124 on timeout (keeps a hostile/pathological deck from hanging CI)",
+    },
+    "err_timeout": {
+        "ko": "archforge: 제한 시간 %.1f초를 초과해 중단했습니다",
+        "en": "archforge: aborted after exceeding the %.1fs timeout",
+    },
     "help_allow_empty_pattern": {
         "ko": "매치 0건인 입력 패턴을 허용(기본은 exit 2: 오타·빌드 실패가 다른 패턴 뒤에 숨는 것 방지)",
         "en": "allow an input pattern that matched nothing (default exits 2 so a typo cannot hide behind another pattern)",

@@ -1,0 +1,6 @@
+{
+  "expected": {},
+  "notes": "negative fixture: plain English text from PptxGenJS defaults",
+  "generator": "pptxgenjs",
+  "profile": "full"
+}

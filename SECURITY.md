@@ -19,6 +19,11 @@ next to the deck. Things we treat as vulnerabilities:
 
 ## Reporting
 
+Archforge performs a resource preflight (zip entry/size/ratio budgets) and defensive
+per-run/per-slide parsing, and `--timeout` bounds wall-clock time in an isolated child
+process. It is not a sandbox for hostile Office documents: run untrusted decks with
+`--no-config --timeout N` and, for a strong boundary, inside your own container.
+
 Please use GitHub's private vulnerability reporting on this repository
 (Security tab -> "Report a vulnerability"). If that is unavailable, open a
 plain issue saying only "security contact requested" without details, and the

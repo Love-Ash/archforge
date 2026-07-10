@@ -77,6 +77,7 @@ archforge deck.pptx --lang en       # report language (default: ARCHFORGE_LANG, 
 archforge deck.pptx --no-config     # ignore config files (linting untrusted decks)
 archforge deck.pptx --sarif out.sarif        # SARIF 2.1.0 (GitHub code scanning)
 archforge deck.pptx --junit out.xml          # JUnit XML (Jenkins/GitLab test reports)
+archforge deck.pptx --timeout 60             # wall-clock limit, isolated in a child process
 archforge deck.pptx --write-baseline bl.json # adopt an existing deck as-is (beta)
 archforge deck.pptx --baseline bl.json       # report only new findings after that
 archforge deck.pptx --hard-min 5 --body-min 9 --small-min 7.5   # size gate thresholds

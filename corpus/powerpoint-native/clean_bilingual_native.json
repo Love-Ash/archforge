@@ -1,0 +1,7 @@
+{
+  "expected": {},
+  "notes": "negative fixture: correct ea font, no dash, readable sizes | re-saved by PowerPoint's own writer: same content, native XML normalization",
+  "generator": "powerpoint-windows (native re-save of python-pptx/clean_bilingual)",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

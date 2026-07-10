@@ -2565,6 +2565,47 @@ def skill_main(argv=None):
     return 0
 
 
+def _timeout_reexec(argv):
+    """--timeout SECONDS: run the whole invocation in a child process with a wall clock,
+    so a hostile or pathological deck cannot hang CI (0.6.x, external review: a real
+    resource bound needs process isolation, and signal.alarm is POSIX-only). Re-execs
+    sys.argv minus --timeout with a sentinel env var so the child does not recurse;
+    subprocess timeout is portable to Windows. Returns an exit code, or None if no
+    timeout was requested or this is already the child."""
+    if os.environ.get("_ARCHFORGE_TIMEOUT_CHILD") == "1":
+        return None
+    secs = None
+    rest = []
+    it = iter(range(len(argv)))
+    i = 0
+    while i < len(argv):
+        tok = argv[i]
+        if tok == "--timeout" and i + 1 < len(argv):
+            secs = argv[i + 1]; i += 2; continue
+        if tok.startswith("--timeout="):
+            secs = tok.split("=", 1)[1]; i += 1; continue
+        rest.append(tok); i += 1
+    if secs is None:
+        return None
+    try:
+        secs_f = float(secs)
+        if not (secs_f > 0):
+            raise ValueError
+    except ValueError:
+        print(M("err_config") % ("--timeout must be a positive number of seconds, got %r"
+                                 % secs), file=sys.stderr)
+        return 2
+    import subprocess
+    env = dict(os.environ)
+    env["_ARCHFORGE_TIMEOUT_CHILD"] = "1"
+    try:
+        return subprocess.call([sys.executable, "-m", "archforge"] + rest,
+                               env=env, timeout=secs_f)
+    except subprocess.TimeoutExpired:
+        print(M("err_timeout") % secs_f, file=sys.stderr)
+        return 124
+
+
 def main():
     # Reconfigured before parser creation so Korean messages and argparse help don't die with
     # UnicodeEncodeError on non-UTF-8 stdout (pipes, cp949/cp1252); --help is printed during
@@ -2575,6 +2616,9 @@ def main():
     except Exception:
         pass
     argv = sys.argv[1:]
+    rc = _timeout_reexec(argv)
+    if rc is not None:
+        sys.exit(rc)
     # --lang must be finalized before the --help string, so this prescans before the parser
     # is created.
     # When given multiple times, the last value wins per argparse convention (third
@@ -2729,6 +2773,7 @@ def _add_common_flags(ap):
     ap.add_argument("--no-config", action="store_true", help=M("help_no_config"))
     ap.add_argument("--sarif", default=None, metavar="PATH", help=M("help_sarif"))
     ap.add_argument("--junit", default=None, metavar="PATH", help=M("help_junit"))
+    ap.add_argument("--timeout", default=None, metavar="SECONDS", help=M("help_timeout"))
     ap.add_argument("--baseline", default=None, metavar="PATH", help=M("help_baseline"))
 
 

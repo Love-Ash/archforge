@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E1": 1
+  },
+  "notes": "Hangul on a Latin-only a:latin with the default theme's empty ea slot",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

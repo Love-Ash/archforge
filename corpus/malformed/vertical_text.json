@@ -1,0 +1,6 @@
+{
+  "generator": "python-pptx (bodyPr@vert=eaVert)",
+  "expected": {},
+  "expect_incomplete": true,
+  "notes": "geometry abstains on vertical text and must say so"
+}
