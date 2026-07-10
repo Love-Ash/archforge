@@ -261,11 +261,11 @@ typography get hammered straight before shipping.
 
 ## Author
 
-Built and calibrated by **Minjae Kwon (Ash)** ([@Love-Ash](https://github.com/Love-Ash)).
+Built and calibrated by **Minjae Kwon (Ash)**
+([@Love-Ash](https://github.com/Love-Ash) · [LinkedIn](https://www.linkedin.com/in/a5h/)).
 If archforge caught something before your audience did, a star helps the next person
 find it. I write up the measurement work behind the gates (how PowerPoint actually
-resolves Korean fonts, and what AI-built decks silently break); follow along via my
-GitHub profile.
+resolves Korean fonts, and what AI-built decks silently break); say hi on LinkedIn.
 
 ## License
 
