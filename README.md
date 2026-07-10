@@ -15,13 +15,13 @@ before a human ever sees a render.
 
 [한국어 README](README.ko.md)
 
-![demo](docs/assets/demo.gif)
+![demo](docs/assets/demo-en.gif)
 
 </div>
 
 PowerPoint opens both of these decks without a single warning. One of them is broken:
 
-![before / after](docs/assets/before-after.png)
+![before / after](docs/assets/before-after-en.png)
 
 Code review cannot see any of it, because the defects live in font slots, autofit
 scales, and coordinates that only materialize at render time. Archforge reads the
