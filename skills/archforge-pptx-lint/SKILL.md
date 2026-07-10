@@ -29,8 +29,11 @@ archforge deck.pptx --json       # machine-readable (recommended for agents)
 archforge deck.pptx --strict     # WARNs also fail + numeric-dash exemptions off
 archforge deck.pptx --ghost      # per-page title list (horizontal-logic review)
 archforge deck.pptx --render pages/   # + on-image contrast check (W7); needs p01.png/p02.png-named PNGs
-archforge deck.pptx --skip W14,W6     # suppress genre-mismatched warnings (editorial decks)
+archforge deck.pptx --skip W14,W6     # suppress specific WARNs (WARN-only; recorded in JSON)
+archforge deck.pptx --profile core    # objective defects only / editorial: W6+W14 off
+archforge deck.pptx --lang en         # report language (codes are language-independent)
 archforge deck.pptx --w6-sim 0.95 --w6-cluster 5   # loosen W6 for template-driven houses
+archforge deck.pptx --hard-min 5 --body-min 9 --small-min 7.5   # size gate thresholds (pt)
 archforge skill --install        # install this skill pack into ./.claude/skills
 ```
 
@@ -42,13 +45,16 @@ No repo clone needed.
 
 ```json
 {"file": "...",
+ "lang": "en",
  "errors":   [{"page": 3, "code": "E1", "message": "...", "detail": "..."}],
  "warnings": [{"page": 5, "code": "W15", "message": "...", "detail": "..."}],
  "ghost":    [{"page": 1, "title": "..."}],
- "summary":  {"error_count": 0, "warn_count": 2, "pass": true}}
+ "summary":  {"error_count": 0, "warn_count": 2, "pass": true,
+              "incomplete": false, "profile": "full", "skipped_codes": []}}
 ```
 
-Messages are in Korean; codes are stable identifiers. Use the code table below.
+Messages follow the report language (`--lang` > `ARCHFORGE_LANG` > OS locale); codes are
+stable language-independent identifiers. Key on codes, not message text.
 
 `ghost` lists the largest (>=18pt) title on each page that has one, in any language, so
 you can read the titles top-to-bottom and check the horizontal logic. Pages with no
@@ -60,10 +66,10 @@ ERROR = ship-blockers. Fix, rebuild, re-lint. Never deliver with ERROR > 0.
 
 | Code | Meaning | Fix |
 |------|---------|-----|
-| E1 | The font that will actually render the CJK text is Latin-only (no Hangul glyphs), so Hangul silently falls back to Malgun. Effective font follows the measured PowerPoint model: run `a:ea` > non-empty theme minorFont `a:ea` (beats run `a:latin`) > run `a:latin` only when the theme ea slot is empty > OS fallback | Give Korean runs a CJK-capable font. Setting only `font.name` (= `a:latin`) with a Korean font works when the theme ea slot is empty, but setting `a:ea` explicitly is the robust fix. Keep mono/Latin display fonts for ASCII-only labels |
-| E2 | A dash-family character in rendered text: em dash U+2014, en dash U+2013, figure dash U+2012, horizontal bar U+2015, 2/3-em dashes U+2E3A/U+2E3B, math minus U+2212, fullwidth hyphen U+FF0D, box-drawing line U+2500. Two legitimate-typography exemptions pass by default: en dash between digits (2020-2024 style ranges) and minus directly before a digit (negative numbers) | For prose dashes, use a colon, comma, parentheses, or line break. Digit ranges and negative numbers are fine by default; under `--strict`, use `~` for ranges and ASCII hyphen for minus |
+| E1 | The font that will actually render Hangul text is Latin-only (no Hangul glyphs), so Hangul silently falls back to Malgun. Effective font follows the measured PowerPoint model: run `a:ea` > lstStyle inheritance chain (shape > layout ph > master ph > master txStyles > defaultTextStyle) > theme ea (majorFont for title placeholders, minorFont otherwise; non-empty theme ea beats run `a:latin`) > run `a:latin` only when the theme ea slot is empty > OS fallback. Hangul-scoped: kana/hanzi-only runs are never judged with Hangul coverage knowledge | Give Korean runs a CJK-capable font. Setting only `font.name` (= `a:latin`) with a Korean font works when the theme ea slot is empty, but setting `a:ea` explicitly is the robust fix. Keep mono/Latin display fonts for ASCII-only labels |
+| E2 | A dash-family character used as sentence punctuation: em dash U+2014, en dash U+2013, figure dash U+2012, horizontal bar U+2015, 2/3-em dashes U+2E3A/U+2E3B, math minus U+2212, fullwidth hyphen U+FF0D, box-drawing line U+2500. Range-function en dashes pass by default: both neighbor tokens numeric-ish (2020, Q1, 5%, FY24; spaces allowed), or one numeric-ish neighbor with the dash attached. Spaced one-sided dashes (the AI parenthetical pattern) and word-to-word joins are blocked. Minus before a digit passes. Context is the full paragraph, so ranges split across runs don't false-positive | For prose dashes, use a colon, comma, parentheses, or line break. Ranges and negative numbers are fine by default; under `--strict`, use `~` for ranges and ASCII hyphen for minus |
 | E3 | Effective font size below 5pt (autofit scale, paragraph AND placeholder/layout/master/defaultTextStyle inheritance included): unreadable | Redesign, don't just bump the number: fewer items, one representative element bigger |
-| E4 | Positive letter-spacing (tracking) on consecutive CJK characters: Hangul spacing breaks | Set tracking to 0 on CJK runs. Track ASCII-only labels only |
+| E4 | Positive letter-spacing (tracking) on consecutive Hangul: Hangul spacing breaks. Hangul-scoped (kana tracking is normal Japanese practice) | Set tracking to 0 on Hangul runs. Track ASCII-only labels only |
 
 WARN = advisory. Read each one; confirm on a rendered page image when the message
 says so. Most are approximation-based, calibrated against rendered output
@@ -85,7 +91,7 @@ says so. Most are approximation-based, calibrated against rendered output
 | W15 | Two text frames' estimated glyph areas overlap >45% | Check the rendered page; move/shrink one. Drop caps and echo typography are auto-excluded |
 | W16 | Text glyphs or picture ink extend past the canvas edge | Pull content inside; decorative shape bleed is auto-excluded |
 | W17 | Text straddles a picture's ink edge (25-75% inside) | Move the caption fully on or off the image; captions on solid cards are auto-excluded |
-| W18 | Some spans on this page could not be checked (malformed/atypical attributes swallowed by guards): results for the page may be incomplete | Treat the page as unverified: inspect stderr for what was skipped, fix the malformed source, re-lint. Under `--strict` this fails the build |
+| W18 | Some spans (page-level, `page` N) or deck-level checks (`page` 0) could not run: malformed/atypical attributes, vertical text, or RTL/complex scripts whose geometry cannot be estimated. Results may be incomplete | Treat the scope as unverified: inspect stderr for what was skipped, fix the malformed source, re-lint. Under `--strict` this fails the build |
 
 ## Agent workflow
 
@@ -114,10 +120,19 @@ Two rules of thumb learned the hard way:
 - The E1 font-resolution model is not guessed from the spec; it was measured by
   rendering probe decks in PowerPoint via COM (2026-07-10) and pinned as fixtures.
   Theme `a:ea` is resolved per slide through its layout's master relationship, so
-  multi-master decks are judged against the theme they actually use.
+  multi-master decks are judged against the theme they actually use. Fonts missing
+  from run rPr resolve through the lstStyle inheritance chain (measured: a master
+  placeholder lstStyle `a:ea` really does render), and title placeholders resolve
+  theme tokens against majorFont. Target renderer: PowerPoint for Windows.
+- Script detection is per text run via Unicode code points (deterministic). Hangul
+  runs get the Korean font/tracking gates; other scripts are never falsely flagged
+  by Korean coverage knowledge. Language-independent gates (sizes, layout, effects,
+  geometry) run for every script.
 - Effective sizes resolve the full inheritance chain: run > paragraph > shape
   lstStyle > layout placeholder lstStyle > master placeholder / txStyles >
   presentation defaultTextStyle. W5 only fires when the entire chain is silent.
+  Sizes inherited from defaultTextStyle don't qualify text as a "title" for
+  ghost/W14 (that would flood them on decks with no explicit sizes).
 - Text geometry is estimated per paragraph from per-run font sizes, real line
   spacing, autofit (`fontScale` including percent-string form, `lnSpcReduction`),
   wrap mode (`wrap="none"` frames are measured as one long line, which is what
@@ -127,9 +142,9 @@ Two rules of thumb learned the hard way:
   crop- and flip-aware, and palette+tRNS transparent PNGs are handled.
 - One malformed attribute never kills the whole report: guards are per-run (a
   corrupt run cannot swallow a sibling run's real violation) and per-slide, and
-  anything a guard skips is surfaced as a W18 warning in the JSON/text output,
-  not just stderr, so CI reading only `summary.pass` can't mistake a partially
-  checked deck for a fully clean one.
+  anything a guard skips is surfaced as a W18 warning plus a machine-readable
+  `summary.incomplete` flag. Gate on `pass` AND `incomplete` together (or run
+  `--strict`, which turns W18 into a failure); `pass` alone reflects ERRORs only.
 - E2's numeric-context exemptions are evaluated against the full paragraph text,
   so ranges split across run boundaries (PowerPoint does this via spellcheck and
   formatting seams) don't false-positive. Theme font tokens ("+mn-lt" etc.) in

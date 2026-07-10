@@ -26,6 +26,18 @@ from pptx.enum.shapes import MSO_CONNECTOR
 from pptx.oxml.ns import qn
 
 import archforge.lint as jl
+from archforge import messages as jmsg
+
+
+@pytest.fixture(autouse=True)
+def _force_korean_messages(monkeypatch):
+    """기존 한국어 문구 어서션 유지를 위해 테스트는 ko 고정(0.3.0 i18n).
+    영어 출력은 test_lang_* 에서 명시적으로 검증한다."""
+    monkeypatch.setenv("ARCHFORGE_LANG", "ko")
+    jmsg.set_lang("ko")
+    yield
+    jmsg.set_lang(None)
+
 
 EN_DASH = chr(0x2013)
 EM_DASH = chr(0x2014)
@@ -133,11 +145,14 @@ def patch_theme_ea(path, typeface):
     return path
 
 
-def run_cli(args):
-    """CLI 실행 헬퍼. stdin=DEVNULL: pytest 캡처 하의 Windows 핸들 상속 실패(WinError 6) 회피."""
+def run_cli(args, lang="ko"):
+    """CLI 실행 헬퍼. stdin=DEVNULL: pytest 캡처 하의 Windows 핸들 상속 실패(WinError 6) 회피.
+    기본 ko 고정(어서션이 한국어 문구), 영어 검증은 lang="en"으로."""
+    env = dict(os.environ)
+    env["ARCHFORGE_LANG"] = lang
     return subprocess.run([sys.executable, "-m", "archforge.lint"] + args,
                           capture_output=True, text=True, encoding="utf-8",
-                          stdin=subprocess.DEVNULL)
+                          stdin=subprocess.DEVNULL, env=env)
 
 
 # ---------------------------------------------------------------- line-level gates
@@ -912,23 +927,87 @@ def test_title_collection_keeps_placeholder_sizes(tmp_path):
     assert any("진짜 제목" in t for _si, t in ghost), ghost
 
 
-def test_script_layer_hangul_only(tmp_path):
-    """E1·E4 트리거 한글 한정(2차 재점검: JP/SC 폰트 오차단 교정).
-    p1 가나+Noto Sans JP -> 침묵(일본어 덱 안전). p2 한글+Noto Sans JP -> E1(진짜 폴백).
-    p3 가나+양수 트래킹 -> E4 없음(일본어 관행). p4 한자 전용+라틴 폰트 -> 침묵."""
+def test_script_layer_two_tier(tmp_path):
+    """스크립트 레이어 2층 구조(3차 패널: 한자 회귀와 JP 폰트 오탐 동시 해소).
+    p1 가나+Noto Sans JP -> 침묵(가나 보유 폰트). p2 한글+Noto Sans JP -> E1(한글 없음).
+    p3 가나+양수 트래킹 -> E4 없음(일본어 관행). p4 한자 전용+Georgia -> E1(CJK 전무 폰트).
+    p5 한자 전용+양수 트래킹 -> E4(한국 덱 인명·법률용어). p6 가나+IBM Plex Mono -> E1."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "こんにちは", font="Noto Sans JP", size=12)
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "한글 텍스트", font="Noto Sans JP", size=12)
     s = add_slide(p)
-    tb(s, 1, 1, 5, 0.5, "あいうえお", font="Wanted Sans", size=12, spc=100)
+    tb(s, 1, 1, 5, 0.5, "あいうえお", font="Noto Sans JP", size=12, spc=100)
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "漢字専用", font="Georgia", size=12)
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "大韓民國", font="맑은 고딕", size=12, spc=100)
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "フリーレン", font="IBM Plex Mono", size=12)
     errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
-    e1_pages = [si for (si, m, d) in by_code(errors, "E1")]
-    assert e1_pages == [2], errors
-    assert not by_code(errors, "E4"), errors
+    e1_pages = sorted(si for (si, m, d) in by_code(errors, "E1"))
+    assert e1_pages == [2, 4, 6], errors
+    e4_pages = sorted(si for (si, m, d) in by_code(errors, "E4"))
+    assert e4_pages == [5], errors
+
+
+def test_hangul_range_extensions():
+    """반각 한글·자모 확장 블록 미탐 봉합(3차 패널)."""
+    assert jl.is_hangul(chr(0xFFA1))    # 반각 ㄱ
+    assert jl.is_hangul(chr(0xA960))    # 자모 확장 A
+    assert jl.is_hangul(chr(0xD7B0))    # 자모 확장 B
+    assert jl._geometry_unsupported(chr(0x0F40))   # 티베트
+    assert jl._geometry_unsupported(chr(0x1000))   # 미얀마
+    assert jl._geometry_unsupported(chr(0x1780))   # 크메르
+
+
+def test_title_own_lststyle_not_flooded(tmp_path):
+    """도형 자체 lstStyle 20pt 본문 산문이 ghost에 쓸리지 않는다(3차 패널 실측 재현 봉합).
+    제목 자격 = 명시 크기 또는 제목 패밀리 placeholder."""
+    p = new_prs()
+    s = add_slide(p)
+    box = tb(s, 1, 1, 9, 0.6, "이것은 본문 카피 문장입니다 절대 제목이 아닙니다",
+             font="Wanted Sans", no_size=True)
+    txBody = box.text_frame._txBody
+    lst = txBody.makeelement(qn("a:lstStyle"), {})
+    lvl1 = lst.makeelement(qn("a:lvl1pPr"), {})
+    defR = lst.makeelement(qn("a:defRPr"), {"sz": "2000"})
+    lvl1.append(defR)
+    lst.append(lvl1)
+    txBody.insert(1, lst)
+    ghost = []
+    jl.lint(save(p, tmp_path, "fx.pptx"), ghost=ghost)
+    assert ghost == [], ghost
+
+
+def test_cli_lang_edge_cases(tmp_path):
+    """--lang CLI 경계(3차 패널): 반복 지정은 마지막이 이김, skill 서브커맨드와 조합 안전."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "clean", font="Wanted Sans", size=20)
+    path = save(p, tmp_path, "fx.pptx")
+    doc = json.loads(run_cli([path, "--json", "--lang", "en", "--lang", "ko"]).stdout)
+    assert doc["lang"] == "ko"
+    r = run_cli(["skill", "--lang", "ko", "--path"])
+    assert r.returncode == 0 and "SKILL.md" in r.stdout
+    r = run_cli(["--lang", "ko", "skill", "--path"])   # 선행 플래그 + 서브커맨드
+    assert r.returncode == 0 and "SKILL.md" in r.stdout
+
+
+def test_summary_incomplete_flag(tmp_path):
+    """summary.incomplete: 검사 불능(W18) 여부의 기계 판독 신호(3차 패널: 문서 과장 교정)."""
+    p = new_prs()
+    s = add_slide(p)
+    box = tb(s, 1, 1, 5, 0.5, "쓰레기 크기 한글", font="Wanted Sans", no_size=True)
+    box.text_frame.paragraphs[0].runs[0]._r.get_or_add_rPr().set("sz", "notanumber")
+    doc = json.loads(run_cli([save(p, tmp_path, "bad.pptx"), "--json"]).stdout)
+    assert doc["summary"]["incomplete"] is True
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "clean", font="Wanted Sans", size=20)
+    doc = json.loads(run_cli([save(p, tmp_path, "good.pptx"), "--json"]).stdout)
+    assert doc["summary"]["incomplete"] is False
 
 
 def test_latin_only_font_additions():
@@ -936,6 +1015,19 @@ def test_latin_only_font_additions():
     assert f("Aptos") and f("Courier") and f("PT Sans") and f("PT Serif")
     assert not f("Noto Sans Mono CJK KR")   # cjk 포함 = 한글 완비(2차 재점검 오탐 교정)
     assert not f("Source Han Sans CJK KR")
+
+
+def test_e2_v2_adversarial_edges():
+    """E2 v2 적대 패널 발견 4건의 회귀 고정(2026-07-10 3차)."""
+    dv = jl.dash_violations
+    MINUS = chr(0x2212)
+    assert dv("전일대비 " + MINUS + " 3.2%") == []            # 띄어진 음수 부호(재무 표기)
+    assert dv("끝 " + MINUS) == [MINUS]                        # 뒤에 숫자 없으면 여전히 차단
+    assert dv("2020" + EN_DASH + EN_DASH + "2024") == [EN_DASH, EN_DASH]   # 2연속 대시 미탐 봉합
+    assert dv("결론2024" + EN_DASH + "우리는") == [EN_DASH]    # 단어+숫자 혼합 토큰 우회 봉합
+    assert dv("매출" + chr(0x00B9) + EN_DASH + "영업이익 증가") == [EN_DASH]   # 위첨자 각주
+    assert dv("2020" + EN_DASH + "현재") == []                 # 숫자 시작 토큰 범위는 유지
+    assert dv("Q1" + EN_DASH + "Q3") == []                     # 양쪽 숫자성 규칙 유지
 
 
 def test_e2_v2_range_forms(tmp_path):
@@ -1032,6 +1124,66 @@ def test_vertical_and_complex_script_geometry_skip(tmp_path):
     w18 = by_code(warns, "W18")
     assert any(si == 1 and "vertical_text" in d for (si, m, d) in w18), warns
     assert any(si == 2 and "complex_script" in d for (si, m, d) in w18), warns
+
+
+# ---------------------------------------------------------------- 0.3.0 i18n + profiles
+def test_lang_english_output(tmp_path):
+    """0.3.0 i18n: 영어 환경에선 메시지가 영어, JSON에 lang 기록. 코드는 언어 무관."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    path = save(p, tmp_path, "fx.pptx")
+    doc = json.loads(run_cli([path, "--json"], lang="en").stdout)
+    assert doc["lang"] == "en"
+    e1 = [e for e in doc["errors"] if e["code"] == "E1"][0]
+    assert "Hangul" in e1["message"] and "Malgun" in e1["message"]
+    doc_ko = json.loads(run_cli([path, "--json"], lang="ko").stdout)
+    assert doc_ko["lang"] == "ko" and "한글" in [e for e in doc_ko["errors"] if e["code"] == "E1"][0]["message"]
+    # --lang 플래그가 환경변수를 이긴다
+    doc_flag = json.loads(run_cli([path, "--json", "--lang", "en"], lang="ko").stdout)
+    assert doc_flag["lang"] == "en"
+
+
+def test_lang_catalog_consistency():
+    """카탈로그 규율: 모든 항목에 ko/en이 있고 % 포맷 지시자 순서가 동일하다."""
+    fmt = re.compile(r"%[-#0-9.]*[sdfr%]")
+    for mid, entry in jmsg.MESSAGES.items():
+        assert set(entry) == {"ko", "en"}, mid
+        assert fmt.findall(entry["ko"]) == fmt.findall(entry["en"]), mid
+
+
+def test_profile_core_drops_style_rules(tmp_path):
+    """core 프로파일 = 객관 결함만: E2(스타일성 ERROR)까지 제외되지만 선택이 JSON에 남는다."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "차단", font="Wanted Sans", size=12)   # E2만
+    path = save(p, tmp_path, "fx.pptx")
+    doc = json.loads(run_cli([path, "--json"]).stdout)
+    assert any(e["code"] == "E2" for e in doc["errors"])           # full(기본)은 차단
+    doc = json.loads(run_cli([path, "--json", "--profile", "core"]).stdout)
+    assert not doc["errors"] and doc["summary"]["pass"]
+    assert doc["summary"]["profile"] == "core"
+    assert "E2" in doc["summary"]["skipped_codes"]                  # 조용한 우회 아님
+
+    # core에서도 객관 결함(E1)은 그대로 차단
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    doc = json.loads(run_cli([save(p, tmp_path, "fx2.pptx"), "--json", "--profile", "core"]).stdout)
+    assert any(e["code"] == "E1" for e in doc["errors"])
+
+
+def test_profile_editorial_drops_w14(tmp_path):
+    p = new_prs()
+    for t in ("시장 현황", "경쟁 구도 분석", "제품 라인업 개요", "사업 확장 전략",
+              "재무 운용 계획", "향후 추진 방안"):
+        s = add_slide(p)
+        tb(s, 1, 0.8, 9, 0.8, t, font="Wanted Sans", size=26)
+        tb(s, 1, 2.2, 10, 3, "본문 내용", font="Wanted Sans", size=12)
+    path = save(p, tmp_path, "fx.pptx")
+    doc = json.loads(run_cli([path, "--json", "--profile", "editorial"]).stdout)
+    assert not any(w["code"] == "W14" for w in doc["warnings"])
+    assert doc["summary"]["profile"] == "editorial"
 
 
 # ---------------------------------------------------------------- skill packaging
