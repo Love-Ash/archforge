@@ -5,6 +5,9 @@
 fixed.pptx(같은 내용의 교정본, full 프로파일 클린)를 만들어 즉석 린트한다.
 리포 examples/ 의 커밋본도 scripts/make_examples.py 가 이 모듈로 생성한다.
 
+덱 텍스트는 리포트 언어와 같은 로케일을 따른다(lang="ko"/"en"). 영어판도 E1/E4는
+한글이 있어야 재현되므로 이중언어 요약 라인(글로벌 덱의 흔한 실물 패턴)으로 심는다.
+
 심는 결함은 실제 생성 덱에서 가장 흔한 축만 고른다:
 - E1 조용한 한글 폰트 폴백(Arial a:latin에 실린 한글, 테마 ea 빈 슬롯)
 - E2 문장 부호로 쓴 em dash(AI 생성 덱 1번 티, full 프로파일)
@@ -19,6 +22,37 @@ from pptx.oxml.ns import qn
 
 # 소스에 금지문자를 리터럴로 두지 않는다(tests와 같은 관례): 검사 대상 pptx 안에만 존재
 EM_DASH = chr(0x2014)
+
+# 언어별 덱 텍스트. en의 e1/e4 라인은 의도적으로 한글이다: 이 두 결함은 한글에서만
+# 발생하고, 영어 덱에 한글 요약 라인이 섞이는 것이 글로벌 덱의 실제 패턴이다.
+_T = {
+    "ko": {
+        "title1": "3분기 실적 요약",
+        "e1": "3분기 실적 요약",   # 타이틀 자체가 E1(Arial 한글)
+        "e2": "핵심 지표는 전 분기 대비 개선" + EM_DASH + "특히 구독 매출이 견인했습니다",
+        "e2_fixed": "핵심 지표는 전 분기 대비 개선: 특히 구독 매출이 견인했습니다",
+        "e4": "자간이 벌어진 한글 강조",
+        "e4_fixed": "자간을 되돌린 한글 강조",
+        "e3": "출처: 사내 관리회계, 2026-06",
+        "title2": "분기 핵심 지표",
+        "kpi1": "매출 성장률 +18%",
+        "kpi2": "영업이익률 12.4%",
+        "w16": "다음 분기 가이던스",
+    },
+    "en": {
+        "title1": "Q3 Results Summary",
+        "e1": "한국어 요약: 구독 매출이 성장을 견인",   # 이중언어 요약 라인이 E1
+        "e2": "Key metrics improved quarter over quarter" + EM_DASH + "subscriptions led the growth",
+        "e2_fixed": "Key metrics improved quarter over quarter: subscriptions led the growth",
+        "e4": "자간이 벌어진 한글 라벨",
+        "e4_fixed": "자간을 되돌린 한글 라벨",
+        "e3": "Source: internal management accounts, 2026-06",
+        "title2": "Key metrics this quarter",
+        "kpi1": "Revenue growth +18%",
+        "kpi2": "Operating margin 12.4%",
+        "w16": "Next quarter guidance",
+    },
+}
 
 
 def _prs():
@@ -53,56 +87,61 @@ def _tb(slide, x, y, w, h, text, size=14, font=None, ea=None, spc=None,
     return box
 
 
-def build_broken(path):
+def build_broken(path, lang="ko"):
     """대표 결함 6종을 심은 덱. full 프로파일에서 ERROR 4 + WARN(W15/W16)이 나온다."""
+    t = _T[lang]
     p = _prs()
     s = _slide(p)   # p1: 타이포그래피 결함
-    _tb(s, 0.8, 0.6, 8.0, 0.9, "3분기 실적 요약", size=26, font="Arial", bold=True)   # E1
-    # E1은 타이틀 하나로 족하다: 나머지 run은 ea를 명시해 결함 하나당 코드 하나로 유지
-    # (기본 Office 테마는 ea 빈 슬롯이라 ea 없는 한글 run은 전부 E1이 맞게 발화한다: 실측)
-    _tb(s, 0.8, 1.8, 10.0, 0.6,
-        "핵심 지표는 전 분기 대비 개선" + EM_DASH + "특히 구독 매출이 견인했습니다",
-        size=14, ea="맑은 고딕")                                                      # E2
-    _tb(s, 0.8, 2.8, 6.0, 0.5, "자간이 벌어진 한글 강조", size=16, spc=300,
-        ea="맑은 고딕")                                                               # E4
-    _tb(s, 0.8, 6.9, 5.0, 0.3, "출처: 사내 관리회계, 2026-06", size=4,
-        ea="맑은 고딕")                                                               # E3
+    if lang == "ko":
+        # 타이틀 자체가 E1(Arial에 실린 한글). 나머지 run은 ea를 명시해 결함 하나당
+        # 코드 하나로 유지한다(기본 Office 테마는 ea 빈 슬롯: ea 없는 한글 run은 전부
+        # E1이 맞게 발화한다는 실측 확인).
+        _tb(s, 0.8, 0.6, 8.0, 0.9, t["title1"], size=26, font="Arial", bold=True)   # E1
+    else:
+        # 영어 타이틀은 한글이 없어 E1 무관. E1은 이중언어 요약 라인이 담당한다.
+        _tb(s, 0.8, 0.6, 8.0, 0.9, t["title1"], size=26, font="Arial", bold=True)
+        _tb(s, 0.8, 3.7, 8.0, 0.5, t["e1"], size=14, font="Arial")                  # E1
+    _tb(s, 0.8, 1.8, 10.0, 0.6, t["e2"], size=14, ea="맑은 고딕")                    # E2
+    _tb(s, 0.8, 2.8, 6.0, 0.5, t["e4"], size=16, spc=300, ea="맑은 고딕")            # E4
+    _tb(s, 0.8, 6.9, 5.0, 0.3, t["e3"], size=4, ea="맑은 고딕")                      # E3
     s = _slide(p)   # p2: 기하 결함
-    _tb(s, 0.8, 0.6, 8.0, 0.9, "분기 핵심 지표", size=26, ea="맑은 고딕", bold=True)
-    _tb(s, 1.0, 2.4, 5.0, 1.0, "매출 성장률 +18%", size=24, ea="맑은 고딕")            # W15 쌍
-    _tb(s, 1.2, 2.5, 5.0, 1.0, "영업이익률 12.4%", size=24, ea="맑은 고딕")
-    _tb(s, 12.0, 4.5, 3.0, 0.6, "다음 분기 가이던스", size=18, ea="맑은 고딕")         # W16
+    _tb(s, 0.8, 0.6, 8.0, 0.9, t["title2"], size=26, ea="맑은 고딕", bold=True)
+    _tb(s, 1.0, 2.4, 5.0, 1.0, t["kpi1"], size=24, ea="맑은 고딕")                   # W15 쌍
+    _tb(s, 1.2, 2.5, 5.0, 1.0, t["kpi2"], size=24, ea="맑은 고딕")
+    _tb(s, 12.0, 4.5, 3.0, 0.6, t["w16"], size=18, ea="맑은 고딕")                   # W16
     p.save(path)
     return path
 
 
-def build_fixed(path):
+def build_fixed(path, lang="ko"):
     """broken과 같은 내용의 교정본. full 프로파일에서 ERROR 0, WARN 0."""
+    t = _T[lang]
     p = _prs()
     s = _slide(p)
     # E1 교정: a:latin은 그대로 두고 a:ea에 한글 폰트를 명시(가장 견고한 수정)
-    _tb(s, 0.8, 0.6, 8.0, 0.9, "3분기 실적 요약", size=26, font="Arial",
+    _tb(s, 0.8, 0.6, 8.0, 0.9, t["title1"], size=26, font="Arial",
         ea="맑은 고딕", bold=True)
+    if lang != "ko":
+        _tb(s, 0.8, 3.7, 8.0, 0.5, t["e1"], size=14, font="Arial", ea="맑은 고딕")
     # E2 교정: 산문 대시는 콜론·쉼표·괄호로
-    _tb(s, 0.8, 1.8, 10.0, 0.6,
-        "핵심 지표는 전 분기 대비 개선: 특히 구독 매출이 견인했습니다",
-        size=14, ea="맑은 고딕")
+    _tb(s, 0.8, 1.8, 10.0, 0.6, t["e2_fixed"], size=14, ea="맑은 고딕")
     # E4 교정: 한글 run 자간 0
-    _tb(s, 0.8, 2.8, 6.0, 0.5, "자간을 되돌린 한글 강조", size=16, ea="맑은 고딕")
+    _tb(s, 0.8, 2.8, 6.0, 0.5, t["e4_fixed"], size=16, ea="맑은 고딕")
     # E3 교정: 출처·캡션도 최소 9pt
-    _tb(s, 0.8, 6.9, 5.0, 0.3, "출처: 사내 관리회계, 2026-06", size=9, ea="맑은 고딕")
+    _tb(s, 0.8, 6.9, 5.0, 0.3, t["e3"], size=9, ea="맑은 고딕")
     s = _slide(p)
-    _tb(s, 0.8, 0.6, 8.0, 0.9, "분기 핵심 지표", size=26, ea="맑은 고딕", bold=True)
-    _tb(s, 1.0, 2.4, 5.0, 1.0, "매출 성장률 +18%", size=24, ea="맑은 고딕")
-    _tb(s, 6.8, 2.4, 5.0, 1.0, "영업이익률 12.4%", size=24, ea="맑은 고딕")
-    _tb(s, 9.2, 4.5, 3.4, 0.6, "다음 분기 가이던스", size=18, ea="맑은 고딕")
+    _tb(s, 0.8, 0.6, 8.0, 0.9, t["title2"], size=26, ea="맑은 고딕", bold=True)
+    _tb(s, 1.0, 2.4, 5.0, 1.0, t["kpi1"], size=24, ea="맑은 고딕")
+    _tb(s, 6.8, 2.4, 5.0, 1.0, t["kpi2"], size=24, ea="맑은 고딕")
+    _tb(s, 9.2, 4.5, 3.4, 0.6, t["w16"], size=18, ea="맑은 고딕")
     p.save(path)
     return path
 
 
 def build_warnings(path):
     """core 프로파일은 클린, full 프로파일에서만 스타일 WARN이 나오는 덱(examples/용):
-    W13 네이티브 그림자, W14 명사구 타이틀 나열. 프로파일 분리를 가르치는 교보재."""
+    W13 네이티브 그림자, W14 명사구 타이틀 나열. 프로파일 분리를 가르치는 교보재.
+    W14가 한글 타이틀 휴리스틱이라 이 덱은 한국어판만 있다."""
     p = _prs()
     for i, title in enumerate(("시장 현황", "경쟁 구도 분석", "성장 전략 로드맵")):
         s = _slide(p)

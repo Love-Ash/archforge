@@ -70,6 +70,10 @@
 - README(en/ko) 전면 개편: 실렌더 before/after 대조 이미지와 데모 GIF(둘 다
   examples 덱의 PowerPoint 실렌더로 제작), 30초 온보딩 섹션, CI 섹션, location
   계약 문서화. SKILL.md에 scan/demo와 location 키 계약 추가.
+- 데모 덱 언어 이원화: `archforge demo`가 리포트 언어에 맞는 덱(ko/en)을 만들고,
+  영어판은 이중언어 요약 라인으로 E1/E4를 재현합니다(글로벌 덱의 실제 패턴).
+  영문 README 자산은 영문 덱, 한국어 README 자산은 한글 덱의 실렌더입니다.
+  examples/에 broken_en/fixed_en 추가.
 - docs/assets/social-preview.jpg(1280x640) 동봉: 리포 Settings의 Social preview에
   업로드하는 용도.
 

@@ -1771,6 +1771,21 @@ def test_examples_contract(tmp_path):
     assert {"W13", "W14"} <= set(codes(w)), codes(w)
 
 
+def test_demo_en_variant(tmp_path):
+    """영어판 데모 덱 계약: broken_en은 4 ERROR+2 WARN(E1/E4는 이중언어 한글 라인),
+    fixed_en은 full 클린. README(en) 자산이 이 덱의 실렌더다."""
+    from archforge import demo as jdemo
+    b = os.path.join(str(tmp_path), "b.pptx")
+    fx = os.path.join(str(tmp_path), "f.pptx")
+    jdemo.build_broken(b, lang="en")
+    jdemo.build_fixed(fx, lang="en")
+    e, w = lint_full(b)
+    assert {"E1", "E2", "E3", "E4"} <= set(codes(e)), codes(e)
+    assert {"W15", "W16"} <= set(codes(w)), codes(w)
+    e, w = lint_full(fx)
+    assert not e and not w, (codes(e), codes(w))
+
+
 def test_cli_scan_sarif_multi(tmp_path):
     """scan --sarif: 여러 파일이 한 SARIF run에 파일별 artifactLocation으로 합쳐진다."""
     d = os.path.join(str(tmp_path), "demo")

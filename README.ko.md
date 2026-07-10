@@ -14,13 +14,13 @@
 
 [English README](README.md)
 
-![demo](docs/assets/demo.gif)
+![demo](docs/assets/demo-ko.gif)
 
 </div>
 
 파워포인트는 이 두 덱을 아무 경고 없이 엽니다. 하나는 망가져 있습니다:
 
-![before / after](docs/assets/before-after.png)
+![before / after](docs/assets/before-after-ko.png)
 
 코드 리뷰로는 이걸 볼 수 없습니다. 결함이 폰트 슬롯, autofit 배율, 좌표처럼 렌더
 시점에야 실체가 되는 곳에 살기 때문입니다. Archforge는 `.pptx` 내부(XML, 폰트 해석

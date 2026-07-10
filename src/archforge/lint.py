@@ -2463,8 +2463,10 @@ def demo_main(argv=None):
     os.makedirs(a.dir, exist_ok=True)
     broken = os.path.join(a.dir, "broken.pptx")
     fixed = os.path.join(a.dir, "fixed.pptx")
-    _demo.build_broken(broken)
-    _demo.build_fixed(fixed)
+    # 덱 텍스트도 리포트 언어를 따른다(영어 사용자는 영어 데모 덱을 받는다, 0.5.0)
+    deck_lang = get_lang() if get_lang() in ("ko", "en") else "en"
+    _demo.build_broken(broken, lang=deck_lang)
+    _demo.build_fixed(fixed, lang=deck_lang)
     print(M("demo_built") % a.dir)
     print()
     rc = 0
