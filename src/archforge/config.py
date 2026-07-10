@@ -1,20 +1,22 @@
 # -*- coding: utf-8 -*-
-"""설정 파일과 baseline(0.4.0, 3차 외부 리뷰 구조 개편).
+"""Config file and baseline (0.4.0, third external review structural overhaul).
 
-설정 탐색: --config 명시 > 덱 파일 폴더 > 현재 폴더에서 .archforge.json /
-.archforge.yml(.yaml). JSON은 의존성 없이 항상 지원하고, YAML은 PyYAML이 있을 때만
-(`pip install archforge[yaml]`). CLI 플래그가 설정 파일을 이긴다.
+Config discovery: --config explicit > deck file's folder > current folder, for
+.archforge.json / .archforge.yml(.yaml). JSON is always supported with no dependency;
+YAML only when PyYAML is present (`pip install archforge[yaml]`). CLI flags override the
+config file.
 
-지원 키:
+Supported keys:
   profile: core|full|editorial
   lang: ko|en
   skip: [W14, ...]
-  hard_min / body_min / small_min / w6_sim / w6_cluster: 숫자
-  baseline: baseline 파일 경로(기록된 기존 위반은 억제하고 신규만 보고)
+  hard_min / body_min / small_min / w6_sim / w6_cluster: number
+  baseline: baseline file path (recorded existing violations are suppressed; only new ones
+    are reported)
 
-baseline 파일은 {"findings": [{"code","page","fingerprint"}...]} 형태로
-`archforge deck.pptx --write-baseline PATH`가 만든다. 지문은 페이지+코드+detail
-기반이라 메시지 언어와 무관하다.
+The baseline file has the shape {"findings": [{"code","page","fingerprint"}...]}, produced by
+`archforge deck.pptx --write-baseline PATH`. The fingerprint is based on page+code+detail, so
+it is independent of the message language.
 """
 import json
 import os
@@ -43,9 +45,10 @@ def find_config(deck_path: str, explicit: Optional[str] = None) -> Optional[str]
 
 
 def load_config(path: str) -> Tuple[Dict, List[str]]:
-    """(설정 dict, 경고 목록). 품질 게이트의 설정은 fail-safe여야 한다(4차 리뷰):
-    알 수 없는 키(오타 profle=full이 조용히 기본 core로 실행되는 사고)와 타입·범위
-    위반은 무시가 아니라 오류다. baseline 경로는 실행 위치가 아니라 설정 파일 기준."""
+    """(config dict, warning list). A quality gate's config must be fail-safe (fourth
+    review): unknown keys (the incident where a typo'd profle=full silently ran as the
+    default core) and type/range violations are errors, not something to ignore. The
+    baseline path is resolved relative to the config file, not the execution directory."""
     warnings: List[str] = []
     if path.endswith((".yml", ".yaml")):
         try:
@@ -66,7 +69,7 @@ def load_config(path: str) -> Tuple[Dict, List[str]]:
         raise RuntimeError("unknown config key(s): %s (allowed: %s)"
                            % (", ".join(unknown), ", ".join(sorted(_ALLOWED_KEYS))))
     out = dict(data)
-    # 타입·범위 검증(traceback 대신 정돈된 오류)
+    # Type/range validation (a tidy error instead of a traceback)
     def _num(key, lo=None, lo_incl=False, hi=None):
         if key not in out:
             return
@@ -102,8 +105,9 @@ def load_config(path: str) -> Tuple[Dict, List[str]]:
 
 
 def write_baseline(path: str, findings, profile: str = "", lang: str = "") -> int:
-    """지문 v2(스키마 2): 페이지 무관 지문 + 발생 수(count) + 실행 조건 메타데이터.
-    v1의 세 결함(언어 의존 detail, 페이지 삽입 취약, multiset 소실)의 교정(4차 리뷰)."""
+    """Fingerprint v2 (schema 2): page-independent fingerprint + occurrence count +
+    run-condition metadata. Fixes v1's three defects (language-dependent detail, fragility
+    to page insertion, lost multiset info) (fourth review)."""
     from collections import Counter
     counts = Counter()
     codes = {}
@@ -132,7 +136,8 @@ def write_baseline(path: str, findings, profile: str = "", lang: str = "") -> in
 
 
 def load_baseline(path: str) -> Dict[str, int]:
-    """지문 -> 허용 발생 수. v1(스키마 1.0) 파일은 재생성을 요구한다(지문 체계 변경)."""
+    """Fingerprint -> allowed occurrence count. v1 (schema 1.0) files require regeneration
+    (the fingerprint scheme changed)."""
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     if str(data.get("schema_version")) != "2":
@@ -146,8 +151,9 @@ def load_baseline(path: str) -> Dict[str, int]:
 
 
 def apply_baseline(findings, known: Dict[str, int]):
-    """(신규 finding 목록, 억제 수). 지문당 허용 발생 수까지만 억제한다(multiset 의미).
-    W18은 baseline 대상이 아니다(불완전성 신호)."""
+    """(new findings list, suppressed count). Suppresses only up to the allowed occurrence
+    count per fingerprint (multiset semantics). W18 is not eligible for baseline
+    suppression (it signals incompleteness)."""
     budget = dict(known)
     kept, suppressed = [], 0
     for f in findings:

@@ -1,197 +1,248 @@
-# 캘리브레이션 기록
+# Calibration Log
 
-임계값이 왜 그 자리에 있는지, 판정 모델이 어디서 왔는지를 기록합니다. 요지: 임계는 취향이
-아니라 실덱 렌더 대조와 적대 검증의 산출물이고, 여기 없는 근거는 코드 주석에 날짜와 함께
-남아 있습니다.
+Records why each threshold sits where it does, and where the judgment model came from. In
+short: thresholds are not a matter of taste but the output of render comparisons against real
+decks and adversarial verification, and any rationale not recorded here remains in code
+comments with a date.
 
-## 코퍼스와 방법
+## Corpus and method
 
-- 기준 코퍼스: 실제 제작·수정된 덱 50여 개(컨설팅형 보고서, IR, 소개서, 에디토리얼 혼합,
-  한글 중심 + 일부 영문). 사적·업무 자료라 원본은 공개하지 않습니다. 공개 불가 대신,
-  아래에 게이트별 결정 근거를 남기고 주요 임계를 CLI 플래그로 노출해 사용자가 자기
-  코퍼스로 재보정할 수 있게 했습니다.
-- 절차: 전수 스캔으로 플래그 수집 → 플래그된 페이지를 실제 렌더 PNG와 대조해 진짜 결함과
-  오탐 분류 → 갈리는 지점에 임계 배치 → 적대 검증(오탐을 유발하는 재현 pptx 제작·공격)
-  → 살아남은 임계와 오탐 억제 규칙을 pytest 픽스처로 고정.
-- 재보정 손잡이: `--hard-min` `--body-min` `--small-min` `--w6-sim` `--w6-cluster`
+- Reference corpus: about 50 actually produced/edited decks (consulting-style reports, IR,
+  pitch decks, editorial mixes; Hangul-centric plus some English). Since these are
+  private/work materials, the originals are not published. In place of publishing them, this
+  document records the rationale behind each gate below and exposes the key thresholds as CLI
+  flags, so users can recalibrate against their own corpus.
+- Procedure: exhaustive scan to collect flags -> compare flagged pages against actual rendered
+  PNGs to classify genuine defects vs. false positives -> place the threshold where the two
+  diverge -> adversarial verification (constructing and attacking reproduction pptx files that
+  induce false positives) -> lock in the surviving thresholds and false-positive suppression
+  rules as pytest fixtures.
+- Recalibration knobs: `--hard-min` `--body-min` `--small-min` `--w6-sim` `--w6-cluster`
   `--skip` `--strict`.
 
-## E1 폰트 해석 모델 (PowerPoint COM 실측, 2026-07-10)
+## E1 font resolution model (measured via PowerPoint COM, 2026-07-10)
 
-규격 문서가 아니라 렌더 실측으로 확정했습니다. 프로브 덱(공백 없는 순수 한글, 60pt)을
-PowerPoint COM으로 PNG 내보내고, 잉크 bbox 정렬 후 픽셀 평균절대차(MAD)로 동일 폰트
-여부를 판정했습니다. 세리프(Batang)와 산세리프(Malgun) 대비라 판정이 명확합니다.
+Determined by rendering measurements, not by the spec document. A probe deck (pure Hangul
+with no spaces, 60pt) was exported to PNG via PowerPoint COM, and after aligning ink bounding
+boxes, same-font identity was judged by pixel mean absolute difference (MAD). Because this
+pits a serif (Batang) against a sans-serif (Malgun), the verdict is unambiguous.
 
-| 케이스 | run a:latin | run a:ea | 테마 minorFont a:ea | 실제 렌더 |
+| Case | run a:latin | run a:ea | theme minorFont a:ea | Actual render |
 |---|---|---|---|---|
-| a1 | Batang | 없음 | ""(빈 슬롯) | Batang (MAD 0.00 vs a2) |
-| a2 | 없음 | Batang | "" | Batang |
-| a3 | 없음 | 없음 | "" | Malgun 폴백 |
-| a4 | Consolas | 없음 | "" | Malgun 폴백 (MAD 0.00 vs a3) |
-| b1 | Batang | 없음 | Malgun Gothic | Malgun (MAD 0.00 vs b2: 테마가 latin을 이김) |
-| b2 | 없음 | 없음 | Malgun Gothic | Malgun |
-| b3 | 없음 | Batang | Malgun Gothic | Batang (run ea가 테마를 이김) |
+| a1 | Batang | none | "" (empty slot) | Batang (MAD 0.00 vs a2) |
+| a2 | none | Batang | "" | Batang |
+| a3 | none | none | "" | Malgun fallback |
+| a4 | Consolas | none | "" | Malgun fallback (MAD 0.00 vs a3) |
+| b1 | Batang | none | Malgun Gothic | Malgun (MAD 0.00 vs b2: theme beats latin) |
+| b2 | none | none | Malgun Gothic | Malgun |
+| b3 | none | Batang | Malgun Gothic | Batang (run ea beats theme) |
 
-추가 실측(프로브6, 2026-07-10, 0.2.1): 폰트 상속 경로 두 건.
+Additional measurement (probe 6, 2026-07-10, 0.2.1): two font inheritance paths.
 
-| 케이스 | 구성 | 실제 렌더 |
+| Case | Configuration | Actual render |
 |---|---|---|
-| P1 | 마스터 body ph lstStyle lvl1 defRPr a:ea="Batang", run 무폰트, 테마 ea "" | Batang (마스터 lstStyle ea가 상속됨) |
-| Q1 | 테마 majorFont ea="Batang", minorFont ea="Malgun", 제목 ph run 무폰트 | Batang (제목은 majorFont ea) |
-| Q2 | 같은 덱의 body ph run 무폰트 | Malgun (본문은 minorFont ea) |
+| P1 | Master body ph lstStyle lvl1 defRPr a:ea="Batang", run has no font, theme ea "" | Batang (master lstStyle ea is inherited) |
+| Q1 | Theme majorFont ea="Batang", minorFont ea="Malgun", title ph run has no font | Batang (titles use majorFont ea) |
+| Q2 | Same deck's body ph run has no font | Malgun (body uses minorFont ea) |
 
-따라서 0.2.1부터 run rPr에 없는 폰트 슬롯은 lstStyle 체인(도형 → 레이아웃 ph → 마스터
-ph → 마스터 txStyles → defaultTextStyle)에서 해석하고, 테마 폴백은 placeholder
-패밀리에 따라 majorFont(제목)/minorFont(그 외) ea를 쓴다.
+So starting in 0.2.1, a font slot missing from run rPr is resolved via the lstStyle chain
+(shape -> layout ph -> master ph -> master txStyles -> defaultTextStyle), and the theme
+fallback uses majorFont (title) / minorFont (everything else) ea depending on the placeholder
+family.
 
-추가 실측(프로브7, 2026-07-10, 0.3.1): 문단 수준 기본 런 속성.
+Additional measurement (probe 7, 2026-07-10, 0.3.1): paragraph-level default run properties.
 
-| 케이스 | 구성 | 실제 렌더 |
+| Case | Configuration | Actual render |
 |---|---|---|
-| c1 | 문단 pPr/defRPr a:ea="Batang", run 무폰트, 테마 빈 슬롯 | Batang (문단 상속 실재) |
-| c2 | 마스터 body ph lstStyle ea="Batang" + 문단 defRPr ea="Malgun", run 무폰트 | Malgun (문단이 lstStyle을 이김) |
+| c1 | Paragraph pPr/defRPr a:ea="Batang", run has no font, theme empty slot | Batang (paragraph inheritance is real) |
+| c2 | Master body ph lstStyle ea="Batang" + paragraph defRPr ea="Malgun", run has no font | Malgun (paragraph beats lstStyle) |
 
-확정 우선순위: run rPr > 문단 pPr/defRPr > lstStyle 체인 > 테마. 부수 실측: 일반
-텍스트박스 txBody에 lstStyle을 넣은 파일은 PowerPoint가 열기를 거부한다(placeholder와
-마스터는 정상). 3차 외부 리뷰가 이 문단 단계 누락을 오탐·미탐 재현으로 확정했다(P0-1). 기본 템플릿의
-defaultTextStyle이 +mn-lt/+mn-ea 토큰을 갖고 있어, 무폰트 텍스트박스의 실효 latin이
-Calibri로 해석되는 것까지 프로브 s3의 COM 폰트 속성과 일치한다.
+Confirmed priority: run rPr > paragraph pPr/defRPr > lstStyle chain > theme. Side measurement:
+a file with lstStyle placed on an ordinary textbox's txBody is refused by PowerPoint on open
+(placeholder and master are fine). The 3rd-round external review confirmed this missing
+paragraph-level step through false-positive/false-negative reproduction (P0-1). The default
+template's defaultTextStyle carries +mn-lt/+mn-ea tokens, which is consistent even down to the
+fact that the effective latin of a fontless textbox resolves to Calibri, matching probe s3's
+COM font properties.
 
-도출된 우선순위: run `a:ea` > lstStyle 상속 체인 > 비어있지 않은 테마 `a:ea`(패밀리별
-major/minor) > (테마 ea가 빈 슬롯일 때만) run `a:latin` > OS 폴백(Malgun). 함의 두 가지:
+Derived priority: run `a:ea` > lstStyle inheritance chain > non-empty theme `a:ea` (major/minor
+by family) > run `a:latin` (only when theme ea is an empty slot) > OS fallback (Malgun). Two
+implications:
 
-1. python-pptx `run.font.name`(= a:latin만 기록)에 한글 폰트를 준 덱은, 기본 템플릿(빈
-   테마 ea)에서는 실제로 그 폰트로 렌더됩니다. 합법 패턴이라 E1을 걸지 않습니다.
-2. 반대로 라틴 전용 폰트를 준 한글 런은 Malgun으로 조용히 폴백됩니다. E1 대상입니다.
+1. A deck that assigns a Hangul font via python-pptx's `run.font.name` (which records only
+   a:latin) actually renders in that font under the default template (empty theme ea). This is
+   a legitimate pattern, so E1 does not flag it.
+2. Conversely, a Hangul run given a Latin-only font silently falls back to Malgun. This is what
+   E1 targets.
 
-블록리스트 방식의 한계: `LATIN_ONLY_FONTS`에 없는 라틴 전용 폰트는 놓칩니다(미탐).
-덱에서 흔한 라틴 패밀리 60여 종을 등재했고, 한글 완비 변형이 접두에 말려드는 것은
-`KOREAN_CAPABLE_EXCEPTIONS`(Arial Unicode, IBM Plex Sans KR, Noto Sans/Serif KR·CJK)로
-막습니다. NanumGothicCoding은 한글 완비 폰트라 0.2.0에서 목록에서 제거했습니다.
+Limitation of the blocklist approach: a Latin-only font not in `LATIN_ONLY_FONTS` is missed (a
+false negative). About 60 Latin families common in decks are registered, and Hangul-complete
+variants getting caught by a prefix match are blocked via `KOREAN_CAPABLE_EXCEPTIONS` (Arial
+Unicode, IBM Plex Sans KR, Noto Sans/Serif KR/CJK). NanumGothicCoding is a Hangul-complete
+font, so it was removed from the list in 0.2.0.
 
-테마 ea는 슬라이드 → 레이아웃 → 마스터 → 테마 관계(rels)로 마스터별 해석합니다. 0.1.0은
-패키지의 첫 테마 파트를 잡아 멀티마스터 덱에서 콘텐츠와 무관한 테마로 판정할 수 있었습니다.
+Theme ea is resolved per master via the slide -> layout -> master -> theme relationship
+(rels). 0.1.0 grabbed the package's first theme part, which could result in judging against a
+theme unrelated to the content in multi-master decks.
 
-## E2 대시 게이트 (0.2.1 v2)
+## E2 dash gate (0.2.1 v2)
 
-- 차단 대상: U+2012, U+2013, U+2014, U+2015, U+2212, U+FF0D, U+2E3A, U+2E3B, U+2500.
-- 판별 축은 문자가 아니라 기능입니다. 같은 en dash가 범위 연결(정당)일 수도 문장
-  부호(AI 삽입구 티)일 수도 있어서, 이웃 토큰의 숫자성과 붙임 여부로 가릅니다.
-  - 양옆 토큰이 둘 다 숫자성(숫자를 포함: 2020, Q1, 5%, FY24): 통과. 띄어도 범위입니다.
-  - 한쪽만 숫자성 + 붙음(2020 뒤에 바로 대시+현재): 통과.
-  - 한쪽만 숫자성 + 띄움: 차단. "성장 (대시) 2024년에는" 류가 정확히 AI 삽입구 패턴입니다.
-  - 단어와 단어 연결(Seoul(대시)Busan): 차단. 삽입구와 기계적으로 구분 불가라 보수
-    선택이고, 이게 잔여 오탐 지대임을 인정합니다(향후 영문 프로파일에서 완화 예정).
-  - U+2212는 바로 뒤가 숫자면 통과(음수·산식).
-- 문맥은 run이 아니라 문단 전체 텍스트로 봅니다(PowerPoint의 run 분할 오탐 방지).
-- `--strict`: 예외 없이 전부 차단. 문서 스타일 규율로 대시류를 완전 금지하는 하우스용.
+- Blocked characters: U+2012, U+2013, U+2014, U+2015, U+2212, U+FF0D, U+2E3A, U+2E3B, U+2500.
+- The discriminating axis is function, not character. The same en dash can be a legitimate
+  range connector or a sentence-punctuation mark (a telltale AI parenthetical), so it is
+  distinguished by whether the neighboring tokens are numeric and whether they are adjacent.
+  - Both surrounding tokens are numeric (contain digits: 2020, Q1, 5%, FY24): passes. Even
+    with spacing, this is a range.
+  - Only one side is numeric + adjacent (e.g. 2020 immediately followed by a dash + "present"):
+    passes.
+  - Only one side is numeric + spaced: blocked. Patterns like "growth (dash) in 2024" are
+    exactly the AI parenthetical pattern.
+  - Word-to-word connection (Seoul(dash)Busan): blocked. This cannot be mechanically
+    distinguished from a parenthetical, so it is a conservative choice, and we acknowledge this
+    is a residual false-positive zone (to be relaxed in a future English profile).
+  - U+2212 passes if immediately followed by a digit (negative numbers, formulas).
+- Context is evaluated over the full paragraph text, not the run (to prevent false positives
+  from PowerPoint's run splitting).
+- `--strict`: blocks everything with no exceptions. For houses whose document style rules ban
+  dash characters entirely.
 
-## 스크립트 레이어 (0.2.1)
+## Script layer (0.2.1)
 
-검사를 텍스트 런의 스크립트(유니코드 코드포인트, 결정적)와 짝짓습니다.
+Pairs each check with the script of the text run (Unicode code point, deterministic).
 
-- 폰트 지식은 2층입니다(3차 패널 교정). 블록리스트 본대(Inter·Arial·모노 계열)는 CJK
-  전체가 없는 폰트라 한글·가나·한자 판정 모두에 유효하고, JP/SC 서브셋(Noto Sans JP 류,
-  가나·한자 보유)은 한글 판정에서만 라틴 전용 취급합니다. 그래서 한자 전용 런이
-  Inter·모노 폰트에 실리면 E1이 잡고(진짜 폴백), Noto Sans JP에 실리면 통과합니다.
-  비한글 스크립트의 빈 슬롯·미지정은 침묵합니다(그쪽 OS 폴백 지형은 미실측이라
-  단정하지 않음).
-- E4는 가나가 섞인 런만 제외합니다(가나 자간은 일본어 디자인의 정상 관행). 한자 전용
-  런은 한국 덱의 인명·법률용어가 흔해 대상을 유지합니다. 중국어 본문 관점에선 의견성
-  판정일 수 있어 향후 프로파일 대상입니다.
-- 미실측 외삽 하나를 명시합니다: 테마 ea 폴백의 패밀리 분기에서 제목 외 placeholder
-  (푸터·날짜·페이지번호)와 일반 텍스트박스를 전부 minorFont로 묶는 것은 프로브6이
-  제목/본문만 측정한 결과의 일반화입니다. OOXML 규격 방향과 일치하나 COM 실측은
-  안 된 지점입니다.
-- 세로쓰기(bodyPr@vert)와 RTL·복잡 조판 스크립트(아랍·히브리·인도계·태국)는 글자폭
-  근사표(라틴/CJK 이분법)가 무의미해 기하 검사(W15~W17)를 스킵하고 W18로 알립니다.
-- 크기·레이아웃·효과 게이트(E3, W1, W5, W6, W12, W13 등)는 언어 무관이라 전 스크립트에
-  그대로 돕니다.
+- Font knowledge has two layers (corrected by the 3rd-round panel). The main blocklist (Inter,
+  Arial, monospace family) lacks CJK entirely, so it is valid for judging Hangul, kana, and Han
+  characters alike, while the JP/SC subset (Noto Sans JP and similar, which have kana and Han)
+  is treated as Latin-only only for Hangul judgment. So a Han-only run set in Inter or a
+  monospace font is caught by E1 (a genuine fallback), while the same run set in Noto Sans JP
+  passes. Empty or unspecified slots for non-Hangul scripts are silent (the OS fallback
+  landscape there is unmeasured, so no claim is made).
+- E4 excludes only runs mixed with kana (kana tracking/letter-spacing is normal practice in
+  Japanese design). Han-only runs remain in scope because personal names and legal terms are
+  common in Korean decks. From a Chinese-body-text perspective this judgment may be
+  opinionated, so it is a candidate for a future profile.
+- One unmeasured extrapolation is called out explicitly: in the family branch of the theme ea
+  fallback, grouping all non-title placeholders (footer, date, page number) and ordinary
+  textboxes under minorFont is a generalization from probe 6, which measured only title/body.
+  This is consistent with the direction of the OOXML spec but is a point that has not been
+  verified by COM measurement.
+- For vertical writing (bodyPr@vert) and RTL/complex-shaping scripts (Arabic, Hebrew, Indic,
+  Thai), the glyph-width approximation table (Latin/CJK dichotomy) is meaningless, so geometry
+  checks (W15-W17) are skipped and reported via W18.
+- Size, layout, and effect gates (E3, W1, W5, W6, W12, W13, etc.) are language-agnostic, so
+  they run unchanged across all scripts.
 
-## 크기 게이트 (E3 / W1 / W8 / W5)
+## Size gates (E3 / W1 / W8 / W5)
 
-- E3 하한 5.0pt: 이 아래는 렌더에서 판독 자체가 불가(코퍼스 렌더 대조).
-- W1: 9pt 미만 + 프레임 폭 4in 초과 + 문단 40자 이상 = 본문급인데 작다. 출처·캡션 오탐을
-  길이·폭 조건으로 억제.
-- W8: 5~7.5pt CJK(한글·가나·한자) + 좁은 프레임(4in 이하) = 목업·카드 내부 서브텍스트. 넓은 프레임의
-  소형 한글은 캡션일 여지가 커 제외(공개 위생 감사 반영).
-- 실효 크기는 autofit(fontScale, 퍼센트 문자열 형태 포함)과 상속 체인 전체(run > 문단 >
-  도형 lstStyle > 레이아웃 placeholder lstStyle > 마스터 placeholder·txStyles >
-  defaultTextStyle)를 해석합니다. 0.1.0은 run·문단까지만 보고 나머지를 전부 W5로 흘려
-  placeholder·템플릿 덱에서 크기 게이트가 사실상 죽어 있었습니다. 이제 W5는 체인 전체가
-  침묵하는 경우(외부 생성기가 defaultTextStyle까지 생략)에만 발화합니다.
+- E3 floor of 5.0pt: below this, the render is simply illegible (per corpus render
+  comparison).
+- W1: under 9pt + frame width over 4in + paragraph 40+ characters = body-level text that is
+  too small. Source/caption false positives are suppressed via the length and width
+  conditions.
+- W8: 5-7.5pt CJK (Hangul, kana, Han) + narrow frame (4in or less) = subtext inside a mockup
+  or card. Small Hangul in a wide frame is likely a caption and is excluded (reflecting the
+  public hygiene audit).
+- Effective size is resolved from autofit (fontScale, including its percent-string form) and
+  the entire inheritance chain (run > paragraph > shape lstStyle > layout placeholder lstStyle
+  > master placeholder/txStyles > defaultTextStyle). 0.1.0 looked only as far as run and
+  paragraph and let everything else fall through to W5, which meant the size gate was
+  effectively dead in placeholder/template decks. Now W5 fires only when the entire chain is
+  silent (i.e. an external generator omits even defaultTextStyle).
 
-## 기하 게이트 (W15 / W16 / W17)
+## Geometry gates (W15 / W16 / W17)
 
-- W15 겹침 임계 45%: 렌더 대조에서 30~35%대는 전부 오탐(빅넘버 아래 타이틀, 2단 사이
-  침범 추정), 60% 이상은 전부 실겹침. 그 사이에 임계를 놓고 페이지당 2건 상한.
-- W16 넘침 허용 오차: 텍스트 0.15in, 그림 0.12in. 장식 도형의 모서리 블리드는 표준
-  기법이라 검사하지 않음(도형 검사는 렌더 실측으로 기각).
-- W17 걸침 판정 25~75%: 완전 위(오버레이 캡션)는 W7 소관, 완전 밖은 무관. 1제곱인치
-  미만 그림 무시, 사진과 텍스트 사이 z에 솔리드 카드가 텍스트의 90% 이상을 받치면 제외.
-- 오탐 억제 픽스처(적대 검증 12건 실측 재현, 2026-07-03): 그룹 off/chOff desync,
-  wrap=none 한 줄 실폭, autofit 퍼센트 문자열, P모드+tRNS 투명, srcRect 크롭, flipH/V,
-  회전 축정렬 bbox, 드롭캡, 동일 텍스트 에코, 카드 위 캡션.
+- W15 overlap threshold 45%: in render comparison, the 30-35% band was entirely false
+  positives (titles beneath big numbers, presumed intrusion between two columns), while 60%
+  and above was entirely genuine overlap. The threshold sits between the two, with a cap of 2
+  findings per page.
+- W16 overflow tolerance: 0.15in for text, 0.12in for pictures. Corner bleed on decorative
+  shapes is a standard technique and is not checked (shape checking was rejected based on
+  render measurement).
+- W17 straddle judgment 25-75%: fully on top (an overlay caption) belongs to W7, fully outside
+  is irrelevant. Pictures under 1 square inch are ignored, and if a solid card sits in the
+  z-order between the photo and the text and backs 90% or more of the text, it is excluded.
+- False-positive suppression fixtures (12 adversarial-verification cases reproduced by
+  measurement, 2026-07-03): group off/chOff desync, actual single-line width with wrap=none,
+  autofit percent string, P-mode + tRNS transparency, srcRect crop, flipH/V, axis-aligned bbox
+  under rotation, drop cap, identical-text echo, caption over a card.
 
-## 구성·카피 게이트 (W6 / W9~W14)
+## Composition/copy gates (W6 / W9-W14)
 
-- W6 골격 반복: 6x4 그리드 점유 벡터 코사인 > 0.90, 같은 골격 4장 이상(최대 클러스터
-  판정, 덱 길이 불변). 의도적 템플릿 하우스는 `--w6-sim`/`--w6-cluster`로 조이거나
-  `--skip W6`. 완전 클론의 코사인은 부동소수점상 1.0을 넘을 수 있어 1.0으로 클램프.
-- W9 accent 세로바: 채도 0.55 이상 + 명도 0.18~0.78의 단색, 세로 정렬 스택 3개 이상,
-  오른쪽 인접 텍스트로 리스트 마커임을 확증. 다색은 범례(데이터 인코딩)라 제외.
-- W12 푸터: 표지 제외, 0.05in 양자화 최빈 버킷의 중앙값을 하우스 baseline으로, 0.03~0.25in
-  어긋난 페이지만. 절대 편차 방식은 50덱 실측에서 17덱 오탐이라 기각.
-- W13 효과: 자식 없는 빈 effectLst는 상속 차단용이라 세지 않음. 덱 단위 1회 집계
-  (페이지별 반복 발화는 소음).
-- W14 액션타이틀: 한글 타이틀 3개 이상이 명사구이고 전체의 절반 이상일 때 덱 단위 1회.
-  종결어미 휴리스틱에 더해 숫자+단위("3배", "42%", "120억")가 박힌 타이틀은 명사로 끝나도
-  주장으로 인정(0.2.0). 에디토리얼·작품 소개 덱은 `--skip W14`.
+- W6 skeleton repetition: 6x4 grid occupancy vector cosine similarity > 0.90, with 4 or more
+  slides sharing the same skeleton (judged by the largest cluster, invariant to deck length).
+  Houses that intentionally use a template can tighten via `--w6-sim`/`--w6-cluster` or
+  `--skip W6`. The cosine of a perfect clone can exceed 1.0 due to floating-point error, so it
+  is clamped to 1.0.
+- W9 accent vertical bar: a solid color with saturation 0.55 or higher and lightness
+  0.18-0.78, 3 or more vertically aligned stacks, confirmed as a list marker by adjacent text
+  to the right. Multicolor is excluded because that indicates a legend (data encoding).
+- W12 footer: excluding the cover, the median of the most frequent bucket after 0.05in
+  quantization becomes the house baseline, flagging only pages off by 0.03-0.25in. An
+  absolute-deviation approach was rejected because it produced false positives in 17 of 50
+  decks measured.
+- W13 effects: an empty effectLst with no children exists to block inheritance and is not
+  counted. Aggregated once per deck (firing repeatedly per page is noise).
+- W14 action titles: fires once per deck when 3 or more Hangul titles are noun phrases and
+  they make up half or more of all titles. In addition to the sentence-ending heuristic, a
+  title containing a number + unit ("3x", "42%", "12 billion") is recognized as an assertion
+  even if it ends in a noun (0.2.0). Editorial/portfolio-showcase decks should use
+  `--skip W14`.
 
-## 견고성 정책
+## Robustness policy
 
-임의 pptx의 최후 방어선이라는 자기 선언에 맞게, 검사 단위 가드가 파싱 불능 속성을
-흡수하고 나머지 검사를 계속합니다. 가드 입도는 run 단위입니다: 프레임 단위 가드는 한
-run의 손상이 이웃 run의 진짜 위반까지 삼켜 거짓 clean을 만든다는 것이 자체 적대
-패널에서 실측 재현됐습니다(2026-07-10). 같은 이유로 기하 기초자료(글리프 박스, 그림
-잉크 박스)는 실패한 축만 후퇴시키고 살아있는 축의 검사는 계속합니다.
+True to its self-declared role as the last line of defense for arbitrary pptx files, per-check
+guards absorb unparseable attributes and let the remaining checks continue. Guard granularity
+is per run: an in-house adversarial panel reproduced by measurement (2026-07-10) that a
+frame-level guard lets damage in one run swallow a genuine violation in a neighboring run,
+producing a false "clean" result. For the same reason, geometry base data (glyph boxes,
+picture ink boxes) retreat only on the failed axis while checks on the surviving axis continue.
 
-가드가 삼킨 구간은 W18로 출력 계약(JSON·텍스트)에 표면화됩니다. stderr에만 남기면
-exit code와 summary.pass만 보는 CI·에이전트 파이프라인이 불완전 검사를 완전 통과로
-오독합니다. --strict에선 W18도 exit 1로 승격됩니다.
+Spans swallowed by a guard are surfaced in the output contract (JSON/text) as W18. Leaving
+this in stderr alone would let a CI or agent pipeline that only checks the exit code and
+summary.pass misread an incomplete check as a full pass. Under --strict, W18 is also escalated
+to exit 1.
 
-OOXML 유니언 타입(정수 또는 "1.5pt"류 universal measure)은 스키마 유효 입력이므로
-파싱으로 흡수합니다: autofit fontScale에서 한 번(2026-07-03), spc 트래킹에서 한 번
-(2026-07-10) 같은 함정이 실측됐습니다. run 슬롯의 테마 토큰("+mn-lt" 류)은 마스터별
-테마 폰트로 해석한 뒤 판정하고, E2의 숫자 맥락 예외는 run이 아니라 문단 전체 텍스트를
-컨텍스트로 판정합니다(run 경계 분리 오탐 방지).
+OOXML union types (an integer or a universal measure like "1.5pt") are schema-valid input, so
+they are absorbed by parsing: the same trap was measured once in autofit fontScale
+(2026-07-03) and once in spc tracking (2026-07-10). Theme tokens in a run slot (e.g.
+"+mn-lt") are resolved to the per-master theme font before judgment, and E2's numeric-context
+exception is judged using the whole paragraph text as context rather than the run (to prevent
+false positives from run-boundary splitting).
 
-알려진 후퇴 지점: 테마 XML이 zip 수준에선 열리지만 lxml 파싱에 실패하는 마스터는
-빈 슬롯과 같은 가정(Malgun 폴백)으로 후퇴하며, 이때 stderr로 후퇴 사실을 고지합니다.
-파스 실패와 확인된 빈 슬롯을 판정에서 구분하지 않는 것은 의도된 보수적 선택입니다.
+Known retreat point: for a master whose theme XML opens at the zip level but fails lxml
+parsing, the code retreats to the same assumption as an empty slot (Malgun fallback), and
+notifies the retreat via stderr. Not distinguishing a parse failure from a confirmed empty
+slot in the judgment is a deliberate, conservative choice.
 
-## 알려진 한계(공개 명세, 4차 리뷰 반영 / 0.5.0에서 일부 해소)
+## Known limitations (public specification, incorporating the 4th-round review / partially resolved in 0.5.0)
 
-0.5.0에서 해소돼 회귀 픽스처로 고정된 항목:
+Resolved in 0.5.0 and locked in as regression fixtures:
 
-- a:fld(슬라이드 번호·날짜 필드)는 이제 일반 run과 같은 게이트(E1/E3/E4)를 지나고
-  location에 `field: true`가 붙습니다. a:br은 E2 문맥·오프셋에서 줄바꿈 한 글자로
-  취급됩니다. 필드는 ghost/W14 제목 수집에서 제외합니다(큰 페이지 번호 오염 방지).
-- finding location의 bbox는 그룹 변환을 합성한 절대좌표(인치)이고, 표 셀 finding에는
-  `cell`=[행,열] 0기반 인덱스가 붙습니다. 이 작업 중 잠복 버그를 실측으로 발견해
-  고쳤습니다: 슬라이드의 grpSpPr는 p: 네임스페이스인데 종전 코드가 a:로 find해 그룹
-  아핀이 항상 항등으로 후퇴했고, W15~W17 기하도 이동 desync 그룹에선 raw 좌표로
-  판정하고 있었습니다(로컬네임 매칭으로 수정, 절대좌표 테스트로 고정).
-- W15~W17에 location이 실립니다: bbox는 겹침을 판정한 실효 글리프(또는 그림 잉크)
-  절대 bbox이고, 쌍 판정(W15/W17)은 `related`로 상대 도형까지 특정합니다.
+- a:fld (slide-number/date fields) now passes through the same gates as an ordinary run
+  (E1/E3/E4), and its location carries `field: true`. a:br is treated as a single line-break
+  character in E2's context/offset handling. Fields are excluded from ghost/W14 title
+  collection (to prevent contamination from large page numbers).
+- The bbox in a finding's location is the absolute coordinate (in inches) with group
+  transforms composed in, and table-cell findings carry a 0-based `cell`=[row, col] index.
+  During this work a latent bug was found and fixed by measurement: a slide's grpSpPr is in
+  the p: namespace, but the previous code did a find with a:, so the group affine always fell
+  back to identity, and W15-W17 geometry was also being judged with raw coordinates in
+  translated/desynced groups (fixed via local-name matching, locked in with absolute-coordinate
+  tests).
+- W15-W17 now carry location: bbox is the absolute bbox of the effective glyph (or picture
+  ink) used to judge the overlap, and pairwise judgments (W15/W17) also identify the
+  counterpart shape via `related`.
 
-남아 있는 한계:
+Remaining limitations:
 
-- `--strict`의 E2 예외 해제는 E2가 실행되는 프로파일(full)에서만 의미가 있습니다.
-  기본(core)에서 --strict는 WARN 승격과 W18 실패만 담당합니다.
-- baseline은 beta입니다. 지문 v2는 코드+로케일 중립 내용키(페이지 무관, 발생 수
-  관리)라 언어·슬라이드 삽입에 안전하지만, 매번 재생성되는 산출물의 완전한 identity는
-  생성기 provenance(소스맵) 없이는 불가능합니다. 내용이 같은 서로 다른 위반은 발생
-  수 풀로 묶여 위치 구분 없이 억제됩니다.
-- E3 메시지의 autofit 주석과 W6·W10·W16의 detail 문자열은 생성 시점 언어로
-  고정됩니다(메시지 본문과 달리). baseline 지문은 fp_key로 이 문제와 분리했습니다.
+- Lifting E2's exceptions via `--strict` is only meaningful in the profile where E2 runs
+  (full). In the default profile (core), --strict handles only WARN escalation and W18
+  failure.
+- baseline is beta. Fingerprint v2 uses a code + locale-neutral content key
+  (page-independent, occurrence-count-managed), which is safe against language changes and
+  slide insertion, but full identity for output that is regenerated every time is not
+  possible without generator provenance (a source map). Distinct violations with identical
+  content are pooled by occurrence count and suppressed without location distinction.
+- The autofit annotation in E3 messages and the detail strings of W6, W10, and W16 are fixed
+  in the language at generation time (unlike the main message body). The baseline fingerprint
+  is decoupled from this issue via fp_key.

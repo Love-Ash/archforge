@@ -1,17 +1,19 @@
 # -*- coding: utf-8 -*-
-"""사용자 대면 메시지 카탈로그(en/ko). 0.3.0 세계화 레이어.
+"""User-facing message catalog (en/ko). 0.3.0 globalization layer.
 
-원칙: 게이트 코드(E1, W15)와 JSON 키는 언어 무관 안정 계약이고, 사람 읽는 메시지만
-언어를 탄다. 리포트 언어는 덱이 아니라 사용자를 따른다(한국 사용자가 영어 덱을
-검사해도 리포트는 한국어): 우선순위 --lang > ARCHFORGE_LANG > 시스템 로케일 > en.
-포맷 인자(%s, %d)는 두 언어 템플릿이 순서까지 동일해야 한다.
+Principle: gate codes (E1, W15) and JSON keys are a language-independent stable
+contract; only the human-read messages carry a language. Report language follows the
+user, not the deck (a Korean user checking an English deck still gets a Korean report):
+priority is --lang > ARCHFORGE_LANG > system locale > en. Format args (%s, %d) must
+match in order, not just count, across both language templates.
 """
 import contextvars
 import os
 from typing import Optional
 
-# 전역 아닌 컨텍스트 변수: 스레드·async로 임베드된 라이브러리 사용에서 언어가 테넌트 간
-# 새지 않는다(적대 패널 경쟁 조건 실측 재현의 교정). CLI 동작은 동일.
+# A context variable, not a global: in threaded/async embedded-library usage, language
+# does not leak across tenants (fixes a bug from a measured reproduction of an
+# adversarial-panel race condition). CLI behavior is unchanged.
 _LANG: "contextvars.ContextVar[Optional[str]]" = contextvars.ContextVar("archforge_lang", default=None)
 
 MESSAGES = {
@@ -125,7 +127,7 @@ MESSAGES = {
     },
     "w6_detail": {"ko": "예 %s", "en": "e.g. %s"},
     "w10_detail": {"ko": "페이지 %s", "en": "pages %s"},
-    # ---- 진단(stderr)
+    # ---- Diagnostics (stderr)
     "note_theme_parse": {
         "ko": "theme parse 실패 마스터 있음: E1 테마 판정이 빈 슬롯 가정으로 후퇴",
         "en": "a master's theme failed to parse: E1 theme judgment falls back to the empty-slot assumption",
@@ -138,7 +140,7 @@ MESSAGES = {
         "ko": "W7 참고: %s 에 p01.png·p02.png 형식 렌더가 없어 이미지 대비 검사를 건너뜀(현재 파일: %s ...)",
         "en": "W7 note: no p01.png/p02.png-named renders in %s; on-image contrast check skipped (found: %s ...)",
     },
-    # ---- 리포트 스캐폴딩
+    # ---- Report scaffolding
     "ghost_header": {
         "ko": "--- ghost deck (제목만 읽기: 주장이 이야기로 흐르는가) ---",
         "en": "--- ghost deck (read titles top to bottom: does the argument flow?) ---",
@@ -151,7 +153,7 @@ MESSAGES = {
         "ko": "  (--profile %s 적용, 제외 코드: %s)",
         "en": "  (--profile %s applied; excluded codes: %s)",
     },
-    # ---- CLI 오류
+    # ---- CLI errors
     "err_notfound": {
         "ko": "archforge: 파일을 찾을 수 없습니다: %s",
         "en": "archforge: file not found: %s",
@@ -180,7 +182,7 @@ MESSAGES = {
         "ko": "archforge: 참고: 현재 폴더에 'skill' 파일이 있지만 서브커맨드를 실행합니다. 그 파일을 린트하려면 `archforge ./skill`",
         "en": "archforge: note: a file named 'skill' exists here, but the subcommand runs. To lint that file use `archforge ./skill`",
     },
-    # ---- CLI 도움말
+    # ---- CLI help
     "prog_desc": {
         "ko": "빌드된 .pptx를 배포 전에 기계로 검사하는 한글 특화 품질 린터 (서브커맨드: scan = 다중 파일/디렉터리, demo = 첫 실행 투어, skill = 에이전트 스킬팩)",
         "en": "Korean-typography-aware quality linter for built .pptx files (subcommands: scan = many files/dirs, demo = first-run tour, skill = agent skill pack)",
@@ -260,7 +262,7 @@ MESSAGES = {
         "ko": "  (baseline 억제: %d건, %s)",
         "en": "  (baseline suppressed: %d finding(s), %s)",
     },
-    # ---- scan/demo 서브커맨드(0.5.0)
+    # ---- scan/demo subcommands (0.5.0)
     "scan_desc": {
         "ko": "여러 파일·디렉터리·글롭을 한 번에 린트(CI·pre-commit용). 하나라도 실패면 exit 1",
         "en": "lint multiple files, directories, or globs in one run (CI/pre-commit). Exits 1 if any file fails",
@@ -291,7 +293,7 @@ MESSAGES = {
     },
     "demo_built": {
         "ko": "archforge: 데모 덱 생성 완료 -> %s (broken.pptx = 결함 6종, fixed.pptx = 교정본)",
-        "en": "archforge: demo decks written -> %s (broken.pptx = 6 seeded defects, fixed.pptx = the corrected version)",
+        "en": "archforge: demo decks written -> %s (broken.pptx = seeded defects, fixed.pptx = the corrected version)",
     },
     "demo_next": {
         "ko": "다음: 직접 돌려보세요. archforge %s --profile full --json (기계 생성 덱 검사는 full 프로파일)",
@@ -301,7 +303,7 @@ MESSAGES = {
 
 
 def detect_lang() -> str:
-    """ARCHFORGE_LANG > LANG/LC_ALL > 시스템 로케일 > en."""
+    """ARCHFORGE_LANG > LANG/LC_ALL > system locale > en."""
     v = os.environ.get("ARCHFORGE_LANG", "").strip().lower()
     if v.startswith("ko"):
         return "ko"
@@ -324,7 +326,8 @@ def detect_lang() -> str:
 
 
 def set_lang(lang: Optional[str]) -> str:
-    """명시 언어 설정(ko/en). None이면 자동 감지로 되돌림. 확정 언어를 반환."""
+    """Explicitly set the language (ko/en). None reverts to auto-detection. Returns the
+    resolved language."""
     _LANG.set(lang if lang in ("ko", "en") else None)
     return get_lang()
 
@@ -335,6 +338,6 @@ def get_lang() -> str:
 
 
 def M(msg_id: str) -> str:
-    """현재 언어의 메시지 템플릿. 포맷 인자는 호출부에서 % 로 채운다."""
+    """Message template for the current language. The caller fills format args with %."""
     entry = MESSAGES[msg_id]
     return entry.get(get_lang(), entry["en"])

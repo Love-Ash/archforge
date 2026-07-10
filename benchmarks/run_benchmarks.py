@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
-"""공개 벤치마크 하네스(0.4.0 시드, 3차 외부 리뷰: 규칙별 정확도의 재현 가능한 증명).
+"""Public benchmark harness (0.4.0 seed, 3rd external review: reproducible proof of
+per-rule accuracy).
 
-바이너리 pptx를 커밋하는 대신 결함 매트릭스에서 픽스처 덱을 생성하고, 설치된
-archforge를 CLI로 돌려 규칙별 precision/recall을 계산해 출력한다. 기대값이 어긋나면
-exit 1이라 CI 게이트로도 쓴다.
+Instead of committing binary pptx files, generates fixture decks from a defect
+matrix, runs the installed archforge via CLI, and computes per-rule
+precision/recall. Exits 1 if expectations are not met, so this also serves as a
+CI gate.
 
-한계를 명시한다: 현재 생성기는 python-pptx 한 종이다. PowerPoint·LibreOffice·
-Google Slides 산출물 변형은 이 하네스의 확장 슬롯(GENERATORS)에 추가하는 것이
-로드맵이며, 실덱 50코퍼스는 사적 자료라 여기 포함되지 않는다(docs/CALIBRATION.md).
+Scope, stated honestly: the current generator is python-pptx only. PowerPoint,
+LibreOffice, and Google Slides export variants are the extension slot
+(GENERATORS) for this harness and the roadmap item; the 50-deck real-world
+corpus is private material and is not included here (docs/CALIBRATION.md).
 
-사용: python benchmarks/run_benchmarks.py [--keep DIR]
+Usage: python benchmarks/run_benchmarks.py [--keep DIR]
 """
 import argparse
 import json
@@ -49,7 +52,7 @@ def _slide(p):
     return p.slides.add_slide(p.slide_layouts[6])
 
 
-# (이름, 빌더, 기대 코드 집합, 프로파일) : 양성과 음성을 쌍으로 둔다
+# (name, builder, expected code set, profile): positive and negative cases paired
 def _case_e1_fallback(p):
     _tb(_slide(p), 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono")
 
@@ -113,7 +116,7 @@ def _generate_pptx(builder, path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--keep", default=None, help="픽스처를 이 폴더에 남김(디버그)")
+    ap.add_argument("--keep", default=None, help="keep the fixtures in this folder (debugging)")
     a = ap.parse_args()
     outdir = a.keep or tempfile.mkdtemp(prefix="archforge_bench_")
     os.makedirs(outdir, exist_ok=True)

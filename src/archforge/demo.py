@@ -1,34 +1,41 @@
 # -*- coding: utf-8 -*-
-"""데모 덱 생성기(0.5.0): 설치 30초 안에 린터가 무엇을 잡는지 보여주는 온보딩 자산.
+"""Demo deck generator (0.5.0): an onboarding asset that shows what the linter catches
+within 30 seconds of install.
 
-`archforge demo`가 이 모듈로 broken.pptx(대표 결함 6종을 의도적으로 심은 덱)와
-fixed.pptx(같은 내용의 교정본, full 프로파일 클린)를 만들어 즉석 린트한다.
-리포 examples/ 의 커밋본도 scripts/make_examples.py 가 이 모듈로 생성한다.
+`archforge demo` uses this module to build broken.pptx (representative defects
+deliberately seeded) and fixed.pptx (the same content, corrected; clean under the full
+profile), then lints both on the spot. The committed copies under the repo's examples/
+are also generated from this module by scripts/make_examples.py.
 
-덱 텍스트는 리포트 언어와 같은 로케일을 따른다(lang="ko"/"en"). 영어판도 E1/E4는
-한글이 있어야 재현되므로 이중언어 요약 라인(글로벌 덱의 흔한 실물 패턴)으로 심는다.
+Deck text follows the same locale as the report language (lang="ko"/"en"), and each
+variant is monolingual (user decision): the Korean deck seeds all 6 defect axes, while
+the English deck seeds the 4 that exist without Hangul (E1 font fallback and E4 Hangul
+tracking physically require Hangul text, so they are demonstrated by the Korean deck
+and by examples/broken.pptx only).
 
-심는 결함은 실제 생성 덱에서 가장 흔한 축만 고른다:
-- E1 조용한 한글 폰트 폴백(Arial a:latin에 실린 한글, 테마 ea 빈 슬롯)
-- E2 문장 부호로 쓴 em dash(AI 생성 덱 1번 티, full 프로파일)
-- E3 판독 불가 크기(4pt 출처 표기)
-- E4 연속 한글 양수 자간
-- W15 텍스트 프레임 겹침 / W16 캔버스 밖 넘침
+The seeded defects cover the axes most common in real generated decks:
+- E1 silent Hangul font fallback (Hangul carried in Arial's a:latin, empty theme ea slot; ko only)
+- E2 an em dash used as punctuation (the #1 tell of an AI-generated deck; full profile)
+- E3 unreadable size (4pt source attribution)
+- E4 positive tracking on consecutive Hangul (ko only)
+- W15 text frame overlap / W16 off-canvas overflow
 """
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.oxml.ns import qn
 
-# 소스에 금지문자를 리터럴로 두지 않는다(tests와 같은 관례): 검사 대상 pptx 안에만 존재
+# Do not keep the banned character as a literal in the source (same convention as
+# tests): it exists only inside the pptx under test
 EM_DASH = chr(0x2014)
 
-# 언어별 덱 텍스트. en의 e1/e4 라인은 의도적으로 한글이다: 이 두 결함은 한글에서만
-# 발생하고, 영어 덱에 한글 요약 라인이 섞이는 것이 글로벌 덱의 실제 패턴이다.
+# Per-language deck text. Each variant is monolingual (user decision, 2026-07-10):
+# the English README/demo must contain English only, so the en deck drops the
+# Hangul-dependent defects (E1/E4) instead of mixing scripts.
 _T = {
     "ko": {
         "title1": "3분기 실적 요약",
-        "e1": "3분기 실적 요약",   # 타이틀 자체가 E1(Arial 한글)
+        "e1": "3분기 실적 요약",   # the title itself is E1 (Hangul in Arial)
         "e2": "핵심 지표는 전 분기 대비 개선" + EM_DASH + "특히 구독 매출이 견인했습니다",
         "e2_fixed": "핵심 지표는 전 분기 대비 개선: 특히 구독 매출이 견인했습니다",
         "e4": "자간이 벌어진 한글 강조",
@@ -41,13 +48,9 @@ _T = {
     },
     "en": {
         "title1": "Q3 Results Summary",
-        # E1/E4는 한글에서만 존재하는 결함이라 한글 페이로드가 필수. 영어 라벨로 시작해
-        # 글로벌 독자가 "한글 샘플이 검사 대상"임을 바로 읽게 한다(사용자 피드백 반영).
-        "e1": "Korean summary: 구독 매출이 성장을 견인했습니다",
         "e2": "Key metrics improved quarter over quarter" + EM_DASH + "subscriptions led the growth",
         "e2_fixed": "Key metrics improved quarter over quarter: subscriptions led the growth",
-        "e4": "Hangul label with tracking: 자간 데모",
-        "e4_fixed": "Hangul label without tracking: 자간 데모",
+        "body": "Subscriptions now account for 41% of total revenue",
         "e3": "Source: internal management accounts, 2026-06",
         "title2": "Key metrics this quarter",
         "kpi1": "Revenue growth +18%",
@@ -90,25 +93,27 @@ def _tb(slide, x, y, w, h, text, size=14, font=None, ea=None, spc=None,
 
 
 def build_broken(path, lang="ko"):
-    """대표 결함 6종을 심은 덱. full 프로파일에서 ERROR 4 + WARN(W15/W16)이 나온다."""
+    """Deck seeded with representative defects. Under the full profile the ko variant
+    yields ERROR 4 (E1/E2/E3/E4) + WARN 2 (W15/W16); the en variant, which is
+    monolingual English and therefore cannot carry the Hangul-only defects, yields
+    ERROR 2 (E2/E3) + WARN 2."""
     t = _T[lang]
     p = _prs()
-    s = _slide(p)   # p1: 타이포그래피 결함
+    s = _slide(p)   # p1: typography defects
     if lang == "ko":
-        # 타이틀 자체가 E1(Arial에 실린 한글). 나머지 run은 ea를 명시해 결함 하나당
-        # 코드 하나로 유지한다(기본 Office 테마는 ea 빈 슬롯: ea 없는 한글 run은 전부
-        # E1이 맞게 발화한다는 실측 확인).
+        # The title itself is E1 (Hangul carried in Arial). The remaining runs specify ea
+        # to keep one code per defect (the default Office theme has an empty ea slot:
+        # measured confirmation that every Hangul run without ea fires E1 correctly).
         _tb(s, 0.8, 0.6, 8.0, 0.9, t["title1"], size=26, font="Arial", bold=True)   # E1
+        _tb(s, 0.8, 2.8, 6.0, 0.5, t["e4"], size=16, spc=300, ea="맑은 고딕")        # E4
     else:
-        # 영어 타이틀은 한글이 없어 E1 무관. E1은 이중언어 요약 라인이 담당한다.
         _tb(s, 0.8, 0.6, 8.0, 0.9, t["title1"], size=26, font="Arial", bold=True)
-        _tb(s, 0.8, 3.7, 8.0, 0.5, t["e1"], size=14, font="Arial")                  # E1
+        _tb(s, 0.8, 2.8, 8.0, 0.5, t["body"], size=16)   # neutral filler, no defect
     _tb(s, 0.8, 1.8, 10.0, 0.6, t["e2"], size=14, ea="맑은 고딕")                    # E2
-    _tb(s, 0.8, 2.8, 6.0, 0.5, t["e4"], size=16, spc=300, ea="맑은 고딕")            # E4
     _tb(s, 0.8, 6.9, 5.0, 0.3, t["e3"], size=4, ea="맑은 고딕")                      # E3
-    s = _slide(p)   # p2: 기하 결함
+    s = _slide(p)   # p2: geometry defects
     _tb(s, 0.8, 0.6, 8.0, 0.9, t["title2"], size=26, ea="맑은 고딕", bold=True)
-    _tb(s, 1.0, 2.4, 5.0, 1.0, t["kpi1"], size=24, ea="맑은 고딕")                   # W15 쌍
+    _tb(s, 1.0, 2.4, 5.0, 1.0, t["kpi1"], size=24, ea="맑은 고딕")                   # W15 pair
     _tb(s, 1.2, 2.5, 5.0, 1.0, t["kpi2"], size=24, ea="맑은 고딕")
     _tb(s, 12.0, 4.5, 3.0, 0.6, t["w16"], size=18, ea="맑은 고딕")                   # W16
     p.save(path)
@@ -116,20 +121,22 @@ def build_broken(path, lang="ko"):
 
 
 def build_fixed(path, lang="ko"):
-    """broken과 같은 내용의 교정본. full 프로파일에서 ERROR 0, WARN 0."""
+    """The corrected version with the same content as broken. ERROR 0, WARN 0 under the
+    full profile."""
     t = _T[lang]
     p = _prs()
     s = _slide(p)
-    # E1 교정: a:latin은 그대로 두고 a:ea에 한글 폰트를 명시(가장 견고한 수정)
+    # E1 fix: leave a:latin as-is and specify a Hangul font on a:ea (the most robust fix)
     _tb(s, 0.8, 0.6, 8.0, 0.9, t["title1"], size=26, font="Arial",
         ea="맑은 고딕", bold=True)
-    if lang != "ko":
-        _tb(s, 0.8, 3.7, 8.0, 0.5, t["e1"], size=14, font="Arial", ea="맑은 고딕")
-    # E2 교정: 산문 대시는 콜론·쉼표·괄호로
+    if lang == "ko":
+        # E4 fix: zero tracking on the Hangul run
+        _tb(s, 0.8, 2.8, 6.0, 0.5, t["e4_fixed"], size=16, ea="맑은 고딕")
+    else:
+        _tb(s, 0.8, 2.8, 8.0, 0.5, t["body"], size=16)
+    # E2 fix: replace prose dashes with a colon, comma, or parentheses
     _tb(s, 0.8, 1.8, 10.0, 0.6, t["e2_fixed"], size=14, ea="맑은 고딕")
-    # E4 교정: 한글 run 자간 0
-    _tb(s, 0.8, 2.8, 6.0, 0.5, t["e4_fixed"], size=16, ea="맑은 고딕")
-    # E3 교정: 출처·캡션도 최소 9pt
+    # E3 fix: sources/captions at least 9pt too
     _tb(s, 0.8, 6.9, 5.0, 0.3, t["e3"], size=9, ea="맑은 고딕")
     s = _slide(p)
     _tb(s, 0.8, 0.6, 8.0, 0.9, t["title2"], size=26, ea="맑은 고딕", bold=True)
@@ -141,9 +148,10 @@ def build_fixed(path, lang="ko"):
 
 
 def build_warnings(path):
-    """core 프로파일은 클린, full 프로파일에서만 스타일 WARN이 나오는 덱(examples/용):
-    W13 네이티브 그림자, W14 명사구 타이틀 나열. 프로파일 분리를 가르치는 교보재.
-    W14가 한글 타이틀 휴리스틱이라 이 덱은 한국어판만 있다."""
+    """A deck (for examples/) that is clean under the core profile and only produces
+    style WARNs under the full profile: W13 native shadows, W14 nominal-phrase titles
+    listed in a row. A teaching aid for the profile split. Since W14 is a Hangul-title
+    heuristic, this deck has only a Korean-language version."""
     p = _prs()
     for i, title in enumerate(("시장 현황", "경쟁 구도 분석", "성장 전략 로드맵")):
         s = _slide(p)
@@ -152,7 +160,8 @@ def build_warnings(path):
             "본문 요지는 페이지마다 다르게 구성했습니다 (%d)" % (i + 1),
             size=14, ea="맑은 고딕")
         from pptx.enum.shapes import MSO_SHAPE
-        # W13은 같은 페이지에 실효 효과 2개+일 때 집계된다(빈 effectLst 오탐 방지 설계)
+        # W13 is counted when a page has 2+ effective effects (designed to avoid false
+        # positives from an empty effectLst)
         for j in range(2):
             sp = s.shapes.add_shape(MSO_SHAPE.RECTANGLE,
                                     Inches(0.8 + i * 0.7 + j * 3.2), Inches(4.0 + i * 0.4),

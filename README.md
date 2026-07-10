@@ -13,9 +13,9 @@ before a human ever sees a render.
 ![license](https://img.shields.io/badge/license-MIT-green)
 [![ci](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml)
 
-[Quickstart](#30-seconds) · [What it catches](#what-it-catches) · [CI](#ci) · [Calibration record](docs/CALIBRATION.md) · [한국어 README](README.ko.md)
+[Quickstart](#30-seconds) · [What it catches](#what-it-catches) · [CI](#ci) · [Calibration record](docs/CALIBRATION.md) · [Discussions](https://github.com/Love-Ash/archforge/discussions) · [한국어 README](README.ko.md)
 
-**AI agents:** `pip install archforge` then `archforge skill --install` teaches your agent the build-lint-fix loop.
+**AI agents / LLMs:** read [llms.txt](llms.txt), or `pip install archforge` then `archforge skill --install` to teach your agent the build-lint-fix loop.
 
 ![demo](docs/assets/demo-en.gif)
 
@@ -247,17 +247,25 @@ is the same file.
 A passing lint is not a finished deck: the linter owns the mechanical defect class;
 composition and narrative still need eyes on renders.
 
-## Contributing
+## Community and contributing
 
-False-positive reports with a repro deck are the most valuable contribution; they become
-permanent regression fixtures. See [CONTRIBUTING.md](CONTRIBUTING.md) for the evidence
-bar (gates are calibrated against renders, not taste) and
-[SECURITY.md](SECURITY.md) for the threat model.
+- Found a false positive? [Report it with the FP template](https://github.com/Love-Ash/archforge/issues/new/choose): a repro deck makes it a permanent regression fixture, the most valuable contribution this project takes.
+- Questions, ideas, decks you are unsure about: [GitHub Discussions](https://github.com/Love-Ash/archforge/discussions).
+- Want to contribute code? [CONTRIBUTING.md](CONTRIBUTING.md) explains the evidence bar (gates are calibrated against renders, not taste); issues tagged [good first issue](https://github.com/Love-Ash/archforge/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) are scoped for a first PR.
+- Security: [SECURITY.md](SECURITY.md).
 
 ## Name
 
 archforge = arch (structure) + forge. A forge where a deck's structure and Korean
 typography get hammered straight before shipping.
+
+## Author
+
+Built and calibrated by **Minjae Kwon (Ash)** ([@Love-Ash](https://github.com/Love-Ash)).
+If archforge caught something before your audience did, a star helps the next person
+find it. I write up the measurement work behind the gates (how PowerPoint actually
+resolves Korean fonts, and what AI-built decks silently break); follow along via my
+GitHub profile.
 
 ## License
 

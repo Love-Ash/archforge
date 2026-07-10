@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
-"""archforge 게이트 회귀: 양성(결함을 심은 pptx가 잡히는가)과 음성(클린·의도 연출이
-오탐 없이 통과하는가)을 게이트별 픽스처로 고정한다.
+"""archforge gate regression: fixes, per gate, both positive fixtures (does a pptx with
+a planted defect get caught) and negative fixtures (does clean, intentional staging
+pass without false positives).
 
-긴 대시 등 린터가 차단하는 문자는 소스에 리터럴로 두지 않고 chr(코드포인트)로 만든다:
-소스는 깨끗하고 검사 대상 pptx 안에만 금지문자가 존재해야 게이트 테스트가 된다.
+Characters the linter blocks, such as the em dash, are not kept as literals in this
+source file but built via chr(codepoint): the source must stay clean, and the
+forbidden character must exist only inside the pptx under test for the gate test to
+be valid.
 
-E1 픽스처의 기대값은 PowerPoint COM 렌더 실측 모델(2026-07-10, docs/CALIBRATION.md)을
-따른다: run a:ea > 테마 minorFont a:ea(비어있지 않으면 run a:latin보다 우선)
-> (테마 ea 빈 슬롯일 때만) run a:latin > OS 폴백(Malgun).
+The expected values in the E1 fixtures follow the PowerPoint COM render measured
+model (2026-07-10, docs/CALIBRATION.md): run a:ea > theme minorFont a:ea (wins over
+run a:latin when non-empty) > (only when the theme ea slot is empty) run a:latin >
+OS fallback (Malgun).
 """
 import os
 import re
@@ -31,8 +35,8 @@ from archforge import messages as jmsg
 
 @pytest.fixture(autouse=True)
 def _force_korean_messages(monkeypatch):
-    """기존 한국어 문구 어서션 유지를 위해 테스트는 ko 고정(0.3.0 i18n).
-    영어 출력은 test_lang_* 에서 명시적으로 검증한다."""
+    """Tests pin the lang to ko to keep existing Korean-message assertions working
+    (0.3.0 i18n). English output is verified explicitly in test_lang_*."""
     monkeypatch.setenv("ARCHFORGE_LANG", "ko")
     jmsg.set_lang("ko")
     yield
@@ -102,7 +106,8 @@ def set_autofit_scale(box, pct):
 
 
 def png(d, name, size=(400, 300), opaque_box=None):
-    """전체 불투명 RGB 또는 opaque_box=(l,t,r,b 비율) 영역만 불투명한 RGBA PNG."""
+    """A fully opaque RGB PNG, or an RGBA PNG opaque only in the opaque_box=(l,t,r,b
+    ratio) region."""
     from PIL import Image, ImageDraw
     path = os.path.join(str(d), name)
     if opaque_box is None:
@@ -117,8 +122,9 @@ def png(d, name, size=(400, 300), opaque_box=None):
 
 
 def lint_full(*args, **kw):
-    """0.4.0에서 기본 프로파일이 core로 바뀌어, 스타일 규칙까지 전제하는 기존
-    픽스처들은 full을 명시한다(기본값 자체는 test_default_profile_core가 검증)."""
+    """In 0.4.0 the default profile changed to core, so existing fixtures that assume
+    style rules too must specify full explicitly (the default value itself is
+    verified by test_default_profile_core)."""
     kw.setdefault("profile", "full")
     return jl.lint(*args, **kw)
 
@@ -138,8 +144,9 @@ def save(p, d, name):
 
 
 def patch_theme_ea(path, typeface):
-    """저장된 pptx의 테마 a:ea 빈 슬롯을 typeface로 교체(zip 재작성). 멀티마스터 없는
-    기본 템플릿용: E1 테마 분기 픽스처를 만드는 유일하게 안정적인 방법."""
+    """Replace the theme a:ea empty slot in a saved pptx with typeface (rewrites the
+    zip). For the default template with no multi-master: the only reliably stable
+    way to build an E1 theme-branch fixture."""
     tmp = path + ".patched.pptx"
     new = ('<a:ea typeface="%s"/>' % typeface).encode("utf-8")
     with zipfile.ZipFile(path) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
@@ -153,8 +160,9 @@ def patch_theme_ea(path, typeface):
 
 
 def run_cli(args, lang="ko"):
-    """CLI 실행 헬퍼. stdin=DEVNULL: pytest 캡처 하의 Windows 핸들 상속 실패(WinError 6) 회피.
-    기본 ko 고정(어서션이 한국어 문구), 영어 검증은 lang="en"으로."""
+    """CLI run helper. stdin=DEVNULL: avoids Windows handle-inheritance failure
+    (WinError 6) under pytest capture. Defaults to ko (assertions use Korean
+    phrasing); verify English with lang="en"."""
     env = dict(os.environ)
     env["ARCHFORGE_LANG"] = lang
     return subprocess.run([sys.executable, "-m", "archforge.lint"] + args,
@@ -165,22 +173,22 @@ def run_cli(args, lang="ko"):
 # ---------------------------------------------------------------- line-level gates
 def test_line_gates_positive(tmp_path):
     p = new_prs()
-    s = add_slide(p)   # p1: E1 한글을 라틴 전용 폰트로
+    s = add_slide(p)   # p1: E1 Hangul in a latin-only font
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
-    s = add_slide(p)   # p2: E2 긴 대시(전각 하이픈)
+    s = add_slide(p)   # p2: E2 long dash (fullwidth hyphen)
     tb(s, 1, 1, 5, 0.5, "dash" + FW_HYPHEN + "test", font="Wanted Sans", size=12)
-    s = add_slide(p)   # p3: E3 직접 4pt
+    s = add_slide(p)   # p3: E3 explicit 4pt
     tb(s, 1, 1, 5, 0.5, "tiny text 4pt", font="Wanted Sans", size=4)
     s = add_slide(p)   # p4: E3 autofit 40pt * 10% = 4pt
     box = tb(s, 1, 1, 5, 1.0, "autofit shrink", font="Wanted Sans", size=40)
     set_autofit_scale(box, 10.0)
-    s = add_slide(p)   # p5: E4 CJK 양수 트래킹
+    s = add_slide(p)   # p5: E4 positive CJK tracking
     tb(s, 1, 1, 5, 0.5, "자간 벌어진 한글", font="Wanted Sans", size=12, spc=100)
-    s = add_slide(p)   # p6: W1 넓은 프레임 본문 8.5pt 40자+
+    s = add_slide(p)   # p6: W1 wide frame body 8.5pt 40+ chars
     tb(s, 1, 1, 11, 0.6, "0123456789" * 5, font="Wanted Sans", size=8.5)
-    s = add_slide(p)   # p7: 크기 미지정 -> defaultTextStyle 18pt로 해석(W5 아님: 상속 해석 도입)
+    s = add_slide(p)   # p7: size unspecified -> resolved to defaultTextStyle 18pt (not W5: inheritance resolution introduced)
     tb(s, 1, 1, 5, 0.5, "no size run", font="Wanted Sans", no_size=True)
-    s = add_slide(p)   # p8: W8 좁은 프레임 소형 한글 6pt
+    s = add_slide(p)   # p8: W8 narrow frame, small 6pt Hangul
     tb(s, 1, 1, 2, 0.4, "목업 안 작은 한글", font="Wanted Sans", size=6)
     errors, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     ec = codes(errors)
@@ -190,17 +198,19 @@ def test_line_gates_positive(tmp_path):
     assert 3 in e3 and 4 in e3
     assert "E4" in ec and by_code(errors, "E4")[0][0] == 5
     assert any(si == 6 for (si, m, d) in by_code(warns, "W1"))
-    # p7: 이전 버전은 W5(상속 미해석)였다. 상속 체인 도입으로 defaultTextStyle 18pt가 잡혀
-    # W5도, 크기 게이트 오발화도 없어야 한다.
+    # p7: the previous version fired W5 (inheritance unresolved). With the
+    # inheritance chain introduced, defaultTextStyle 18pt is resolved, so
+    # neither W5 nor a false-fire of the size gate should occur.
     assert not any(si == 7 for (si, m, d) in by_code(warns, "W5"))
     assert not any(si == 7 for (si, m, d) in by_code(errors, "E3"))
     assert any(si == 8 for (si, m, d) in by_code(warns, "W8"))
 
 
 def test_e1_nofont_empty_theme_slot(tmp_path):
-    """폰트 미지정 + 빈 테마 ea = Malgun 폴백 E1. 0.2.1부터는 defaultTextStyle의
-    +mn-lt 토큰이 상속 체인으로 해석돼(실효 latin=Calibri) 더 정확한 분기로 잡히므로
-    메시지가 아니라 코드로 고정한다."""
+    """Font unspecified + empty theme ea = Malgun fallback E1. Since 0.2.1, the
+    +mn-lt token in defaultTextStyle is resolved through the inheritance chain
+    (effective latin=Calibri), so it's caught via a more accurate branch; pin it
+    to the code rather than the message."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "폰트 미지정 한글", size=12)
@@ -209,10 +219,12 @@ def test_e1_nofont_empty_theme_slot(tmp_path):
 
 
 def test_e1_render_model_slots(tmp_path):
-    """실측 렌더 모델 회귀(2026-07-10 COM 프로브):
-    p1 run ea가 라틴 전용 -> E1. p2 빈 테마에서 latin이 라틴 전용(Inter, 구 미탐) -> E1.
-    p3 빈 테마에서 latin이 한글 폰트 -> 실제로 그 폰트가 한글을 그림(합법 패턴) -> 통과.
-    p4 run ea가 한글 폰트면 latin이 라틴 전용이어도 ea가 이김 -> 통과."""
+    """Measured render model regression (2026-07-10 COM probe):
+    p1 run ea is latin-only -> E1. p2 with an empty theme, latin is latin-only
+    (Inter, previously a missed detection) -> E1.
+    p3 with an empty theme, latin is a Hangul font -> that font actually renders
+    the Hangul (a legitimate pattern) -> passes.
+    p4 if run ea is a Hangul font, ea wins even when latin is latin-only -> passes."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "이에이 슬롯 모노", font="Arial", ea="IBM Plex Mono", size=12)
@@ -229,8 +241,9 @@ def test_e1_render_model_slots(tmp_path):
 
 
 def test_e1_theme_ea_korean_suppresses_latin(tmp_path):
-    """테마 ea가 한글 폰트면 run latin이 라틴 전용이어도 렌더는 테마 ea가 받는다(실측):
-    구버전 ea-or-latin 대용이 내던 E1 오탐의 회귀 고정."""
+    """If the theme ea is a Hangul font, the theme ea handles the render even when
+    run latin is latin-only (measured): pins the regression for the E1 false
+    positive that the old ea-or-latin substitute used to emit."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "테마가 받는 한글", font="IBM Plex Mono", size=12)
@@ -242,8 +255,9 @@ def test_e1_theme_ea_korean_suppresses_latin(tmp_path):
 
 
 def test_e1_theme_ea_latin_only_flags(tmp_path):
-    """테마 ea 자체가 라틴 전용이면 폰트 미지정 한글은 E1. 0.2.1부터 defaultTextStyle의
-    +mn-ea 토큰이 체인으로 해석돼 실효 ea=Consolas로 잡힌다(분기 무관, 폰트명으로 고정)."""
+    """If the theme ea itself is latin-only, font-unspecified Hangul is E1. Since
+    0.2.1, the +mn-ea token in defaultTextStyle is resolved through the chain and
+    caught as effective ea=Consolas (branch-independent, pinned by font name)."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "폰트 미지정 한글", size=12)
@@ -253,7 +267,8 @@ def test_e1_theme_ea_latin_only_flags(tmp_path):
 
 
 def test_theme_ea_by_master_relationship(tmp_path):
-    """테마 해석이 iter_parts 순서가 아니라 마스터->테마 관계로 나오는지(키=마스터 partname)."""
+    """Whether theme resolution comes from the master->theme relationship rather
+    than iter_parts order (key = master partname)."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "관계 해석", font="Wanted Sans", size=12)
@@ -262,26 +277,28 @@ def test_theme_ea_by_master_relationship(tmp_path):
     assert len(ea_map) == 1
     key = next(iter(ea_map))
     assert "slideMaster" in key
-    assert ea_map[key] == ""   # 기본 템플릿 = 빈 슬롯
+    assert ea_map[key] == ""   # default template = empty slot
 
 
 def test_e1_unit_matrix():
-    """e1_violation 판정 매트릭스(실측 렌더 모델 문서화를 겸한 유닛 회귀)."""
+    """e1_violation decision matrix (a unit regression that doubles as documentation
+    of the measured render model)."""
     v = jl.e1_violation
-    assert v("한글", {"ea": "IBM Plex Mono"}, "") is not None          # run ea 라틴 전용
-    assert v("한글", {"ea": "맑은 고딕", "latin": "Consolas"}, "") is None   # run ea 한글
-    assert v("한글", {"latin": "IBM Plex Mono"}, "맑은 고딕") is None   # 테마 ea가 렌더를 받음
-    assert v("한글", {}, "Consolas") is not None                        # 테마 ea 라틴 전용
-    assert v("한글", {"latin": "Wanted Sans"}, "") is None              # 빈 테마 + latin 한글폰트
-    assert v("한글", {"latin": "Inter"}, "") is not None                # 빈 테마 + latin 라틴 전용(구 미탐)
-    assert v("한글", {}, "") is not None                                # 전부 없음 = Malgun 확정
+    assert v("한글", {"ea": "IBM Plex Mono"}, "") is not None          # run ea latin-only
+    assert v("한글", {"ea": "맑은 고딕", "latin": "Consolas"}, "") is None   # run ea Hangul
+    assert v("한글", {"latin": "IBM Plex Mono"}, "맑은 고딕") is None   # theme ea handles the render
+    assert v("한글", {}, "Consolas") is not None                        # theme ea latin-only
+    assert v("한글", {"latin": "Wanted Sans"}, "") is None              # empty theme + latin Hangul font
+    assert v("한글", {"latin": "Inter"}, "") is not None                # empty theme + latin latin-only (previously a missed detection)
+    assert v("한글", {}, "") is not None                                # nothing at all = Malgun confirmed
 
 
 def test_latin_only_font_boundaries():
-    """블록리스트 접두 매칭 경계: 한글 완비 변형이 접두에 말려들지 않는다."""
+    """Blocklist prefix-match boundary: a Hangul-complete variant must not get
+    swept up by a prefix match."""
     f = jl.is_latin_only_font
     assert f("Inter") and f("Arial") and f("Calibri") and f("IBM Plex Sans") and f("Noto Sans")
-    assert not f("NanumGothicCoding")     # 한글 완비 고정폭: 구버전 오분류의 회귀 고정
+    assert not f("NanumGothicCoding")     # Hangul-complete monospace: pins the regression for an old misclassification
     assert not f("IBM Plex Sans KR")
     assert not f("Noto Sans KR") and not f("Noto Serif KR")
     assert not f("Arial Unicode MS")
@@ -290,7 +307,8 @@ def test_latin_only_font_boundaries():
 
 
 def test_e2_numeric_context(tmp_path):
-    """E2 맥락 예외: 숫자 범위 en dash와 음수 부호 U+2212는 기본 모드 통과, em dash는 항상 차단."""
+    """E2 context exception: a numeric-range en dash and a minus sign U+2212 pass in
+    default mode; an em dash is always blocked."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "FY2020" + EN_DASH + "2024 실적", font="Wanted Sans", size=12)
@@ -302,7 +320,7 @@ def test_e2_numeric_context(tmp_path):
     errors, _w = lint_full(path)
     e2_pages = [si for (si, m, d) in by_code(errors, "E2")]
     assert e2_pages == [3], errors
-    # strict: 예외 해제, 세 페이지 전부 차단
+    # strict: exceptions lifted, all three pages blocked
     errors_s, _w = lint_full(path, strict=True)
     assert sorted(si for (si, m, d) in by_code(errors_s, "E2")) == [1, 2, 3]
 
@@ -312,13 +330,14 @@ def test_dash_violations_unit():
     assert dv("2020" + EN_DASH + "2024") == []
     assert dv("2020" + EN_DASH + "2024", strict=True) == [EN_DASH]
     assert dv(MINUS + "3.2%") == []
-    assert dv("A" + EN_DASH + "B") == [EN_DASH]        # 숫자 맥락 아님 -> 차단 유지
-    assert dv("끝" + MINUS) == [MINUS]                  # 뒤에 숫자 없음 -> 차단 유지
+    assert dv("A" + EN_DASH + "B") == [EN_DASH]        # not a numeric context -> stays blocked
+    assert dv("끝" + MINUS) == [MINUS]                  # no digit follows -> stays blocked
     assert dv("a" + EM_DASH + "b") == [EM_DASH]
 
 
 def test_e4_universal_measure_spc(tmp_path):
-    """spc의 universal measure('1.5pt')와 쓰레기값: 크래시 없이 전자는 E4, 후자는 무시."""
+    """spc's universal measure ('1.5pt') and a garbage value: without crashing, the
+    former should be E4 and the latter should be ignored."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "자간 벌어진 한글", font="Wanted Sans", size=12, spc="1.5pt")
@@ -339,11 +358,13 @@ def test_text_point_attr_unit():
 
 
 def test_partial_salvage_on_bad_frame(tmp_path):
-    """가드 입도 회귀(적대 패널 확정 2026-07-10): 같은 프레임 안에서 run1이 쓰레기 속성으로
-    죽어도 run2의 진짜 E1 위반은 잡혀야 하고(per-run 가드), 삼켜진 구간은 W18로 JSON에
-    표면화돼야 한다. 프레임 단위 가드 시절엔 run2 위반까지 통째로 사라져 거짓 clean이 났다."""
+    """Guard granularity regression (third adversarial panel confirmed, 2026-07-10):
+    even if run1 in the same frame dies on a garbage attribute, run2's genuine E1
+    violation must still be caught (per-run guard), and the swallowed section must
+    be surfaced to JSON as W18. In the days of frame-level guards, run2's violation
+    used to vanish entirely too, producing a false clean."""
     p = new_prs()
-    s = add_slide(p)   # p1: 한 프레임에 쓰레기 run + 진짜 E1 run
+    s = add_slide(p)   # p1: one frame with a garbage run + a genuine E1 run
     box = tb(s, 1, 1, 5, 0.5, "쓰레기 크기 한글", font="Wanted Sans", no_size=True)
     r1 = box.text_frame.paragraphs[0].runs[0]
     r1._r.get_or_add_rPr().set("sz", "notanumber")
@@ -352,34 +373,36 @@ def test_partial_salvage_on_bad_frame(tmp_path):
     r2.font.name = "IBM Plex Mono"
     from pptx.util import Pt as _Pt
     r2.font.size = _Pt(12)
-    s = add_slide(p)   # p2: 정상 E1 결함(페이지 간 생존도 함께 고정)
+    s = add_slide(p)   # p2: a normal E1 defect (also pins survival across pages)
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
     errors, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     e1_pages = [si for (si, m, d) in by_code(errors, "E1")]
-    assert 1 in e1_pages, errors          # 같은 프레임 이웃 run의 위반 생존
+    assert 1 in e1_pages, errors          # the neighboring run's violation in the same frame survives
     assert 2 in e1_pages, errors
     w18 = by_code(warns, "W18")
-    assert any(si == 1 for (si, m, d) in w18), warns   # 삼켜진 구간이 출력 계약에 표면화
+    assert any(si == 1 for (si, m, d) in w18), warns   # the swallowed section is surfaced in the output contract
 
 
 def test_w18_geometry_decoupling(tmp_path):
-    """tboxes 계산 실패(손상 anchor)가 무관한 그림 W16까지 침묵시키지 않는다(적대 패널
-    실측 재현 2건의 회귀 고정). W16은 살아남고 W18이 불완전성을 알린다."""
+    """A tboxes calculation failure (a corrupted anchor) must not also silence an
+    unrelated picture's W16 (pins the regression for 2 cases reproduced measured
+    by the adversarial panel). W16 survives and W18 reports the incompleteness."""
     p = new_prs()
     s = add_slide(p)
     box = tb(s, 1, 1, 4, 0.5, "손상 앵커 텍스트", font="Wanted Sans", size=14)
     bodyPr = box.text_frame._txBody.find(qn("a:bodyPr"))
-    bodyPr.set("anchor", "bogusvalue")   # MSO_VERTICAL_ANCHOR 매핑 없는 값 -> tboxes 예외
+    bodyPr.set("anchor", "bogusvalue")   # a value with no MSO_VERTICAL_ANCHOR mapping -> tboxes exception
     s.shapes.add_picture(png(tmp_path, "over.png"), Inches(12.8), Inches(2.0),
-                         Inches(2.0), Inches(1.5))   # 우측 1.47in 넘침
+                         Inches(2.0), Inches(1.5))   # overflows 1.47in on the right
     errors, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert any("그림" in d for (_si, m, d) in by_code(warns, "W16")), warns
     assert by_code(warns, "W18"), warns
 
 
 def test_w6_page_numbers_survive_token_failure(tmp_path, monkeypatch):
-    """sigs 이중 append 회귀(적대 패널 확정): _fill_tokens가 죽어도 sigs 위치가 밀리지 않아
-    W6 페이지 번호가 실제 슬라이드 번호를 가리킨다."""
+    """sigs double-append regression (adversarial panel confirmed): even if
+    _fill_tokens dies, the sigs positions don't shift, so W6 page numbers point to
+    the actual slide number."""
     def boom(slide, sw, sh):
         raise RuntimeError("token fail")
     monkeypatch.setattr(jl, "_fill_tokens", boom)
@@ -393,15 +416,16 @@ def test_w6_page_numbers_survive_token_failure(tmp_path, monkeypatch):
     w6 = by_code(warns, "W6")
     assert w6, warns
     pages = [int(m) for m in re.findall(r"p(\d+)", w6[0][2])]
-    assert pages and max(pages) <= 6, w6   # 이중 append 시절엔 p7~p11이 나왔다
-    # 0.2.1: 토큰 수집 실패도 W18로 표면화된다(가드 배선 전체 확장)
+    assert pages and max(pages) <= 6, w6   # in the days of double-append, p7-p11 used to show up
+    # 0.2.1: token-collection failure is also surfaced as W18 (guard wiring extended everywhere)
     assert any("w10_tokens" in d for (_si, m, d) in by_code(warns, "W18")), warns
 
 
 def test_e1_theme_token_resolution(tmp_path):
-    """OOXML 테마 토큰(+mn-lt 류)을 실폰트로 해석(적대 패널 확정: 토큰을 문자 그대로
-    블록리스트에 대조하면 E1 미탐). 기본 템플릿 테마 minor latin=Calibri(라틴 전용)라
-    latin="+mn-lt" 한글 런은 E1이어야 한다."""
+    """Resolve OOXML theme tokens (the +mn-lt kind) to actual fonts (adversarial
+    panel confirmed: matching the token against the blocklist literally causes an
+    E1 missed detection). The default template's theme minor latin=Calibri
+    (latin-only), so a Hangul run with latin="+mn-lt" must be E1."""
     p = new_prs()
     s = add_slide(p)
     box = tb(s, 1, 1, 5, 0.5, "토큰 한글", size=12)
@@ -417,21 +441,23 @@ def test_resolve_font_tokens_unit():
     assert rft({"latin": "+mn-lt"}, thm) == {"latin": "Calibri"}
     assert rft({"ea": "+mn-ea"}, thm) == {"ea": "맑은 고딕"}
     assert rft({"latin": "+mj-lt", "ea": "Wanted Sans"}, thm) == {"latin": "Georgia", "ea": "Wanted Sans"}
-    assert rft({"ea": "+mj-ea"}, thm) == {}          # 빈 값으로 해석되면 슬롯 제거(체인에 맡김)
-    assert rft({"latin": "+mn-lt"}, None) == {}       # 테마 파싱 실패면 슬롯 제거
-    assert rft({"latin": "Batang"}, thm) == {"latin": "Batang"}   # 토큰 아니면 그대로
+    assert rft({"ea": "+mj-ea"}, thm) == {}          # if resolved to an empty value, remove the slot (leave it to the chain)
+    assert rft({"latin": "+mn-lt"}, None) == {}       # if theme parsing fails, remove the slot
+    assert rft({"latin": "Batang"}, thm) == {"latin": "Batang"}   # leave as-is if not a token
 
 
 def test_e2_run_boundary_split(tmp_path):
-    """run 경계로 쪼개진 숫자 범위 오탐 회귀(적대 패널 확정, high): '2020'/'-2021'이
-    서로 다른 run이어도 문단 컨텍스트로 예외가 적용된다. em dash는 분리돼도 차단 유지."""
+    """False-positive regression for a numeric range split across a run boundary
+    (adversarial panel confirmed, high): even when '2020'/'-2021' are different
+    runs, the exception applies via the paragraph context. An em dash stays
+    blocked even when split."""
     p = new_prs()
-    s = add_slide(p)   # p1: en dash 범위가 run 경계에서 분리
+    s = add_slide(p)   # p1: en dash range split at a run boundary
     box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(0.5))
     para = box.text_frame.paragraphs[0]
     r1 = para.add_run(); r1.text = "2020"; r1.font.size = Pt(14)
     r2 = para.add_run(); r2.text = EN_DASH + "2024 실적"; r2.font.size = Pt(14)
-    s = add_slide(p)   # p2: em dash 분리(항상 차단)
+    s = add_slide(p)   # p2: em dash split (always blocked)
     box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(0.5))
     para = box.text_frame.paragraphs[0]
     r1 = para.add_run(); r1.text = "말"; r1.font.size = Pt(14)
@@ -440,26 +466,27 @@ def test_e2_run_boundary_split(tmp_path):
     errors, _w = lint_full(path)
     e2_pages = [si for (si, m, d) in by_code(errors, "E2")]
     assert e2_pages == [2], errors
-    errors_s, _w = lint_full(path, strict=True)   # strict는 분리 여부 무관 전부 차단
+    errors_s, _w = lint_full(path, strict=True)   # strict blocks everything regardless of split
     assert sorted(set(si for (si, m, d) in by_code(errors_s, "E2"))) == [1, 2]
 
 
 def test_size_inheritance_placeholder_gates(tmp_path):
-    """placeholder 상속 체인 활성화 회귀: 명시 크기 없는 placeholder 텍스트가 W5로 새지 않고
-    레이아웃 lstStyle 크기로 해석돼 E3/W1이 실제로 돈다(구버전은 전부 W5로 무력)."""
+    """Placeholder inheritance chain activation regression: placeholder text with
+    no explicit size doesn't leak into W5 but is resolved to the layout lstStyle
+    size, so E3/W1 actually run (the old version disarmed everything into W5)."""
     p = Presentation()
     p.slide_width = Inches(13.333)
     p.slide_height = Inches(7.5)
     lay = p.slide_layouts[1]   # Title and Content
     for ph in lay.placeholders:
-        sz = {0: "400", 1: "800"}.get(ph.placeholder_format.idx)   # 제목 4pt, 본문 8pt
+        sz = {0: "400", 1: "800"}.get(ph.placeholder_format.idx)   # title 4pt, body 8pt
         if sz is None:
             continue
         txBody = ph.text_frame._txBody
         lst = txBody.find(qn("a:lstStyle"))
         if lst is None:
             lst = txBody.makeelement(qn("a:lstStyle"), {})
-            txBody.insert(1, lst)   # bodyPr 다음
+            txBody.insert(1, lst)   # after bodyPr
         lvl1 = lst.makeelement(qn("a:lvl1pPr"), {})
         defR = lst.makeelement(qn("a:defRPr"), {"sz": sz})
         lvl1.append(defR)
@@ -469,12 +496,12 @@ def test_size_inheritance_placeholder_gates(tmp_path):
     s.placeholders[1].text_frame.text = "본문이 레이아웃 상속 크기로 해석되는지 보는 사십자 이상의 충분히 긴 문장입니다"
     errors, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert not by_code(warns, "W5"), warns
-    assert any("4.0pt" in m for (_si, m, _d) in by_code(errors, "E3")), errors       # 제목 4pt
-    assert any("8.0pt" in m for (_si, m, _d) in by_code(warns, "W1")), warns          # 본문 8pt
+    assert any("4.0pt" in m for (_si, m, _d) in by_code(errors, "E3")), errors       # title 4pt
+    assert any("8.0pt" in m for (_si, m, _d) in by_code(warns, "W1")), warns          # body 8pt
 
 
 def test_size_inheritance_master_txstyles(tmp_path):
-    """마스터 txStyles 경로: 기본 템플릿 title=44pt, body(OBJECT)=32pt 해석."""
+    """Master txStyles path: default template resolves title=44pt, body(OBJECT)=32pt."""
     p = Presentation()
     s = p.slides.add_slide(p.slide_layouts[1])
     s.shapes.title.text_frame.text = "제목"
@@ -491,7 +518,8 @@ def test_size_inheritance_master_txstyles(tmp_path):
 
 
 def test_w5_when_chain_fully_absent(tmp_path):
-    """defaultTextStyle까지 제거하면(외부 생성기 산출물 시뮬레이션) 크기 미상이 W5로 표면화."""
+    """If even defaultTextStyle is removed (simulating output from an external
+    generator), an unresolved size is surfaced as W5."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "크기 미상 한글", font="Wanted Sans", no_size=True)
@@ -504,7 +532,8 @@ def test_w5_when_chain_fully_absent(tmp_path):
 
 
 def test_table_cell_e1(tmp_path):
-    """네이티브 표 셀 경로(헤드라인 기능인데 커버리지 0이던 것): 셀 안 CJK의 폰트 결함도 잡는다."""
+    """Native table-cell path (a headline feature that had zero coverage): also
+    catches font defects on CJK inside a cell."""
     p = new_prs()
     s = add_slide(p)
     gf = s.shapes.add_table(2, 2, Inches(1), Inches(1), Inches(8), Inches(2))
@@ -536,7 +565,8 @@ def test_w6_layout_clones(tmp_path):
 
 
 def test_w6_tunables_suppress(tmp_path):
-    """W6 튜너블: 클러스터 임계를 올리면 같은 덱이 통과(의도적 템플릿 하우스용 완화 손잡이)."""
+    """W6 tunable: raising the cluster threshold makes the same deck pass (an
+    intentional relief knob for template houses)."""
     p = new_prs()
     for i in range(6):
         s = add_slide(p)
@@ -546,7 +576,7 @@ def test_w6_tunables_suppress(tmp_path):
     path = save(p, tmp_path, "fx.pptx")
     _e, warns = lint_full(path, w6_min_cluster=10)
     assert "W6" not in codes(warns)
-    # 완전 클론은 코사인이 정확히 1.00이라 sim 임계는 1.0으로 줘야 배제된다(파라미터 관통 확인)
+    # an exact clone has cosine exactly 1.00, so the sim threshold must be set to 1.0 to exclude it (confirms the parameter passes through)
     _e, warns = lint_full(path, w6_sim=1.0)
     assert "W6" not in codes(warns)
 
@@ -568,9 +598,10 @@ def test_w7_low_contrast_needs_render(tmp_path):
 
 
 def test_render_on_textonly_deck_no_crash(tmp_path):
-    """이미지가 한 장도 없는 텍스트 전용 덱을 --render로 린트해도 크래시하지 않아야 한다.
-    회귀: glob 이 contrast_check 지역 import 로만 있던 시절, render_png_hits==0 분기의
-    glob.glob 이 NameError 로 죽고 그게 'pptx 못 엶'으로 오라벨됐다(2026-07-04)."""
+    """Linting a text-only deck with not a single image via --render must not crash.
+    Regression: back when glob existed only as a local import inside
+    contrast_check, glob.glob in the render_png_hits==0 branch died with a
+    NameError, which got mislabeled as "could not open pptx" (2026-07-04)."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 0.8, 9, 0.8, "제목만 있는 페이지", font="Wanted Sans", size=28)
@@ -578,8 +609,8 @@ def test_render_on_textonly_deck_no_crash(tmp_path):
     pages = os.path.join(str(tmp_path), "pages")
     os.makedirs(pages)
     from PIL import Image
-    Image.new("RGB", (1600, 900), (240, 240, 240)).save(os.path.join(pages, "slide-1.png"))  # 규약과 다른 이름
-    errors, warns = lint_full(save(p, tmp_path, "fx.pptx"), render_dir=pages)  # NameError 나면 실패
+    Image.new("RGB", (1600, 900), (240, 240, 240)).save(os.path.join(pages, "slide-1.png"))  # a name that breaks the convention
+    errors, warns = lint_full(save(p, tmp_path, "fx.pptx"), render_dir=pages)  # fails if NameError occurs
     assert isinstance(errors, list) and isinstance(warns, list)
 
 
@@ -659,7 +690,8 @@ def test_w14_nominal_titles_and_ghost(tmp_path):
 
 
 def test_w14_numeric_claim_titles_pass(tmp_path):
-    """숫자+단위 타이틀은 명사로 끝나도 주장형: W14가 오발화하지 않는다(장르 편향 완화)."""
+    """A number+unit title is a claim even when it ends in a noun: W14 must not
+    false-fire (mitigates genre bias)."""
     p = new_prs()
     for t in ("매출 3배 성장", "점유율 42% 달성", "비용 120억 절감", "가입자 500만 돌파",
               "마진 8pp 개선", "리텐션 2x 향상"):
@@ -673,13 +705,13 @@ def test_w14_numeric_claim_titles_pass(tmp_path):
 # ---------------------------------------------------------------- geometry gates
 def test_w15_overlap_and_intentional_layers(tmp_path):
     p = new_prs()
-    s = add_slide(p)  # p1: 진짜 겹침(값 위 라벨)
+    s = add_slide(p)  # p1: genuine overlap (label over a value)
     tb(s, 1, 2.0, 4, 1.2, "12,400원", font="Wanted Sans", size=44)
     tb(s, 1.2, 2.15, 3, 0.5, "+11.7% 전년 대비", font="Wanted Sans", size=14)
-    s = add_slide(p)  # p2: 드롭캡 = 의도
+    s = add_slide(p)  # p2: drop cap = intentional
     tb(s, 1.0, 1.0, 1.2, 1.1, "피", font="Wanted Sans", size=60)
     tb(s, 1.0, 1.05, 5, 0.5, "지컬 AI", font="Wanted Sans", size=13)
-    s = add_slide(p)  # p3: 동일 텍스트 에코 = 의도
+    s = add_slide(p)  # p3: identical text echo = intentional
     tb(s, 2, 2, 4, 1, "떠난 뒤에야", font="Wanted Sans", size=30)
     tb(s, 2.05, 2.05, 4, 1, "떠난 뒤에야", font="Wanted Sans", size=30)
     _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
@@ -691,17 +723,17 @@ def test_w15_overlap_and_intentional_layers(tmp_path):
 
 def test_w16_overflow_and_negatives(tmp_path):
     p = new_prs()
-    s = add_slide(p)  # p1: 텍스트 우측 뚫음(wrap=none 한 줄)
+    s = add_slide(p)  # p1: text overflows right (wrap=none, single line)
     tb(s, 11.0, 1.0, 4.0, 0.6, "Quarterly revenue grew twenty two percent",
        font="Wanted Sans", size=18)
-    s = add_slide(p)  # p2: word_wrap=True 프레임의 긴 한글이 바닥 뚫음
+    s = add_slide(p)  # p2: long Hangul in a word_wrap=True frame overflows the bottom
     bx = tb(s, 1.0, 7.0, 3.0, 0.4,
             "긴 본문이 프레임 계산보다 길어져 바닥을 뚫고 내려가는 경우를 재현한다",
             font="Wanted Sans", size=16)
     bx.text_frame.word_wrap = True
-    s = add_slide(p)  # p3: 그림 우측 잘림
+    s = add_slide(p)  # p3: picture clipped on the right
     s.shapes.add_picture(png(tmp_path, "op.png"), Inches(12.5), Inches(2.0), Inches(2.0), Inches(1.5))
-    s = add_slide(p)  # p4(음성): 풀블리드 + 투명 여백 차트 경계 걸침
+    s = add_slide(p)  # p4 (negative): full bleed + a chart boundary straddling transparent margin
     s.shapes.add_picture(png(tmp_path, "bleed.png"), Inches(0), Inches(0), Inches(13.4), Inches(7.55))
     s.shapes.add_picture(png(tmp_path, "chart.png", opaque_box=(0.1, 0.1, 0.5, 0.5)),
                          Inches(9.0), Inches(4.0), Inches(5.0), Inches(3.6))
@@ -716,13 +748,13 @@ def test_w16_overflow_and_negatives(tmp_path):
 
 def test_w17_straddle_and_negatives(tmp_path):
     p = new_prs()
-    s = add_slide(p)  # p1: 걸침
+    s = add_slide(p)  # p1: straddling
     s.shapes.add_picture(png(tmp_path, "p1.png"), Inches(4.0), Inches(2.0), Inches(4.0), Inches(3.0))
     tb(s, 7.0, 3.0, 4.0, 0.4, "잘린 캡션 텍스트 예시", font="Wanted Sans", size=14)
-    s = add_slide(p)  # p2(음성): 완전 오버레이
+    s = add_slide(p)  # p2 (negative): full overlay
     s.shapes.add_picture(png(tmp_path, "p2.png"), Inches(4.0), Inches(2.0), Inches(4.0), Inches(3.0))
     tb(s, 4.4, 3.0, 3.0, 0.4, "오버레이 캡션", font="Wanted Sans", size=14)
-    s = add_slide(p)  # p3(음성): 투명 여백 위 걸침(알파 트림)
+    s = add_slide(p)  # p3 (negative): straddling over a transparent margin (alpha-trimmed)
     s.shapes.add_picture(png(tmp_path, "p3.png", opaque_box=(0.0, 0.0, 0.45, 1.0)),
                          Inches(4.0), Inches(2.0), Inches(4.0), Inches(3.0))
     tb(s, 6.5, 3.0, 3.0, 0.4, "투명부 위 캡션 예시", font="Wanted Sans", size=14)
@@ -734,35 +766,36 @@ def test_w17_straddle_and_negatives(tmp_path):
 
 
 def test_geo_robustness_no_false_positives(tmp_path):
-    """적대 검증이 실측 재현한 오탐 시나리오 6종: 전부 플래그 0이어야 한다."""
+    """6 false-positive scenarios reproduced measured by adversarial verification:
+    all must flag 0."""
     from PIL import Image, ImageDraw
     p = new_prs()
-    s = add_slide(p)  # p1: wrap=none 팬텀 랩
+    s = add_slide(p)  # p1: wrap=none phantom wrap
     tb(s, 1.0, 1.0, 1.0, 0.4, "Quarterly revenue grew 18% on cloud momentum",
        font="Wanted Sans", size=12)
     tb(s, 1.0, 1.4, 2.0, 0.3, "Source: 10-K", font="Wanted Sans", size=9)
-    s = add_slide(p)  # p2: 그룹 이동 desync
+    s = add_slide(p)  # p2: group-move desync
     grp = s.shapes.add_group_shape()
     box = grp.shapes.add_textbox(Inches(12.5), Inches(3.0), Inches(1.5), Inches(0.4))
     r = box.text_frame.paragraphs[0].add_run()
     r.text = "group label"
     r.font.size = Pt(12)
     grp.left, grp.top = Inches(7.5), Inches(3.0)
-    s = add_slide(p)  # p3: 회전 그림(회전 전 bbox는 밖, 렌더는 안)
+    s = add_slide(p)  # p3: rotated picture (bbox before rotation is outside, render is inside)
     pic = s.shapes.add_picture(png(tmp_path, "rot.png", size=(400, 50)),
                                Inches(11.0), Inches(3.5), Inches(4.0), Inches(0.5))
     pic.rotation = 90
-    s = add_slide(p)  # p4: flipH(잉크 미러로 화면 안)
+    s = add_slide(p)  # p4: flipH (mirrored ink lands on screen)
     pic = s.shapes.add_picture(png(tmp_path, "flip.png", opaque_box=(0.0, 0.0, 0.5, 1.0)),
                                Inches(-0.8), Inches(3.0), Inches(2.0), Inches(1.0))
     pic._element.spPr.find(qn("a:xfrm")).set("flipH", "1")
-    s = add_slide(p)  # p5: P모드+tRNS 투명
+    s = add_slide(p)  # p5: P-mode + tRNS transparency
     im = Image.new("RGBA", (400, 400), (0, 0, 0, 0))
     ImageDraw.Draw(im).rectangle([150, 150, 250, 250], fill=(40, 60, 90, 255))
     pmode = os.path.join(str(tmp_path), "pmode.png")
     im.convert("P").save(pmode, transparency=0)
     s.shapes.add_picture(pmode, Inches(10.33), Inches(2.0), Inches(4.0), Inches(4.0))
-    s = add_slide(p)  # p6: 사진 위 솔리드 카드 위 캡션
+    s = add_slide(p)  # p6: caption over a solid card over a photo
     s.shapes.add_picture(png(tmp_path, "photo.png"), Inches(4.0), Inches(0.5), Inches(6.0), Inches(6.5))
     rect(s, 6.0, 2.5, 4.0, 1.5, "FFFFFF")
     tb(s, 6.3, 3.0, 3.4, 0.4, "카드 위 캡션 문장", font="Wanted Sans", size=14)
@@ -813,7 +846,7 @@ def test_cli_json_and_exit_codes(tmp_path):
     assert r.returncode == 1
     assert doc["summary"]["error_count"] >= 1 and not doc["summary"]["pass"]
     assert any(e["code"] == "E1" for e in doc["errors"])
-    assert "ghost" in doc and isinstance(doc["ghost"], list)   # 문서화된 JSON 계약
+    assert "ghost" in doc and isinstance(doc["ghost"], list)   # documented JSON contract
 
     p = new_prs()
     s = add_slide(p)
@@ -825,7 +858,8 @@ def test_cli_json_and_exit_codes(tmp_path):
 
 
 def test_cli_exit2_missing_and_corrupt(tmp_path):
-    """exit 2 경로 회귀(구버전 미테스트): 파일 없음과 손상 pptx."""
+    """exit 2 path regression (untested in the old version): missing file and a
+    corrupt pptx."""
     r = run_cli([os.path.join(str(tmp_path), "no_such.pptx")])
     assert r.returncode == 2
     assert "찾을 수 없습니다" in r.stderr
@@ -838,7 +872,7 @@ def test_cli_exit2_missing_and_corrupt(tmp_path):
 
 
 def test_cli_text_output_and_ghost(tmp_path):
-    """사람용 텍스트 출력 + --ghost 섹션(구버전 미테스트)."""
+    """Human-readable text output + the --ghost section (untested in the old version)."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 0.8, 9, 0.8, "고스트 타이틀 페이지", font="Wanted Sans", size=26)
@@ -853,10 +887,11 @@ def test_cli_text_output_and_ghost(tmp_path):
 
 
 def test_cli_strict_gates(tmp_path):
-    """--strict: WARN만 있는 덱이 exit 1로 바뀌고, E2 숫자 맥락 예외가 해제된다."""
+    """--strict: a deck with only WARNs switches to exit 1, and the E2 numeric
+    context exception is lifted."""
     p = new_prs()
     s = add_slide(p)
-    tb(s, 1, 1, 11, 0.6, "0123456789" * 5, font="Wanted Sans", size=8.5)   # W1만
+    tb(s, 1, 1, 11, 0.6, "0123456789" * 5, font="Wanted Sans", size=8.5)   # W1 only
     warn_only = save(p, tmp_path, "warn.pptx")
     assert run_cli([warn_only]).returncode == 0
     assert run_cli([warn_only, "--strict"]).returncode == 1
@@ -873,7 +908,7 @@ def test_cli_strict_gates(tmp_path):
 
 
 def test_cli_skip_codes(tmp_path):
-    """--skip: 장르 무관 경고(W14 등)를 선택 억제."""
+    """--skip: selectively suppress genre-independent warnings (W14 etc.)."""
     p = new_prs()
     for t in ("시장 현황", "경쟁 구도 분석", "제품 라인업 개요", "사업 확장 전략",
               "재무 운용 계획", "향후 추진 방안"):
@@ -889,7 +924,8 @@ def test_cli_skip_codes(tmp_path):
 
 # ---------------------------------------------------------------- 0.2.1 script layer + fixes
 def patch_theme_fonts(path, major_ea=None, minor_ea=None):
-    """테마 major/minor ea 빈 슬롯을 각각 다른 값으로 패치(zip 재작성)."""
+    """Patch the theme's major/minor ea empty slots to different values respectively
+    (rewrites the zip)."""
     tmp = path + ".patched.pptx"
     with zipfile.ZipFile(path) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
         for item in zin.infolist():
@@ -911,8 +947,9 @@ def patch_theme_fonts(path, major_ea=None, minor_ea=None):
 
 
 def test_title_flood_regression(tmp_path):
-    """defaultTextStyle 폴백 18pt가 제목 후보로 수집돼 ghost/W14가 범람하던 회귀의 고정
-    (2차 외부 재점검 확정). 크기 미지정 본문만 있는 덱의 ghost는 비어야 한다."""
+    """Pins the regression where the defaultTextStyle fallback 18pt got collected as
+    a title candidate, flooding ghost/W14 (second external re-review confirmed).
+    A deck with only size-unspecified body text must have an empty ghost."""
     p = new_prs()
     s = add_slide(p)
     for i, txt in enumerate(("본문 첫 문장입니다", "본문 둘째 문장입니다", "표 안 텍스트 셋째")):
@@ -924,7 +961,8 @@ def test_title_flood_regression(tmp_path):
 
 
 def test_title_collection_keeps_placeholder_sizes(tmp_path):
-    """placeholder 상속 크기(마스터 titleStyle 44pt)는 의도된 제목이라 계속 수집돼야 한다."""
+    """Placeholder inherited size (master titleStyle 44pt) is an intentional title,
+    so it must still be collected."""
     p = Presentation()
     s = p.slides.add_slide(p.slide_layouts[1])
     s.shapes.title.text_frame.text = "진짜 제목"
@@ -935,10 +973,12 @@ def test_title_collection_keeps_placeholder_sizes(tmp_path):
 
 
 def test_script_layer_two_tier(tmp_path):
-    """스크립트 레이어 2층 구조(3차 패널: 한자 회귀와 JP 폰트 오탐 동시 해소).
-    p1 가나+Noto Sans JP -> 침묵(가나 보유 폰트). p2 한글+Noto Sans JP -> E1(한글 없음).
-    p3 가나+양수 트래킹 -> E4 없음(일본어 관행). p4 한자 전용+Georgia -> E1(CJK 전무 폰트).
-    p5 한자 전용+양수 트래킹 -> E4(한국 덱 인명·법률용어). p6 가나+IBM Plex Mono -> E1."""
+    """The script layer's two-tier structure (third panel: resolves both the Hanja
+    regression and the JP font false positive at once).
+    p1 kana+Noto Sans JP -> silent (font has kana). p2 Hangul+Noto Sans JP ->
+    E1 (no Hangul). p3 kana+positive tracking -> no E4 (Japanese convention).
+    p4 Hanja-only+Georgia -> E1 (font has no CJK at all). p5 Hanja-only+positive
+    tracking -> E4 (Korean-deck names/legal terms). p6 kana+IBM Plex Mono -> E1."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "こんにちは", font="Noto Sans JP", size=12)
@@ -960,18 +1000,20 @@ def test_script_layer_two_tier(tmp_path):
 
 
 def test_hangul_range_extensions():
-    """반각 한글·자모 확장 블록 미탐 봉합(3차 패널)."""
-    assert jl.is_hangul(chr(0xFFA1))    # 반각 ㄱ
-    assert jl.is_hangul(chr(0xA960))    # 자모 확장 A
-    assert jl.is_hangul(chr(0xD7B0))    # 자모 확장 B
-    assert jl._geometry_unsupported(chr(0x0F40))   # 티베트
-    assert jl._geometry_unsupported(chr(0x1000))   # 미얀마
-    assert jl._geometry_unsupported(chr(0x1780))   # 크메르
+    """Closes the missed detection for halfwidth Hangul and the Jamo Extension
+    blocks (third panel)."""
+    assert jl.is_hangul(chr(0xFFA1))    # halfwidth giyeok
+    assert jl.is_hangul(chr(0xA960))    # Jamo Extended-A
+    assert jl.is_hangul(chr(0xD7B0))    # Jamo Extended-B
+    assert jl._geometry_unsupported(chr(0x0F40))   # Tibetan
+    assert jl._geometry_unsupported(chr(0x1000))   # Myanmar
+    assert jl._geometry_unsupported(chr(0x1780))   # Khmer
 
 
 def test_title_own_lststyle_not_flooded(tmp_path):
-    """도형 자체 lstStyle 20pt 본문 산문이 ghost에 쓸리지 않는다(3차 패널 실측 재현 봉합).
-    제목 자격 = 명시 크기 또는 제목 패밀리 placeholder."""
+    """Body prose in a shape's own lstStyle 20pt is not swept into ghost (closes a
+    case reproduced measured by the third panel). Title eligibility = an explicit
+    size or a title-family placeholder."""
     p = new_prs()
     s = add_slide(p)
     box = tb(s, 1, 1, 9, 0.6, "이것은 본문 카피 문장입니다 절대 제목이 아닙니다",
@@ -989,7 +1031,8 @@ def test_title_own_lststyle_not_flooded(tmp_path):
 
 
 def test_cli_lang_edge_cases(tmp_path):
-    """--lang CLI 경계(3차 패널): 반복 지정은 마지막이 이김, skill 서브커맨드와 조합 안전."""
+    """--lang CLI edge cases (third panel): repeated flags let the last one win, and
+    it composes safely with the skill subcommand."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "clean", font="Wanted Sans", size=20)
@@ -998,12 +1041,13 @@ def test_cli_lang_edge_cases(tmp_path):
     assert doc["lang"] == "ko"
     r = run_cli(["skill", "--lang", "ko", "--path"])
     assert r.returncode == 0 and "SKILL.md" in r.stdout
-    r = run_cli(["--lang", "ko", "skill", "--path"])   # 선행 플래그 + 서브커맨드
+    r = run_cli(["--lang", "ko", "skill", "--path"])   # leading flag + subcommand
     assert r.returncode == 0 and "SKILL.md" in r.stdout
 
 
 def test_summary_incomplete_flag(tmp_path):
-    """summary.incomplete: 검사 불능(W18) 여부의 기계 판독 신호(3차 패널: 문서 과장 교정)."""
+    """summary.incomplete: a machine-readable signal for whether checking was
+    impossible (W18) (third panel: corrects documentation overclaiming)."""
     p = new_prs()
     s = add_slide(p)
     box = tb(s, 1, 1, 5, 0.5, "쓰레기 크기 한글", font="Wanted Sans", no_size=True)
@@ -1020,34 +1064,36 @@ def test_summary_incomplete_flag(tmp_path):
 def test_latin_only_font_additions():
     f = jl.is_latin_only_font
     assert f("Aptos") and f("Courier") and f("PT Sans") and f("PT Serif")
-    assert not f("Noto Sans Mono CJK KR")   # cjk 포함 = 한글 완비(2차 재점검 오탐 교정)
+    assert not f("Noto Sans Mono CJK KR")   # contains cjk = Hangul-complete (second re-review fixed a false positive)
     assert not f("Source Han Sans CJK KR")
 
 
 def test_e2_v2_adversarial_edges():
-    """E2 v2 적대 패널 발견 4건의 회귀 고정(2026-07-10 3차)."""
+    """Pins the regression for 4 cases found by the E2 v2 adversarial panel
+    (2026-07-10, third round)."""
     dv = jl.dash_violations
     MINUS = chr(0x2212)
-    assert dv("전일대비 " + MINUS + " 3.2%") == []            # 띄어진 음수 부호(재무 표기)
-    assert dv("끝 " + MINUS) == [MINUS]                        # 뒤에 숫자 없으면 여전히 차단
-    assert dv("2020" + EN_DASH + EN_DASH + "2024") == [EN_DASH, EN_DASH]   # 2연속 대시 미탐 봉합
-    assert dv("결론2024" + EN_DASH + "우리는") == [EN_DASH]    # 단어+숫자 혼합 토큰 우회 봉합
-    assert dv("매출" + chr(0x00B9) + EN_DASH + "영업이익 증가") == [EN_DASH]   # 위첨자 각주
-    assert dv("2020" + EN_DASH + "현재") == []                 # 숫자 시작 토큰 범위는 유지
-    assert dv("Q1" + EN_DASH + "Q3") == []                     # 양쪽 숫자성 규칙 유지
+    assert dv("전일대비 " + MINUS + " 3.2%") == []            # spaced minus sign (financial notation)
+    assert dv("끝 " + MINUS) == [MINUS]                        # still blocked when no digit follows
+    assert dv("2020" + EN_DASH + EN_DASH + "2024") == [EN_DASH, EN_DASH]   # closes the missed detection for 2 consecutive dashes
+    assert dv("결론2024" + EN_DASH + "우리는") == [EN_DASH]    # closes the bypass via a word+digit mixed token
+    assert dv("매출" + chr(0x00B9) + EN_DASH + "영업이익 증가") == [EN_DASH]   # superscript footnote
+    assert dv("2020" + EN_DASH + "현재") == []                 # keeps the digit-starting-token range rule
+    assert dv("Q1" + EN_DASH + "Q3") == []                     # keeps the both-sides-numeric rule
 
 
 def test_e2_v2_range_forms(tmp_path):
-    """E2 v2: 잔존 오탐 4형태 통과 + 띄운 한쪽 숫자(AI 삽입구) 차단 유지."""
+    """E2 v2: passes the remaining 4 false-positive forms + keeps blocking a
+    spaced one-sided-digit case (an AI-inserted-clause pattern)."""
     dv = jl.dash_violations
-    assert dv("2020 " + EN_DASH + " 2024") == []          # 띄운 숫자 범위
-    assert dv("Q1" + EN_DASH + "Q3") == []                 # 알파숫자 토큰
-    assert dv("5%" + EN_DASH + "10%") == []                # 퍼센트 범위
-    assert dv("2020" + EN_DASH + "현재") == []             # 붙은 한쪽 숫자
-    assert dv("성장 " + EN_DASH + " 2024년에는") == [EN_DASH]   # 띄운 삽입구는 차단
-    assert dv("서울" + EN_DASH + "부산") == [EN_DASH]       # 단어 연결은 보수 차단
+    assert dv("2020 " + EN_DASH + " 2024") == []          # spaced numeric range
+    assert dv("Q1" + EN_DASH + "Q3") == []                 # alphanumeric token
+    assert dv("5%" + EN_DASH + "10%") == []                # percent range
+    assert dv("2020" + EN_DASH + "현재") == []             # attached one-sided digit
+    assert dv("성장 " + EN_DASH + " 2024년에는") == [EN_DASH]   # a spaced inserted clause stays blocked
+    assert dv("서울" + EN_DASH + "부산") == [EN_DASH]       # word-to-word connection stays conservatively blocked
     assert dv("2020" + EN_DASH + "현재", strict=True) == [EN_DASH]
-    # 통합: 덱 픽스처로도 고정
+    # integration: also pinned via a deck fixture
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 6, 0.5, "매출 5%" + EN_DASH + "10% 구간", font="Wanted Sans", size=14)
@@ -1058,7 +1104,8 @@ def test_e2_v2_range_forms(tmp_path):
 
 
 def test_skip_rejects_error_codes(tmp_path):
-    """--skip은 WARN 전용: E코드는 exit 2 거부, 적용된 skip은 JSON에 기록(풋건 교정)."""
+    """--skip is WARN-only: an E code causes exit 2 rejection, and applied skips
+    are recorded in the JSON (fixes a footgun)."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
@@ -1067,12 +1114,13 @@ def test_skip_rejects_error_codes(tmp_path):
     assert r.returncode == 2 and "WARN" in r.stderr
     doc = json.loads(run_cli([path, "--json", "--profile", "full", "--skip", "W14"]).stdout)
     assert doc["summary"]["skipped_codes"] == ["W14"]
-    assert any(e["code"] == "E1" for e in doc["errors"])   # E1은 여전히 살아있음
+    assert any(e["code"] == "E1" for e in doc["errors"])   # E1 is still alive
 
 
 def test_e1_master_lststyle_font_inheritance(tmp_path):
-    """프로브6 실측 반영: 마스터 ph lstStyle의 a:ea가 실효 렌더 폰트다.
-    라틴 전용이면 E1, 한글 폰트면 통과('Malgun 폴백 확정' 오탐의 교정)."""
+    """Reflects Probe 6's measured finding: the master ph lstStyle's a:ea is the
+    effective render font. Latin-only means E1, a Hangul font means it passes
+    (fixes the "Malgun fallback confirmed" false positive)."""
     def build(ea_font):
         p = Presentation()
         master = p.slide_masters[0]
@@ -1101,7 +1149,8 @@ def test_e1_master_lststyle_font_inheritance(tmp_path):
 
 
 def test_e1_title_uses_major_font(tmp_path):
-    """프로브6 Q1/Q2 실측 반영: 제목 ph는 테마 majorFont ea, 본문은 minorFont ea를 탄다."""
+    """Reflects Probe 6 Q1/Q2's measured finding: the title ph rides the theme's
+    majorFont ea, and the body rides the minorFont ea."""
     p = Presentation()
     s = p.slides.add_slide(p.slide_layouts[1])
     s.shapes.title.text_frame.text = "제목 한글"
@@ -1111,18 +1160,19 @@ def test_e1_title_uses_major_font(tmp_path):
     errors, _w = lint_full(path)
     e1 = by_code(errors, "E1")
     assert any("제목" in d for (_si, m, d) in e1), errors     # major=Consolas -> E1
-    assert not any("본문" in d for (_si, m, d) in e1), errors  # minor=맑은 고딕 -> 통과
+    assert not any("본문" in d for (_si, m, d) in e1), errors  # minor=Malgun Gothic -> passes
 
 
 def test_vertical_and_complex_script_geometry_skip(tmp_path):
-    """세로쓰기(bodyPr@vert)·복잡 조판 스크립트는 기하 추정 불가: 스킵하되 W18로 표면화."""
+    """Vertical writing (bodyPr@vert) and complex-typesetting scripts can't be
+    geometrically estimated: skip them but surface it via W18."""
     p = new_prs()
-    s = add_slide(p)   # p1: 세로쓰기 프레임이 화면 밖까지 -> W16 FP 없어야
+    s = add_slide(p)   # p1: a vertical-writing frame goes off-screen -> must have no W16 FP
     box = tb(s, 12.0, 1.0, 4.0, 0.6, "vertical long text overflowing edge",
              font="Wanted Sans", size=18)
     bodyPr = box.text_frame._txBody.find(qn("a:bodyPr"))
     bodyPr.set("vert", "eaVert")
-    s = add_slide(p)   # p2: 아랍어 텍스트 -> 기하 스킵 + W18
+    s = add_slide(p)   # p2: Arabic text -> geometry skip + W18
     tb(s, 11.0, 1.0, 4.0, 0.6, "مرحبا بالعالم",
        font="Arial", size=18)
     _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
@@ -1135,7 +1185,8 @@ def test_vertical_and_complex_script_geometry_skip(tmp_path):
 
 # ---------------------------------------------------------------- 0.3.0 i18n + profiles
 def test_lang_english_output(tmp_path):
-    """0.3.0 i18n: 영어 환경에선 메시지가 영어, JSON에 lang 기록. 코드는 언어 무관."""
+    """0.3.0 i18n: in an English environment, messages are in English and lang is
+    recorded in the JSON. Codes are language-independent."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
@@ -1146,13 +1197,14 @@ def test_lang_english_output(tmp_path):
     assert "Hangul" in e1["message"] and "Malgun" in e1["message"]
     doc_ko = json.loads(run_cli([path, "--json"], lang="ko").stdout)
     assert doc_ko["lang"] == "ko" and "한글" in [e for e in doc_ko["errors"] if e["code"] == "E1"][0]["message"]
-    # --lang 플래그가 환경변수를 이긴다
+    # the --lang flag beats the environment variable
     doc_flag = json.loads(run_cli([path, "--json", "--lang", "en"], lang="ko").stdout)
     assert doc_flag["lang"] == "en"
 
 
 def test_lang_catalog_consistency():
-    """카탈로그 규율: 모든 항목에 ko/en이 있고 % 포맷 지시자 순서가 동일하다."""
+    """Catalog discipline: every entry has both ko/en, and the % format-specifier
+    order is identical."""
     fmt = re.compile(r"%[-#0-9.]*[sdfr%]")
     for mid, entry in jmsg.MESSAGES.items():
         assert set(entry) == {"ko", "en"}, mid
@@ -1160,19 +1212,20 @@ def test_lang_catalog_consistency():
 
 
 def test_profile_core_drops_style_rules(tmp_path):
-    """core 프로파일 = 객관 결함만: E2(스타일성 ERROR)까지 제외되지만 선택이 JSON에 남는다."""
+    """The core profile = objective defects only: even E2 (a stylistic ERROR) is
+    excluded, but the choice is left in the JSON."""
     p = new_prs()
     s = add_slide(p)
-    tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "차단", font="Wanted Sans", size=12)   # E2만
+    tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "차단", font="Wanted Sans", size=12)   # E2 only
     path = save(p, tmp_path, "fx.pptx")
     doc = json.loads(run_cli([path, "--json", "--profile", "full"]).stdout)
-    assert any(e["code"] == "E2" for e in doc["errors"])           # full 명시 시 차단(0.4.0: 기본은 core)
+    assert any(e["code"] == "E2" for e in doc["errors"])           # blocked when full is specified explicitly (0.4.0: default is core)
     doc = json.loads(run_cli([path, "--json", "--profile", "core"]).stdout)
     assert not doc["errors"] and doc["summary"]["pass"]
     assert doc["summary"]["profile"] == "core"
-    assert "E2" in doc["summary"]["skipped_codes"]                  # 조용한 우회 아님
+    assert "E2" in doc["summary"]["skipped_codes"]                  # not a silent bypass
 
-    # core에서도 객관 결함(E1)은 그대로 차단
+    # objective defects (E1) still get blocked even under core
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
@@ -1193,18 +1246,20 @@ def test_profile_editorial_drops_w14(tmp_path):
     assert doc["summary"]["profile"] == "editorial"
 
 
-# ---------------------------------------------------------------- 0.3.1 (3차 외부 리뷰 P0/P1)
+# ---------------------------------------------------------------- 0.3.1 (third external review P0/P1)
 def test_e1_para_defrpr_inheritance(tmp_path):
-    """P0-1(프로브7 실측): 문단 pPr/defRPr 폰트는 run 다음 순위로 상속되고 lstStyle을 이긴다.
-    케이스A: 문단 ea=한글폰트 -> E1 오탐 없어야. 케이스B: 마스터 lstStyle ea=한글폰트인데
-    문단 ea=Consolas -> 문단이 이기므로 E1 미탐 없어야."""
+    """P0-1 (Probe 7 measured): the paragraph pPr/defRPr font is inherited at the
+    rank right after run, and wins over lstStyle.
+    Case A: paragraph ea=Hangul font -> there must be no E1 false positive.
+    Case B: master lstStyle ea=Hangul font but paragraph ea=Consolas -> the
+    paragraph wins, so there must be no E1 missed detection."""
     def add_para_ea(para, ea):
         pPr = para._p.get_or_add_pPr()
         defR = pPr.makeelement(qn("a:defRPr"), {})
         defR.append(defR.makeelement(qn("a:ea"), {"typeface": ea}))
         pPr.append(defR)
 
-    # 케이스A: 오탐 검증
+    # Case A: verify no false positive
     p = new_prs()
     s = add_slide(p)
     box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(0.6))
@@ -1214,7 +1269,7 @@ def test_e1_para_defrpr_inheritance(tmp_path):
     errors, _w = lint_full(save(p, tmp_path, "a.pptx"))
     assert not by_code(errors, "E1"), errors
 
-    # 케이스B: 미탐 검증(마스터 lstStyle 한글폰트 + 문단 Consolas)
+    # Case B: verify no missed detection (master lstStyle Hangul font + paragraph Consolas)
     p = Presentation()
     for ph in p.slide_masters[0].placeholders:
         if ph.placeholder_format.idx == 1:
@@ -1239,8 +1294,9 @@ def test_e1_para_defrpr_inheritance(tmp_path):
 
 
 def test_geometry_uses_style_resolver(tmp_path):
-    """P0-2: 기하 검사가 E3와 동일한 상속 크기를 쓴다. 레이아웃 lstStyle 40pt 텍스트가
-    우측을 뚫으면 W16(구버전은 기본 12pt로 계산해 미탐)."""
+    """P0-2: geometry checks use the same inherited size as E3. If layout lstStyle
+    40pt text overflows on the right, it's W16 (the old version computed with a
+    default 12pt and missed it)."""
     p = Presentation()
     p.slide_width = Inches(13.333)
     p.slide_height = Inches(7.5)
@@ -1262,17 +1318,18 @@ def test_geometry_uses_style_resolver(tmp_path):
     body.left, body.top = Inches(12.0), Inches(2.0)
     body.width, body.height = Inches(1.2), Inches(0.8)
     body.text_frame.word_wrap = False
-    body.text_frame.text = "Revenue ABC"   # 12pt면 0.95in(통과), 40pt면 3.2in(넘침)
+    body.text_frame.text = "Revenue ABC"   # at 12pt it's 0.95in (passes), at 40pt it's 3.2in (overflows)
     _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert any("텍스트" in d for (_si, m, d) in by_code(warns, "W16")), warns
 
 
 def test_table_cell_geometry(tmp_path):
-    """P0-3: 네이티브 표 셀 텍스트가 기하 검사에 포함된다(우측 이탈 표 -> W16)."""
+    """P0-3: native table-cell text is included in geometry checks (a table straying
+    off the right -> W16)."""
     p = new_prs()
     s = add_slide(p)
     gf = s.shapes.add_table(1, 2, Inches(11.0), Inches(2.0), Inches(4.0), Inches(1.0))
-    cell = gf.table.cell(0, 1)   # 오른쪽 열은 x=13in 부근에서 시작 -> 캔버스 밖
+    cell = gf.table.cell(0, 1)   # the right column starts around x=13in -> off canvas
     cell.text = "overflowing table cell text"
     r = cell.text_frame.paragraphs[0].runs[0]
     r.font.size = Pt(24)
@@ -1282,7 +1339,8 @@ def test_table_cell_geometry(tmp_path):
 
 
 def test_render_dir_contract(tmp_path):
-    """P0-4: --render 폴더 부재·페이지 렌더 누락은 incomplete로 표면화, 그림 없는 덱은 무관."""
+    """P0-4: a missing --render folder or missing page renders are surfaced as
+    incomplete; a deck with no pictures is unaffected."""
     p = new_prs()
     s = add_slide(p)
     s.shapes.add_picture(png(tmp_path, "pic.png"), Inches(2), Inches(2), Inches(3), Inches(2))
@@ -1294,8 +1352,8 @@ def test_render_dir_contract(tmp_path):
     empty = os.path.join(str(tmp_path), "empty_pages")
     os.makedirs(empty)
     doc = json.loads(run_cli([deck, "--json", "--render", empty]).stdout)
-    assert doc["summary"]["incomplete"] is True, doc["summary"]   # 그림 있는 페이지 렌더 누락
-    # 그림 없는 덱은 렌더가 없어도 완전(검사할 W7 대상 자체가 없음)
+    assert doc["summary"]["incomplete"] is True, doc["summary"]   # missing render for a page that has a picture
+    # a deck with no pictures is complete even with no render (there's no W7 target to check at all)
     p2 = new_prs()
     s2 = add_slide(p2)
     tb(s2, 1, 1, 5, 0.5, "text only", font="Wanted Sans", size=20)
@@ -1304,28 +1362,29 @@ def test_render_dir_contract(tmp_path):
 
 
 def test_profile_is_engine_policy(tmp_path, monkeypatch):
-    """P0-5: 프로파일은 실행 정책이다. 라이브러리 lint(profile=)로 쓸 수 있고,
-    제외 규칙은 실행 자체가 안 되므로 그 내부 실패가 W18로 누출되지 않는다."""
+    """P0-5: a profile is an execution policy. It can be used as a library via
+    lint(profile=), and since an excluded rule simply doesn't run, its internal
+    failure doesn't leak into W18."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "차단", font="Wanted Sans", size=12)
     path = save(p, tmp_path, "fx.pptx")
     errors, _w = lint_full(path, profile="core")
-    assert not by_code(errors, "E2"), errors            # 라이브러리 API에서 프로파일 동작
+    assert not by_code(errors, "E2"), errors            # profile works through the library API
     errors, _w = lint_full(path)
-    assert by_code(errors, "E2"), errors                # 기본 full은 차단 유지
+    assert by_code(errors, "E2"), errors                # default full stays blocking
 
     def boom(*a, **kw):
         raise RuntimeError("w9 fail")
     monkeypatch.setattr(jl, "accent_vbars_check", boom)
-    _e, warns = lint_full(path, profile="core")           # W9 제외 -> 실행 안 함 -> W18 누출 없음
+    _e, warns = lint_full(path, profile="core")           # W9 excluded -> doesn't run -> no W18 leak
     assert not any("w9" in d for (_si, m, d) in by_code(warns, "W18")), warns
-    _e, warns = lint_full(path)                           # full -> 실행 -> 가드 -> W18
+    _e, warns = lint_full(path)                           # full -> runs -> guard -> W18
     assert any("w9" in d for (_si, m, d) in by_code(warns, "W18")), warns
 
 
 def test_skip_validation_strengthened(tmp_path):
-    """P1: 존재하지 않는 W코드와 W18 억제는 exit 2 거부."""
+    """P1: a nonexistent W code or suppressing W18 causes exit 2 rejection."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "clean", font="Wanted Sans", size=20)
@@ -1336,7 +1395,7 @@ def test_skip_validation_strengthened(tmp_path):
 
 
 def test_e4_hanja_message(tmp_path):
-    """P1: E4 메시지가 실제 판정 범위(한글·한자)와 일치한다."""
+    """P1: the E4 message matches the actual judged scope (Hangul and Hanja)."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "大韓民國", font="맑은 고딕", size=12, spc=100)
@@ -1346,16 +1405,18 @@ def test_e4_hanja_message(tmp_path):
 
 
 def test_w8_extended_hangul(tmp_path):
-    """P1: is_cjk 통합으로 반각 한글도 W8 소형 CJK 판정에 잡힌다."""
+    """P1: with is_cjk unified, halfwidth Hangul is also caught by the W8
+    small-CJK judgment."""
     p = new_prs()
     s = add_slide(p)
-    tb(s, 1, 1, 2, 0.4, chr(0xFFA1) * 6, font="Wanted Sans", size=6)   # 반각 ㄱ x6
+    tb(s, 1, 1, 2, 0.4, chr(0xFFA1) * 6, font="Wanted Sans", size=6)   # halfwidth giyeok x6
     _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert by_code(warns, "W8"), warns
 
 
 def test_ghost_prefers_title_placeholder(tmp_path):
-    """제목 placeholder가 있으면 더 큰 KPI 빅넘버가 ghost 제목을 밀어내지 않는다(3차 리뷰)."""
+    """When a title placeholder exists, a bigger KPI big-number must not push the
+    ghost title out (third review)."""
     p = Presentation()
     s = p.slides.add_slide(p.slide_layouts[1])
     s.shapes.title.text_frame.text = "시장 규모는 빠르게 확대된다"
@@ -1372,7 +1433,8 @@ def test_ghost_prefers_title_placeholder(tmp_path):
 
 
 def test_json_schema_contract(tmp_path):
-    """JSON 버전 계약 시작(3차 리뷰): schema_version·tool·target_renderer."""
+    """Start of the JSON version contract (third review): schema_version, tool,
+    target_renderer."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "clean", font="Wanted Sans", size=20)
@@ -1383,7 +1445,7 @@ def test_json_schema_contract(tmp_path):
 
 
 def test_w6_detail_english(tmp_path):
-    """P1: detail까지 i18n(영어 모드에서 W6 detail이 e.g.로 시작)."""
+    """P1: i18n extends even to detail (in English mode, W6's detail starts with "e.g.")."""
     p = new_prs()
     for i in range(6):
         s = add_slide(p)
@@ -1395,27 +1457,29 @@ def test_w6_detail_english(tmp_path):
     assert w6 and w6[0]["detail"].startswith("e.g."), w6
 
 
-# ---------------------------------------------------------------- 0.4.0 구조 개편
+# ---------------------------------------------------------------- 0.4.0 structural overhaul
 def test_default_profile_is_core(tmp_path):
-    """0.4.0 파괴적 변경: 무옵션 기본은 core(객관 결함만). 스타일 규칙 E2는 옵트인,
-    객관 결함 E1은 기본에서도 차단."""
+    """0.4.0 breaking change: with no options, the default is core (objective
+    defects only). The style rule E2 is opt-in; the objective defect E1 stays
+    blocked even under the default."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "정상 통과", font="Wanted Sans", size=12)
     dash_deck = save(p, tmp_path, "dash.pptx")
-    errors, _w = jl.lint(dash_deck)              # 라이브러리 기본값
+    errors, _w = jl.lint(dash_deck)              # library default
     assert not by_code(errors, "E2"), errors
-    r = run_cli([dash_deck, "--json"])           # CLI 기본값
+    r = run_cli([dash_deck, "--json"])           # CLI default
     doc = json.loads(r.stdout)
     assert r.returncode == 0 and doc["summary"]["profile"] == "core"
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
-    assert run_cli([save(p, tmp_path, "e1.pptx")]).returncode == 1   # 객관 결함은 차단 유지
+    assert run_cli([save(p, tmp_path, "e1.pptx")]).returncode == 1   # objective defects stay blocked
 
 
 def test_config_file(tmp_path):
-    """.archforge.json: 덱 폴더에서 자동 발견, CLI 플래그가 설정을 이긴다."""
+    """.archforge.json: auto-discovered in the deck folder; a CLI flag beats the
+    config."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "차단", font="Wanted Sans", size=12)
@@ -1423,16 +1487,17 @@ def test_config_file(tmp_path):
     with open(os.path.join(str(tmp_path), ".archforge.json"), "w", encoding="utf-8") as f:
         json.dump({"profile": "full"}, f)
     doc = json.loads(run_cli([deck, "--json"]).stdout)
-    assert any(e["code"] == "E2" for e in doc["errors"])    # 설정의 full 적용
+    assert any(e["code"] == "E2" for e in doc["errors"])    # the config's full is applied
     doc = json.loads(run_cli([deck, "--json", "--profile", "core"]).stdout)
-    assert not doc["errors"]                                 # CLI가 설정을 이김
-    # fail-safe(4차 리뷰): 알 수 없는 키(오타)는 무시가 아니라 exit 2. 'profle: full'이
-    # 조용히 기본 core로 실행되는 사고 방지
+    assert not doc["errors"]                                 # CLI beats the config
+    # fail-safe (fourth review): an unknown key (a typo) causes exit 2 rather than
+    # being ignored. Prevents the accident where 'profle: full' silently runs as
+    # the default core
     with open(os.path.join(str(tmp_path), ".archforge.json"), "w", encoding="utf-8") as f:
         json.dump({"profile": "full", "no_such_key": 1}, f)
     r = run_cli([deck, "--json"])
     assert r.returncode == 2 and "no_such_key" in r.stderr
-    # --no-config: 신뢰 불가 덱 폴더의 설정을 무시(신뢰 경계)
+    # --no-config: ignore the config of an untrusted deck folder (a trust boundary)
     with open(os.path.join(str(tmp_path), ".archforge.json"), "w", encoding="utf-8") as f:
         json.dump({"profile": "full"}, f)
     doc = json.loads(run_cli([deck, "--json", "--no-config"]).stdout)
@@ -1442,8 +1507,9 @@ def test_config_file(tmp_path):
 
 
 def test_config_value_validation(tmp_path):
-    """설정값 타입·범위는 traceback이 아니라 정돈된 exit 2(4차 리뷰). CLI 범위도 동일
-    (--hard-min 0으로 E3를 조용히 끄던 구 X1 우회 봉합)."""
+    """A config value's type/range gets a clean exit 2 rather than a traceback
+    (fourth review). Same for CLI range (closes the old X1 bypass where
+    --hard-min 0 silently turned off E3)."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "clean", font="Wanted Sans", size=20)
@@ -1457,14 +1523,15 @@ def test_config_value_validation(tmp_path):
     assert run_cli([deck, "--json"]).returncode == 2
     with open(os.path.join(str(tmp_path), ".archforge.json"), "w", encoding="utf-8") as f:
         json.dump({}, f)
-    assert run_cli([deck, "--hard-min", "0"]).returncode == 2   # CLI 범위 검증
+    assert run_cli([deck, "--hard-min", "0"]).returncode == 2   # CLI range validation
 
 
 def test_baseline_v2_language_and_count(tmp_path):
-    """지문 v2(4차 리뷰 HIGH 교정): ko로 만든 baseline이 en 실행에서도 유효하고,
-    발생 수(count) 의미를 지키며, 페이지 무관이라 슬라이드 삽입에도 생존한다."""
+    """Fingerprint v2 (fourth review HIGH fix): a baseline made under ko is also
+    valid under an en run, preserves the meaning of the occurrence count, and is
+    page-independent so it survives a slide insertion."""
     p = new_prs()
-    for i in range(6):   # W6 클론 덱(detail이 로케일 문자열이던 대표 규칙)
+    for i in range(6):   # a W6 clone deck (the representative rule whose detail used to be a locale string)
         s = add_slide(p)
         tb(s, 1, 0.8, 8, 0.6, "Title block %d" % i, font="Wanted Sans", size=24)
         tb(s, 1, 2.0, 6, 2.5, "Body block", font="Wanted Sans", size=12)
@@ -1476,19 +1543,19 @@ def test_baseline_v2_language_and_count(tmp_path):
                              lang="en").stdout)
     assert not any(w["code"] == "W6" for w in doc["warnings"]), doc["warnings"]
 
-    # count 의미: 같은 지문 2건 발생, baseline엔 1건 -> 1건만 억제
+    # count semantics: the same fingerprint occurs 2 times, baseline has 1 -> only 1 is suppressed
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
     one = save(p, tmp_path, "one.pptx")
     run_cli([one, "--write-baseline", bl])
-    s = add_slide(p)   # 같은 텍스트·같은 폰트 = 같은 지문이 두 페이지에
+    s = add_slide(p)   # same text, same font = the same fingerprint on two pages
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
     two = save(p, tmp_path, "two.pptx")
     doc = json.loads(run_cli([two, "--json", "--baseline", bl]).stdout)
     assert doc["summary"]["baseline_suppressed"] == 1
     assert doc["summary"]["error_count"] == 1
-    # 페이지 무관: 앞에 슬라이드를 끼운 덱에서도 억제 유지
+    # page-independent: suppression persists even in a deck with a slide inserted before it
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "새로 삽입된 표지", font="Wanted Sans", size=20)
@@ -1497,13 +1564,14 @@ def test_baseline_v2_language_and_count(tmp_path):
     shifted = save(p, tmp_path, "shifted.pptx")
     doc = json.loads(run_cli([shifted, "--json", "--baseline", bl]).stdout)
     assert doc["summary"]["baseline_suppressed"] == 1 and doc["summary"]["error_count"] == 0
-    # 텍스트 모드 가시성: 억제가 각주로 표시(불가시 clean 오독 교정)
+    # text-mode visibility: suppression shows as a footnote (fixes the misreading of invisible-as-clean)
     r = run_cli([shifted, "--baseline", bl])
     assert "baseline" in r.stdout
 
 
 def test_lint_rejects_unknown_profile(tmp_path):
-    """라이브러리 API: 오타 프로파일이 조용히 full로 동작하던 것 교정(4차 리뷰)."""
+    """Library API: fixes a typo'd profile that used to silently behave as full
+    (fourth review)."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "clean", font="Wanted Sans", size=20)
@@ -1513,7 +1581,8 @@ def test_lint_rejects_unknown_profile(tmp_path):
 
 
 def test_baseline_flow(tmp_path):
-    """baseline: 기존 위반 수용 후 신규만 보고. 억제 수는 summary에 기록."""
+    """baseline: accept existing violations, then report only new ones. The
+    suppressed count is recorded in summary."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
@@ -1523,7 +1592,7 @@ def test_baseline_flow(tmp_path):
     assert r.returncode == 0 and os.path.exists(bl)
     doc = json.loads(run_cli([deck, "--json", "--baseline", bl]).stdout)
     assert doc["summary"]["pass"] and doc["summary"]["baseline_suppressed"] == 1
-    # 신규 결함 추가 -> 신규만 보고
+    # add a new defect -> only the new one is reported
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "새 결함 한글", font="Consolas", size=12)
     deck2 = save(p, tmp_path, "fx2.pptx")
@@ -1533,7 +1602,7 @@ def test_baseline_flow(tmp_path):
 
 
 def test_sarif_output(tmp_path):
-    """SARIF 2.1.0 최소 계약: version·rules·results·ruleId·level."""
+    """SARIF 2.1.0 minimal contract: version, rules, results, ruleId, level."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
@@ -1551,7 +1620,8 @@ def test_sarif_output(tmp_path):
 
 
 def test_finding_location_payload(tmp_path):
-    """구조화 위치(3차 리뷰): shape_id·bbox·part·paragraph·run이 JSON location에 실린다."""
+    """Structured location (third review): shape_id, bbox, part, paragraph, run are
+    carried in the JSON location."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
@@ -1565,7 +1635,8 @@ def test_finding_location_payload(tmp_path):
 
 
 def test_finding_tuple_compat_and_lazy_message():
-    """Finding의 4튜플 하위호환과 로케일 중립성(같은 finding을 두 언어로 렌더)."""
+    """Finding's 4-tuple backward compatibility and locale neutrality (rendering the
+    same finding in two languages)."""
     from archforge.findings import Finding
     f = Finding(3, "E2", "e2", (), "cp=U+2014")
     page, code, msg, detail = f
@@ -1584,7 +1655,8 @@ def _repo_root():
 
 
 def test_skill_pack_sync():
-    """리포 루트 skills/(발견용)와 패키지 동봉본(정본)이 갈라지지 않는다."""
+    """The repo-root skills/ (for discovery) and the package-bundled copy (the
+    canonical one) must not drift apart."""
     root = _repo_root()
     a = os.path.join(root, "skills", "archforge-pptx-lint", "SKILL.md")
     b = os.path.join(root, "src", "archforge", "skills", "archforge-pptx-lint", "SKILL.md")
@@ -1593,7 +1665,8 @@ def test_skill_pack_sync():
 
 
 def test_skill_frontmatter_name_matches_dir():
-    """Agent Skills 규격: frontmatter name == 스킬 디렉터리명(외부 리뷰 지적 회귀)."""
+    """Agent Skills spec: frontmatter name == the skill directory name (regression
+    for an external review finding)."""
     root = _repo_root()
     path = os.path.join(root, "skills", "archforge-pptx-lint", "SKILL.md")
     with open(path, encoding="utf-8") as f:
@@ -1603,7 +1676,8 @@ def test_skill_frontmatter_name_matches_dir():
 
 
 def test_cli_skill_subcommand(tmp_path):
-    """archforge skill: 출력·설치 두 경로 모두 패키지 동봉본과 일치."""
+    """archforge skill: both the output and install paths match the package-bundled
+    copy."""
     r = run_cli(["skill"])
     assert r.returncode == 0
     assert "name: archforge-pptx-lint" in r.stdout
@@ -1616,13 +1690,14 @@ def test_cli_skill_subcommand(tmp_path):
     assert "name: archforge-pptx-lint" in installed
 
 
-# ---------------------------------------------------------------- 0.5.0: loc 보강 + a:fld/a:br
+# ---------------------------------------------------------------- 0.5.0: loc reinforcement + a:fld/a:br
 def _by(items, code):
     return [f for f in items if f.code == code]
 
 
 def _add_fld(para, text, sz=None, latin=None, spc=None):
-    """문단에 a:fld(자동 필드)를 직접 심는다. python-pptx runs가 건너뛰는 요소라 XML로."""
+    """Plant an a:fld (auto field) directly into the paragraph. python-pptx runs
+    skip this element, so it's done via raw XML."""
     fld = para._p.makeelement(qn("a:fld"), {
         "id": "{93C0AD05-B0B5-4E56-9A2A-9F2113D1B94A}", "type": "slidenum"})
     attrs = {}
@@ -1642,8 +1717,10 @@ def _add_fld(para, text, sz=None, latin=None, spc=None):
 
 
 def test_fld_field_runs_gated(tmp_path):
-    """a:fld도 일반 run과 같은 rPr로 렌더되므로 같은 게이트 대상(4차 리뷰 이월분):
-    Arial 한글 필드가 E1, 양수 자간 필드가 E4. loc엔 field 표식, run 인덱스는 없다."""
+    """a:fld also renders with the same rPr as a normal run, so it's subject to
+    the same gates (carried over from the fourth review): an Arial Hangul field
+    is E1, a positive-tracking field is E4. loc carries a field marker, with no
+    run index."""
     p = new_prs()
     s = add_slide(p)
     box = s.shapes.add_textbox(Inches(1), Inches(6.8), Inches(3), Inches(0.4))
@@ -1656,8 +1733,9 @@ def test_fld_field_runs_gated(tmp_path):
 
 
 def test_br_offsets_and_fld_not_title(tmp_path):
-    """a:br은 E2 문맥에서 줄바꿈 한 글자로만 기여(오프셋 유지: br 뒤 run의 em dash가
-    잡힌다). 큰 자동 필드(40pt 페이지 번호)는 ghost 제목으로 수집되지 않는다."""
+    """a:br contributes only a single line-break character in the E2 context
+    (offset preserved: an em dash in the run after br is still caught). A large
+    auto field (a 40pt page number) is not collected as a ghost title."""
     p = new_prs()
     s = add_slide(p)
     box = tb(s, 1, 1, 8, 1, "첫 줄", size=14)
@@ -1675,7 +1753,8 @@ def test_br_offsets_and_fld_not_title(tmp_path):
 
 
 def test_table_cell_loc(tmp_path):
-    """표 셀 finding의 loc.cell == [행, 열] 0기반(4차 리뷰 이월분)."""
+    """A table-cell finding's loc.cell == [row, col], 0-based (carried over from
+    the fourth review)."""
     p = new_prs()
     s = add_slide(p)
     gfx = s.shapes.add_table(2, 2, Inches(1), Inches(1), Inches(6), Inches(2))
@@ -1691,9 +1770,10 @@ def test_table_cell_loc(tmp_path):
 
 
 def test_group_child_loc_bbox_absolute(tmp_path):
-    """그룹 이동 desync(off!=chOff)에서 run 단위 finding의 loc bbox가 그룹 chOff
-    좌표계가 아니라 슬라이드 절대좌표(4차 리뷰 이월분). 자식 raw x=12.5in, 그룹을
-    7.5in로 이동 → 절대 x는 7.5in."""
+    """Under group-move desync (off!=chOff), a run-level finding's loc bbox is in
+    slide absolute coordinates, not the group's chOff coordinate system (carried
+    over from the fourth review). Child raw x=12.5in, group moved to 7.5in ->
+    absolute x is 7.5in."""
     p = new_prs()
     s = add_slide(p)
     grp = s.shapes.add_group_shape()
@@ -1710,8 +1790,9 @@ def test_group_child_loc_bbox_absolute(tmp_path):
 
 
 def test_w15_w16_locations(tmp_path):
-    """W15/W16에 loc이 실리고(실효 글리프 절대 bbox), W15는 related로 상대 프레임을
-    특정한다(4차 리뷰 이월분: W15~17 location 부재)."""
+    """W15/W16 carry loc (the effective glyph's absolute bbox), and W15 identifies
+    the counterpart frame via related (carried over from the fourth review: W15-17
+    lacked location)."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1.0, 1.0, 5.0, 1.0, "겹침 판정 대상 문장 하나", size=24)
@@ -1727,16 +1808,18 @@ def test_w15_w16_locations(tmp_path):
     assert w16[0].loc and "bbox" in w16[0].loc, w16[0].loc
 
 
-# ---------------------------------------------------------------- 0.5.0: scan/demo 서브커맨드
+# ---------------------------------------------------------------- 0.5.0: scan/demo subcommands
 def test_cli_demo_and_scan(tmp_path):
-    """demo: broken(결함 6종 발화)+fixed(클린) 생성·즉석 린트, exit 0.
-    scan: 디렉터리 재귀 집계 JSON, 하나라도 실패면 exit 1, 매치 0건은 exit 2."""
+    """demo: generates broken (fires 6 kinds of defects) + fixed (clean) and lints
+    them on the spot, exit 0.
+    scan: recursive directory aggregate JSON, exit 1 if even one fails, exit 2 if
+    there are 0 matches."""
     d = os.path.join(str(tmp_path), "demo")
     r = run_cli(["demo", "--dir", d])
     assert r.returncode == 0, r.stderr
     assert os.path.exists(os.path.join(d, "broken.pptx"))
     assert os.path.exists(os.path.join(d, "fixed.pptx"))
-    assert "ERROR 0, WARN 0" in r.stdout   # fixed는 클린이어야 한다(데모 계약)
+    assert "ERROR 0, WARN 0" in r.stdout   # fixed must be clean (demo contract)
 
     r = run_cli(["scan", d, "--profile", "full", "--json"])
     assert r.returncode == 1, r.stderr
@@ -1749,18 +1832,19 @@ def test_cli_demo_and_scan(tmp_path):
     for fdoc in doc["files"]:
         assert fdoc["summary"]["profile"] == "full"
 
-    # fixed만: exit 0 + 텍스트 요약 라인
+    # fixed only: exit 0 + a text summary line
     r = run_cli(["scan", os.path.join(d, "fixed.pptx"), "--profile", "full"])
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "1" in r.stdout and "0" in r.stdout   # 스캔 요약(파일 1, 실패 0)
+    assert "1" in r.stdout and "0" in r.stdout   # scan summary (1 file, 0 failed)
 
-    # 글롭 매치 0건 = 조용한 통과가 아니라 exit 2(CI 풋건 방지)
+    # 0 glob matches = exit 2, not a silent pass (prevents a CI footgun)
     r = run_cli(["scan", os.path.join(str(tmp_path), "none_*.pptx")])
     assert r.returncode == 2
 
 
 def test_examples_contract(tmp_path):
-    """examples/의 문서화된 계약 고정: style_warnings는 core 클린 + full에서 W13·W14."""
+    """Pins the documented contract for examples/: style_warnings is clean under
+    core, and W13/W14 under full."""
     from archforge import demo as jdemo
     p = os.path.join(str(tmp_path), "warn.pptx")
     jdemo.build_warnings(p)
@@ -1772,22 +1856,25 @@ def test_examples_contract(tmp_path):
 
 
 def test_demo_en_variant(tmp_path):
-    """영어판 데모 덱 계약: broken_en은 4 ERROR+2 WARN(E1/E4는 이중언어 한글 라인),
-    fixed_en은 full 클린. README(en) 자산이 이 덱의 실렌더다."""
+    """English-edition demo deck contract: monolingual English (user decision), so it
+    seeds only the script-independent defects. broken_en is exactly E2+E3 plus W15/W16;
+    the Hangul-only defects (E1/E4) are the Korean deck's job. fixed_en is clean under
+    full. The README(en) assets are this deck's actual renders."""
     from archforge import demo as jdemo
     b = os.path.join(str(tmp_path), "b.pptx")
     fx = os.path.join(str(tmp_path), "f.pptx")
     jdemo.build_broken(b, lang="en")
     jdemo.build_fixed(fx, lang="en")
     e, w = lint_full(b)
-    assert {"E1", "E2", "E3", "E4"} <= set(codes(e)), codes(e)
+    assert set(codes(e)) == {"E2", "E3"}, codes(e)
     assert {"W15", "W16"} <= set(codes(w)), codes(w)
     e, w = lint_full(fx)
     assert not e and not w, (codes(e), codes(w))
 
 
 def test_cli_scan_sarif_multi(tmp_path):
-    """scan --sarif: 여러 파일이 한 SARIF run에 파일별 artifactLocation으로 합쳐진다."""
+    """scan --sarif: multiple files are merged into one SARIF run, each with its
+    own per-file artifactLocation."""
     d = os.path.join(str(tmp_path), "demo")
     r = run_cli(["demo", "--dir", d])
     assert r.returncode == 0, r.stderr

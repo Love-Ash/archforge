@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""examples/ 커밋본 재생성. `archforge demo`와 같은 소스(archforge.demo)로 만들어
-데모 명령·리포 예제·테스트가 한 정의를 공유한다(드리프트 방지).
+"""Regenerates the committed examples/ files. Built from the same source as
+`archforge demo` (archforge.demo), so the demo command, repo examples, and
+tests share one definition (prevents drift).
 
-사용: python scripts/make_examples.py
+Usage: python scripts/make_examples.py
 """
 import os
 import sys

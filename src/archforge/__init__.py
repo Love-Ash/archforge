@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Archforge(아치포지): 빌드된 .pptx를 배포 전에 기계로 검사하는 한글 특화 품질 린터.
+"""Archforge: a Hangul-focused quality linter that machine-checks a built .pptx before it ships.
 
-이름은 arch(구조·아키텍처)와 forge(불려 벼리다·대장간)에서 왔다. 덱의 구조와 한글 타이포를
-배포 전에 벼려 다듬는 대장간이라는 뜻이다.
+The name comes from arch (structure/architecture) and forge (to hammer and temper; a smithy).
+It means a smithy that forges and refines a deck's structure and Hangul typography before it
+ships.
 
-`archforge.lint`는 서브모듈이다(패키지 속성을 함수로 가리지 않는다). 함수형 진입점이
-필요하면 `from archforge.lint import lint` 또는 `archforge.lint_pptx`를 쓴다.
+`archforge.lint` is a submodule (it is not shadowed by a function of the same name on the
+package). If a functional entry point is needed, use `from archforge.lint import lint` or
+`archforge.lint_pptx`.
 """
-from . import lint as _lint_module  # noqa: F401  (서브모듈 로드 보장)
+from . import lint as _lint_module  # noqa: F401  (ensures the submodule is loaded)
 from .lint import lint as lint_pptx  # noqa: F401
 from .lint import frame_autofit, frame_font_scale, main  # noqa: F401
-from .findings import Finding  # noqa: F401  (0.4.0 공개 모델)
+from .findings import Finding  # noqa: F401  (0.4.0 public model)
 
 __version__ = "0.5.0"

@@ -1,0 +1,25 @@
+# archforge
+
+> The preflight linter for AI-generated PowerPoint (.pptx). It reads the built file
+> (XML, font-resolution chain, geometry, image alpha; no PowerPoint needed) and blocks
+> silent Korean font fallback, unreadable sizes, colliding frames, off-canvas text, and
+> AI-tell punctuation before a human sees a render.
+
+Quick use for agents: `pip install archforge`, then `archforge deck.pptx --profile full --json`.
+Ship condition: `summary.error_count == 0` AND `summary.incomplete == false`. Findings carry a
+`location` payload (shape id, absolute bbox in inches, paragraph/run, table cell, `related`
+counterpart) so you can fix the exact shape without text search. Rule codes (E1..E4, W1..W18)
+are stable language-independent identifiers; message language follows `--lang` (en/ko).
+
+## Docs
+
+- [README](https://github.com/Love-Ash/archforge/blob/main/README.md): overview, 30-second quickstart, CI (GitHub Action, pre-commit), JSON contract
+- [Agent skill pack (SKILL.md)](https://github.com/Love-Ash/archforge/blob/main/skills/archforge-pptx-lint/SKILL.md): the build-lint-fix loop, per-code fix guide, output contract; also bundled in the wheel (`archforge skill --install`)
+- [Calibration record](https://github.com/Love-Ash/archforge/blob/main/docs/CALIBRATION.md): the measured PowerPoint font-resolution model (COM render probes) and every threshold's rationale
+- [Examples](https://github.com/Love-Ash/archforge/tree/main/examples): defect decks with expected outputs (`archforge demo` regenerates them anywhere)
+- [CHANGELOG](https://github.com/Love-Ash/archforge/blob/main/CHANGELOG.md)
+
+## Contributing
+
+- [CONTRIBUTING](https://github.com/Love-Ash/archforge/blob/main/CONTRIBUTING.md): gates change only with render evidence
+- [Report a false positive](https://github.com/Love-Ash/archforge/issues/new/choose): the most valuable report; confirmed FPs become permanent regression fixtures

@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
-"""규칙 레지스트리(0.4.0, 3차 외부 리뷰 구조 개편의 1단계).
+"""Rule registry (0.4.0, phase 1 of the third external review's structural overhaul).
 
-규칙의 메타데이터(심각도·분류·메시지 id)와 프로파일 정의를 검사 구현에서 분리한다.
-CLI 검증(--skip 오타), 프로파일, SARIF rules[] 생성이 전부 이 표 하나를 소비한다.
-검사 구현 자체의 물리적 분해(rules/typography 등 패키지화)는 다음 단계다.
+Separates rule metadata (severity, category, message id) and profile definitions from the
+check implementation. CLI validation (--skip typos), profiles, and SARIF rules[]
+generation all consume this single table. Physically decomposing the check implementation
+itself (packaging into rules/typography etc.) is the next phase.
 """
 
-# code -> (severity, category, 대표 메시지 id)
+# code -> (severity, category, representative message id)
 RULES = {
     "E1": ("error",   "typography", "e1_nofont"),
     "E2": ("error",   "style",      "e2"),
@@ -31,9 +32,9 @@ RULES = {
 
 ALL_CODES = frozenset(RULES)
 
-# 프로파일 = 엔진 실행 정책(0.3.1부터 제외 규칙은 실행 자체를 안 함).
-# 0.4.0: 기본 프로파일이 core로 바뀜(파괴적 변경). 객관 결함만 기본이고,
-# AI 티·하우스 스타일 규칙(E2, W6, W9~W14)은 full 옵트인이다.
+# Profile = engine execution policy (since 0.3.1, excluded rules simply do not run).
+# 0.4.0: the default profile changed to core (a breaking change). Only objective defects
+# run by default; AI-tell/house-style rules (E2, W6, W9-W14) are full opt-in.
 PROFILES = {
     "full": frozenset(),
     "core": frozenset({"E2", "W6", "W9", "W10", "W11", "W12", "W13", "W14"}),

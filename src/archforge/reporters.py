@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""리포터(0.4.0): finding 목록을 텍스트/JSON/SARIF로. 언어는 여기서 결정된다
-(finding은 로케일 중립: 3차 외부 리뷰의 검사·표현 분리)."""
+"""Reporters (0.4.0): render a findings list as text/JSON/SARIF. Language is decided here
+(findings are locale-neutral: the check/presentation split from the third external
+review)."""
 from typing import Dict, List, Optional
 
 try:
@@ -54,23 +55,25 @@ def render_text(path: str, errors: List, warns: List, ghost,
     if skip:
         lines.append(M("skip_applied") % ",".join(sorted(skip)))
     if config_path:
-        # 신뢰 경계 가시성(4차 리뷰): 어떤 설정 파일이 게이트를 조정했는지 항상 표시
+        # Trust-boundary visibility (fourth review): always show which config file
+        # adjusted the gate
         lines.append(M("config_applied") % config_path)
     if baseline_suppressed:
-        # baseline 억제가 사람용 출력에서 완전 불가시라 'clean'으로 오독되던 것 교정
+        # Fixes baseline suppression being entirely invisible in human-facing output and
+        # misread as 'clean'
         lines.append(M("baseline_applied") % (baseline_suppressed, baseline_path or ""))
     lines.append("--- ERROR %d, WARN %d ---" % (len(errors), len(warns)))
     return lines
 
 
 def build_sarif(path: str, errors: List, warns: List) -> Dict:
-    """SARIF 2.1.0 최소 유효 문서(GitHub code scanning 수용 형태)."""
+    """Minimal valid SARIF 2.1.0 document (a shape GitHub code scanning accepts)."""
     return build_sarif_multi([(path, errors, warns)])
 
 
 def build_sarif_multi(items: List) -> Dict:
-    """items = [(path, errors, warns), ...]. 여러 파일이면 한 run에 파일별
-    artifactLocation으로 합친다(scan 모드, 0.5.0)."""
+    """items = [(path, errors, warns), ...]. When there are multiple files, merges them
+    into one run with a per-file artifactLocation (scan mode, 0.5.0)."""
     rules_meta = []
     used = sorted({f.code for (_p, errs, ws) in items for f in list(errs) + list(ws)})
     for code in used:

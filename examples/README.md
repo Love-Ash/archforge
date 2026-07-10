@@ -5,15 +5,15 @@ from the same source as the `archforge demo` command (`archforge/demo.py`).
 
 | File | What it shows | Expected result |
 |------|---------------|-----------------|
-| `broken_en.pptx` | The six most common machine-made defects, in an English deck with a bilingual summary line (the realistic way E1/E4 appear in global decks): silent Korean font fallback (E1), an em dash used as prose punctuation (E2), a 4pt source line (E3), tracked Hangul (E4), two colliding text frames (W15), text past the canvas edge (W16) | `--profile full`: 4 ERRORs + 2 WARNs, exit 1 |
-| `fixed_en.pptx` | The same content, corrected: explicit `a:ea` Korean font on the Korean line, colon instead of the dash, 9pt source, tracking removed, frames separated and inside the canvas | `--profile full`: clean, exit 0 |
-| `broken.pptx` / `fixed.pptx` | The same defect/fix pair as a fully Korean deck | Same as above |
+| `broken_en.pptx` | The script-independent machine-made defects, in an all-English deck: an em dash used as prose punctuation (E2), a 4pt source line (E3), two colliding text frames (W15), text past the canvas edge (W16) | `--profile full`: 2 ERRORs + 2 WARNs, exit 1 |
+| `fixed_en.pptx` | The same content, corrected: colon instead of the dash, 9pt source, frames separated and inside the canvas | `--profile full`: clean, exit 0 |
+| `broken.pptx` / `fixed.pptx` | The full six-defect pair as a Korean deck, adding the two Hangul-only defects: silent Korean font fallback (E1) and tracked Hangul (E4) | `--profile full`: 4 ERRORs + 2 WARNs / clean |
 | `style_warnings.pptx` | Defects only the style/AI-tell rules see: native PowerPoint shadows (W13) and noun-phrase titles (W14, a Korean-title heuristic, hence Korean-only) | `core` (default): clean. `--profile full`: WARNs, exit 0 (`--strict`: exit 1) |
 
 Try them:
 
 ```bash
-archforge examples/broken_en.pptx --profile full       # 4 ERRORs, 2 WARNs
+archforge examples/broken_en.pptx --profile full       # 2 ERRORs, 2 WARNs
 archforge examples/fixed_en.pptx  --profile full       # clean
 archforge examples/style_warnings.pptx                 # clean (core profile)
 archforge examples/style_warnings.pptx --profile full  # W13 + W14
