@@ -303,6 +303,10 @@ MESSAGES = {
         "ko": "E2 숫자 맥락 예외(범위·음수) 해제. E2가 실행되는 프로파일(full)에서만 의미",
         "en": "lift E2's numeric-context exemptions (ranges, minus). Only meaningful in profiles that run E2 (full)",
     },
+    "help_junit": {
+        "ko": "JUnit XML 결과를 이 경로에 기록(Jenkins·GitLab 등 테스트 리포트 UI 연동)",
+        "en": "write JUnit XML results to this path (Jenkins/GitLab test-report UIs)",
+    },
     "help_allow_empty_pattern": {
         "ko": "매치 0건인 입력 패턴을 허용(기본은 exit 2: 오타·빌드 실패가 다른 패턴 뒤에 숨는 것 방지)",
         "en": "allow an input pattern that matched nothing (default exits 2 so a typo cannot hide behind another pattern)",

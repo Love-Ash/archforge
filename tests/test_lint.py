@@ -2270,5 +2270,47 @@ def test_w15_loc_carries_paragraph_and_cell_fields(tmp_path):
     assert w15 and "paragraph" in w15[0].loc, w15[0].loc if w15 else warns
 
 
+def test_junit_reporter(tmp_path):
+    """JUnit mapping contract: a testcase per executed rule (skipped = excluded by
+    profile), ERROR findings as <failure>, WARN findings in <system-out> unless a
+    warn-failing policy is active, and a corrupt file as an <error> testcase."""
+    import xml.etree.ElementTree as ET
+    d = os.path.join(str(tmp_path), "batch")
+    os.makedirs(d)
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "tiny", size=3)   # E3
+    save(p, d, "bad.pptx")
+    with open(os.path.join(d, "corrupt.pptx"), "w") as f:
+        f.write("nope")
+    out = os.path.join(str(tmp_path), "o.xml")
+    r = run_cli(["scan", d, "--junit", out])   # core profile: E2 etc. excluded
+    assert r.returncode == 1
+    tree = ET.parse(out)
+    suites = tree.getroot().findall("testsuite")
+    assert len(suites) == 2
+    by_name = {sx.get("name"): sx for sx in suites}
+    bad = by_name[os.path.join(d, "bad.pptx")]
+    cases = {c.get("name").split()[0]: c for c in bad.findall("testcase")}
+    assert cases["E3"].find("failure") is not None
+    assert cases["E2"].find("skipped") is not None   # excluded by core
+    corrupt = by_name[os.path.join(d, "corrupt.pptx")]
+    assert corrupt.find("testcase/error") is not None
+    # single-file mode + warn-fail policy: WARNs become failures
+    p2 = new_prs()
+    s2 = add_slide(p2)
+    tb(s2, 12.8, 3.0, 3.0, 0.5, "off the canvas edge text", size=18)   # W16
+    deck2 = save(p2, tmp_path, "warn.pptx")
+    out2 = os.path.join(str(tmp_path), "o2.xml")
+    run_cli([deck2, "--junit", out2])
+    root2 = ET.parse(out2).getroot()
+    w16 = [c for c in root2.iter("testcase") if c.get("name").startswith("W16")][0]
+    assert w16.find("failure") is None and w16.find("system-out") is not None
+    run_cli([deck2, "--junit", out2, "--fail-on-warning"])
+    root3 = ET.parse(out2).getroot()
+    w16b = [c for c in root3.iter("testcase") if c.get("name").startswith("W16")][0]
+    assert w16b.find("failure") is not None
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))

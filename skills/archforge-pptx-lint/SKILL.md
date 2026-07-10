@@ -37,6 +37,7 @@ archforge deck.pptx --render pages/   # + on-image contrast check (W7); needs p0
 archforge deck.pptx --skip W14,W6     # suppress specific WARNs (WARN-only; recorded in JSON)
 archforge deck.pptx --lang en         # report language (codes are language-independent)
 archforge deck.pptx --sarif out.sarif # SARIF 2.1.0 for GitHub code scanning
+archforge deck.pptx --junit out.xml   # JUnit XML for Jenkins/GitLab test reports
 archforge deck.pptx --write-baseline bl.json / --baseline bl.json   # adopt existing decks (beta)
 archforge deck.pptx --no-config       # ignore config files (untrusted decks)
 archforge deck.pptx --w6-sim 0.95 --w6-cluster 5   # loosen W6 for template-driven houses

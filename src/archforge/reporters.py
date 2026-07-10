@@ -66,6 +66,81 @@ def render_text(path: str, errors: List, warns: List, ghost,
     return lines
 
 
+def _junit_sanitize(s):
+    return "".join(ch for ch in s if ch == "\t" or ch == "\n" or ord(ch) >= 0x20)
+
+
+def build_junit_multi(items: List) -> str:
+    """JUnit XML for CI systems that consume test reports (Jenkins, GitLab, ...).
+
+    items = [(path, errors, warns, excluded_codes, warn_fail, usage_error)], one
+    testsuite per file. The honest mapping (issue #2 design discussion): a testcase is
+    a RULE THAT RAN, so "tests" means "checks executed". ERROR findings map to
+    <failure>; WARN findings fail only under a warn-failing policy and otherwise land
+    in <system-out> (JUnit <skipped> means "not run", so it is reserved for rules
+    excluded by the active profile/--skip). A file that could not be checked at all
+    (corrupt package, bad per-deck config) becomes a single <error> testcase."""
+    import xml.etree.ElementTree as ET
+    from .rules import ALL_CODES, TITLES
+
+    def _order(c):
+        return (c[0] != "E", int(c[1:]))
+
+    root = ET.Element("testsuites", name="archforge")
+    total = failures = errors_n = skipped_n = 0
+    for path, errs, warns, excluded, warn_fail, usage_error in items:
+        suite = ET.SubElement(root, "testsuite", name=path)
+        if usage_error is not None:
+            case = ET.SubElement(suite, "testcase", classname=path, name="usage")
+            err = ET.SubElement(case, "error", message=_junit_sanitize(usage_error))
+            err.text = _junit_sanitize(usage_error)
+            suite.set("tests", "1")
+            suite.set("errors", "1")
+            suite.set("failures", "0")
+            suite.set("skipped", "0")
+            total += 1
+            errors_n += 1
+            continue
+        by_code: Dict[str, List] = {}
+        for f in list(errs) + list(warns):
+            by_code.setdefault(f.code, []).append(f)
+        s_tests = s_fail = s_skip = 0
+        for code in sorted(ALL_CODES, key=_order):
+            case = ET.SubElement(suite, "testcase", classname=path,
+                                 name="%s %s" % (code, TITLES.get(code, code)))
+            s_tests += 1
+            if code in excluded:
+                ET.SubElement(case, "skipped",
+                              message="excluded by the active profile or --skip")
+                s_skip += 1
+                continue
+            hits = by_code.get(code, [])
+            if not hits:
+                continue
+            lines = "\n".join(_junit_sanitize("p%02d %s | %s" % (f.page, f.message, f.detail))
+                              for f in hits)
+            if code.startswith("E") or warn_fail:
+                fail = ET.SubElement(case, "failure",
+                                     message="%d finding(s)" % len(hits))
+                fail.text = lines
+                s_fail += 1
+            else:
+                out = ET.SubElement(case, "system-out")
+                out.text = lines
+        suite.set("tests", str(s_tests))
+        suite.set("failures", str(s_fail))
+        suite.set("errors", "0")
+        suite.set("skipped", str(s_skip))
+        total += s_tests
+        failures += s_fail
+        skipped_n += s_skip
+    root.set("tests", str(total))
+    root.set("failures", str(failures))
+    root.set("errors", str(errors_n))
+    root.set("skipped", str(skipped_n))
+    return '<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(root, encoding="unicode")
+
+
 def build_sarif(path: str, errors: List, warns: List) -> Dict:
     """Minimal valid SARIF 2.1.0 document (a shape GitHub code scanning accepts)."""
     return build_sarif_multi([(path, errors, warns)])

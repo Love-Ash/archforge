@@ -2634,6 +2634,14 @@ def main():
         with open(a.sarif, "w", encoding="utf-8", newline="\n") as f:
             json.dump(sarif_doc, f, ensure_ascii=False, indent=2)
 
+    if a.junit:
+        xml_text = _reporters.build_junit_multi(
+            [(a.pptx, res["errors"], res["warns"],
+              set(res["summary"]["skipped_codes"]),
+              res["summary"]["policy"]["fail_on_warning"], None)])
+        with open(a.junit, "w", encoding="utf-8", newline="\n") as f:
+            f.write(xml_text)
+
     if a.json:
         import json
         doc = _reporters.build_json_doc(a.pptx, res["errors"], res["warns"],
@@ -2720,6 +2728,7 @@ def _add_common_flags(ap):
     ap.add_argument("--config", default=None, metavar="PATH", help=M("help_config"))
     ap.add_argument("--no-config", action="store_true", help=M("help_no_config"))
     ap.add_argument("--sarif", default=None, metavar="PATH", help=M("help_sarif"))
+    ap.add_argument("--junit", default=None, metavar="PATH", help=M("help_junit"))
     ap.add_argument("--baseline", default=None, metavar="PATH", help=M("help_baseline"))
 
 
@@ -2996,6 +3005,18 @@ def scan_main(argv=None):
             [(p, r["errors"], r["warns"]) for (p, r) in ok])
         with open(a.sarif, "w", encoding="utf-8", newline="\n") as f:
             json.dump(sarif_doc, f, ensure_ascii=False, indent=2)
+
+    if a.junit:
+        junit_items = []
+        for p, r, e in results:
+            if r is None:
+                junit_items.append((p, [], [], set(), False, e))
+            else:
+                junit_items.append((p, r["errors"], r["warns"],
+                                    set(r["summary"]["skipped_codes"]),
+                                    r["summary"]["policy"]["fail_on_warning"], None))
+        with open(a.junit, "w", encoding="utf-8", newline="\n") as f:
+            f.write(_reporters.build_junit_multi(junit_items))
 
     if a.json:
         import json

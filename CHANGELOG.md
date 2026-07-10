@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- JUnit XML reporter: `--junit PATH` in both single-file and scan modes. One
+  testsuite per file, one testcase per executed rule (excluded rules map to
+  skipped, since JUnit's skipped means "not run"), ERROR findings as failures,
+  WARN findings in system-out unless a warn-failing policy is active, and an
+  unreadable file as an error testcase. The implementation follows the design
+  discussed with @siddhanttiwari19 in issue #2.
+
 ## 0.6.1 (2026-07-11)
 
 A contract-consistency release driven by an external review of 0.6.0 (overall verdict:

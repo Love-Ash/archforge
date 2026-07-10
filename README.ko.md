@@ -73,6 +73,7 @@ archforge deck.pptx --skip W14,W6   # 특정 WARN 억제(JSON에 기록됨)
 archforge deck.pptx --lang ko       # 리포트 언어(기본: ARCHFORGE_LANG, 그다음 OS 로케일)
 archforge deck.pptx --no-config     # 설정 파일 무시(신뢰 불가 덱을 린트할 때)
 archforge deck.pptx --sarif out.sarif        # SARIF 2.1.0(GitHub code scanning)
+archforge deck.pptx --junit out.xml          # JUnit XML(Jenkins·GitLab 테스트 리포트)
 archforge deck.pptx --write-baseline bl.json # 기존 덱을 있는 그대로 수용(베타)
 archforge deck.pptx --baseline bl.json       # 이후 신규 위반만 보고
 archforge deck.pptx --hard-min 5 --body-min 9 --small-min 7.5   # 크기 게이트 임계
