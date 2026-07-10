@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.6.2 (2026-07-11)
+
+Reporters, reproducibility, and resource bounds. Additive; no contract changes.
 
 - JUnit XML reporter: `--junit PATH` in both single-file and scan modes. One
   testsuite per file, one testcase per executed rule (excluded rules map to

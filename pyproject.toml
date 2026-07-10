@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "archforge"
-version = "0.6.1"
+version = "0.6.2"
 description = "Preflight quality linter for AI-generated PowerPoint: catches silent font fallback (Hangul-deep, CJK-aware), tracking damage, text collisions, off-canvas bleed, and AI-generated deck tells in built .pptx files"
 readme = "README.md"
 requires-python = ">=3.9"
