@@ -176,11 +176,14 @@ def test_line_gates_positive(tmp_path):
 
 
 def test_e1_nofont_empty_theme_slot(tmp_path):
+    """폰트 미지정 + 빈 테마 ea = Malgun 폴백 E1. 0.2.1부터는 defaultTextStyle의
+    +mn-lt 토큰이 상속 체인으로 해석돼(실효 latin=Calibri) 더 정확한 분기로 잡히므로
+    메시지가 아니라 코드로 고정한다."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "폰트 미지정 한글", size=12)
     errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
-    assert any(c == "E1" and "미지정" in m for (_si, c, m, _d) in errors)
+    assert any(c == "E1" for (_si, c, m, _d) in errors), errors
 
 
 def test_e1_render_model_slots(tmp_path):
@@ -217,13 +220,14 @@ def test_e1_theme_ea_korean_suppresses_latin(tmp_path):
 
 
 def test_e1_theme_ea_latin_only_flags(tmp_path):
-    """테마 ea 자체가 라틴 전용이면 폰트 미지정 CJK는 E1(테마 분기)."""
+    """테마 ea 자체가 라틴 전용이면 폰트 미지정 한글은 E1. 0.2.1부터 defaultTextStyle의
+    +mn-ea 토큰이 체인으로 해석돼 실효 ea=Consolas로 잡힌다(분기 무관, 폰트명으로 고정)."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "폰트 미지정 한글", size=12)
     path = patch_theme_ea(save(p, tmp_path, "fx.pptx"), "Consolas")
     errors, _w = jl.lint(path)
-    assert any(c == "E1" and "테마" in m for (_si, c, m, _d) in errors), errors
+    assert any(c == "E1" and "Consolas" in d for (_si, c, m, d) in errors), errors
 
 
 def test_theme_ea_by_master_relationship(tmp_path):
@@ -368,6 +372,8 @@ def test_w6_page_numbers_survive_token_failure(tmp_path, monkeypatch):
     assert w6, warns
     pages = [int(m) for m in re.findall(r"p(\d+)", w6[0][2])]
     assert pages and max(pages) <= 6, w6   # 이중 append 시절엔 p7~p11이 나왔다
+    # 0.2.1: 토큰 수집 실패도 W18로 표면화된다(가드 배선 전체 확장)
+    assert any("w10_tokens" in d for (_si, m, d) in by_code(warns, "W18")), warns
 
 
 def test_e1_theme_token_resolution(tmp_path):
@@ -857,6 +863,175 @@ def test_cli_skip_codes(tmp_path):
     assert any(w["code"] == "W14" for w in doc["warnings"])
     doc = json.loads(run_cli([path, "--json", "--skip", "W14"]).stdout)
     assert not any(w["code"] == "W14" for w in doc["warnings"])
+
+
+# ---------------------------------------------------------------- 0.2.1 script layer + fixes
+def patch_theme_fonts(path, major_ea=None, minor_ea=None):
+    """테마 major/minor ea 빈 슬롯을 각각 다른 값으로 패치(zip 재작성)."""
+    tmp = path + ".patched.pptx"
+    with zipfile.ZipFile(path) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if re.search(r"theme/theme\d+\.xml$", item.filename):
+                if major_ea is not None:
+                    m = re.search(rb"<a:majorFont>.*?</a:majorFont>", data, re.S)
+                    seg = m.group(0).replace(b'<a:ea typeface=""/>',
+                                             ('<a:ea typeface="%s"/>' % major_ea).encode("utf-8"))
+                    data = data[:m.start()] + seg + data[m.end():]
+                if minor_ea is not None:
+                    m = re.search(rb"<a:minorFont>.*?</a:minorFont>", data, re.S)
+                    seg = m.group(0).replace(b'<a:ea typeface=""/>',
+                                             ('<a:ea typeface="%s"/>' % minor_ea).encode("utf-8"))
+                    data = data[:m.start()] + seg + data[m.end():]
+            zout.writestr(item, data)
+    shutil.move(tmp, path)
+    return path
+
+
+def test_title_flood_regression(tmp_path):
+    """defaultTextStyle 폴백 18pt가 제목 후보로 수집돼 ghost/W14가 범람하던 회귀의 고정
+    (2차 외부 재점검 확정). 크기 미지정 본문만 있는 덱의 ghost는 비어야 한다."""
+    p = new_prs()
+    s = add_slide(p)
+    for i, txt in enumerate(("본문 첫 문장입니다", "본문 둘째 문장입니다", "표 안 텍스트 셋째")):
+        tb(s, 1, 1 + i, 8, 0.5, txt, font="Wanted Sans", no_size=True)
+    ghost = []
+    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"), ghost=ghost)
+    assert ghost == [], ghost
+    assert "W14" not in codes(warns)
+
+
+def test_title_collection_keeps_placeholder_sizes(tmp_path):
+    """placeholder 상속 크기(마스터 titleStyle 44pt)는 의도된 제목이라 계속 수집돼야 한다."""
+    p = Presentation()
+    s = p.slides.add_slide(p.slide_layouts[1])
+    s.shapes.title.text_frame.text = "진짜 제목"
+    s.placeholders[1].text_frame.text = "본문"
+    ghost = []
+    jl.lint(save(p, tmp_path, "fx.pptx"), ghost=ghost)
+    assert any("진짜 제목" in t for _si, t in ghost), ghost
+
+
+def test_script_layer_hangul_only(tmp_path):
+    """E1·E4 트리거 한글 한정(2차 재점검: JP/SC 폰트 오차단 교정).
+    p1 가나+Noto Sans JP -> 침묵(일본어 덱 안전). p2 한글+Noto Sans JP -> E1(진짜 폴백).
+    p3 가나+양수 트래킹 -> E4 없음(일본어 관행). p4 한자 전용+라틴 폰트 -> 침묵."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "こんにちは", font="Noto Sans JP", size=12)
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "한글 텍스트", font="Noto Sans JP", size=12)
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "あいうえお", font="Wanted Sans", size=12, spc=100)
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "漢字専用", font="Georgia", size=12)
+    errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
+    e1_pages = [si for (si, m, d) in by_code(errors, "E1")]
+    assert e1_pages == [2], errors
+    assert not by_code(errors, "E4"), errors
+
+
+def test_latin_only_font_additions():
+    f = jl.is_latin_only_font
+    assert f("Aptos") and f("Courier") and f("PT Sans") and f("PT Serif")
+    assert not f("Noto Sans Mono CJK KR")   # cjk 포함 = 한글 완비(2차 재점검 오탐 교정)
+    assert not f("Source Han Sans CJK KR")
+
+
+def test_e2_v2_range_forms(tmp_path):
+    """E2 v2: 잔존 오탐 4형태 통과 + 띄운 한쪽 숫자(AI 삽입구) 차단 유지."""
+    dv = jl.dash_violations
+    assert dv("2020 " + EN_DASH + " 2024") == []          # 띄운 숫자 범위
+    assert dv("Q1" + EN_DASH + "Q3") == []                 # 알파숫자 토큰
+    assert dv("5%" + EN_DASH + "10%") == []                # 퍼센트 범위
+    assert dv("2020" + EN_DASH + "현재") == []             # 붙은 한쪽 숫자
+    assert dv("성장 " + EN_DASH + " 2024년에는") == [EN_DASH]   # 띄운 삽입구는 차단
+    assert dv("서울" + EN_DASH + "부산") == [EN_DASH]       # 단어 연결은 보수 차단
+    assert dv("2020" + EN_DASH + "현재", strict=True) == [EN_DASH]
+    # 통합: 덱 픽스처로도 고정
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 6, 0.5, "매출 5%" + EN_DASH + "10% 구간", font="Wanted Sans", size=14)
+    s = add_slide(p)
+    tb(s, 1, 1, 6, 0.5, "성장 " + EN_DASH + " 2024년에는 확대", font="Wanted Sans", size=14)
+    errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
+    assert [si for (si, m, d) in by_code(errors, "E2")] == [2], errors
+
+
+def test_skip_rejects_error_codes(tmp_path):
+    """--skip은 WARN 전용: E코드는 exit 2 거부, 적용된 skip은 JSON에 기록(풋건 교정)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    path = save(p, tmp_path, "fx.pptx")
+    r = run_cli([path, "--skip", "E1"])
+    assert r.returncode == 2 and "WARN" in r.stderr
+    doc = json.loads(run_cli([path, "--json", "--skip", "W14"]).stdout)
+    assert doc["summary"]["skipped_codes"] == ["W14"]
+    assert any(e["code"] == "E1" for e in doc["errors"])   # E1은 여전히 살아있음
+
+
+def test_e1_master_lststyle_font_inheritance(tmp_path):
+    """프로브6 실측 반영: 마스터 ph lstStyle의 a:ea가 실효 렌더 폰트다.
+    라틴 전용이면 E1, 한글 폰트면 통과('Malgun 폴백 확정' 오탐의 교정)."""
+    def build(ea_font):
+        p = Presentation()
+        master = p.slide_masters[0]
+        for ph in master.placeholders:
+            if ph.placeholder_format.idx == 1:
+                txBody = ph.text_frame._txBody
+                lst = txBody.find(qn("a:lstStyle"))
+                if lst is None:
+                    lst = txBody.makeelement(qn("a:lstStyle"), {})
+                    txBody.insert(1, lst)
+                lvl1 = lst.makeelement(qn("a:lvl1pPr"), {})
+                defR = lst.makeelement(qn("a:defRPr"), {})
+                defR.append(defR.makeelement(qn("a:ea"), {"typeface": ea_font}))
+                lvl1.append(defR)
+                lst.append(lvl1)
+        s = p.slides.add_slide(p.slide_layouts[1])
+        s.shapes.title.text_frame.text = ""
+        body = s.placeholders[1]
+        body.text_frame.text = "마스터 상속 한글"
+        return save(p, tmp_path, "fx_%s.pptx" % ("bad" if "Mono" in ea_font else "ok"))
+
+    errors, _w = jl.lint(build("IBM Plex Mono"))
+    assert any("IBM Plex Mono" in d for (_si, m, d) in by_code(errors, "E1")), errors
+    errors, _w = jl.lint(build("맑은 고딕"))
+    assert not by_code(errors, "E1"), errors
+
+
+def test_e1_title_uses_major_font(tmp_path):
+    """프로브6 Q1/Q2 실측 반영: 제목 ph는 테마 majorFont ea, 본문은 minorFont ea를 탄다."""
+    p = Presentation()
+    s = p.slides.add_slide(p.slide_layouts[1])
+    s.shapes.title.text_frame.text = "제목 한글"
+    s.placeholders[1].text_frame.text = "본문 한글"
+    path = save(p, tmp_path, "fx.pptx")
+    patch_theme_fonts(path, major_ea="Consolas", minor_ea="맑은 고딕")
+    errors, _w = jl.lint(path)
+    e1 = by_code(errors, "E1")
+    assert any("제목" in d for (_si, m, d) in e1), errors     # major=Consolas -> E1
+    assert not any("본문" in d for (_si, m, d) in e1), errors  # minor=맑은 고딕 -> 통과
+
+
+def test_vertical_and_complex_script_geometry_skip(tmp_path):
+    """세로쓰기(bodyPr@vert)·복잡 조판 스크립트는 기하 추정 불가: 스킵하되 W18로 표면화."""
+    p = new_prs()
+    s = add_slide(p)   # p1: 세로쓰기 프레임이 화면 밖까지 -> W16 FP 없어야
+    box = tb(s, 12.0, 1.0, 4.0, 0.6, "vertical long text overflowing edge",
+             font="Wanted Sans", size=18)
+    bodyPr = box.text_frame._txBody.find(qn("a:bodyPr"))
+    bodyPr.set("vert", "eaVert")
+    s = add_slide(p)   # p2: 아랍어 텍스트 -> 기하 스킵 + W18
+    tb(s, 11.0, 1.0, 4.0, 0.6, "مرحبا بالعالم",
+       font="Arial", size=18)
+    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    w16_text = [d for (_si, m, d) in by_code(warns, "W16") if "텍스트" in d]
+    assert not w16_text, warns
+    w18 = by_code(warns, "W18")
+    assert any(si == 1 and "vertical_text" in d for (si, m, d) in w18), warns
+    assert any(si == 2 and "complex_script" in d for (si, m, d) in w18), warns
 
 
 # ---------------------------------------------------------------- skill packaging
