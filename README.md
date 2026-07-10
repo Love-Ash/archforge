@@ -4,7 +4,7 @@
 
 **The preflight linter for AI-generated PowerPoint.**
 
-Catches silent Korean font fallback, unreadable sizes, colliding frames,
+Catches silent font fallback, unreadable sizes, colliding frames,
 off-canvas text, and AI-tell punctuation in built `.pptx` files,
 before a human ever sees a render.
 
@@ -52,8 +52,9 @@ The three decks in [examples/](examples/) show every gate with expected outputs.
 
 The worst pptx defects are silent. No error is raised when:
 
-- Korean text lands on a Latin-only font and silently falls back to Malgun Gothic
-- positive letter-spacing quietly wrecks Hangul spacing
+- text lands on a font that lacks its glyphs and silently falls back to an OS default
+  (the classic case: CJK text on a Latin-only font)
+- positive letter-spacing quietly wrecks CJK character spacing
 - autofit shrinks text below readable size
 - text frames collide, or glyphs run off the canvas
 
@@ -256,8 +257,8 @@ composition and narrative still need eyes on renders.
 
 ## Name
 
-archforge = arch (structure) + forge. A forge where a deck's structure and Korean
-typography get hammered straight before shipping.
+archforge = arch (structure) + forge. A forge where a deck's structure and typography
+get hammered straight before shipping.
 
 ## Author
 
@@ -265,7 +266,7 @@ Built and calibrated by **Minjae Kwon (Ash)**
 ([@Love-Ash](https://github.com/Love-Ash) · [LinkedIn](https://www.linkedin.com/in/a5h/)).
 If archforge caught something before your audience did, a star helps the next person
 find it. I write up the measurement work behind the gates (how PowerPoint actually
-resolves Korean fonts, and what AI-built decks silently break); say hi on LinkedIn.
+resolves fonts, and what AI-built decks silently break); say hi on LinkedIn.
 
 ## License
 

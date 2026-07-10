@@ -13,7 +13,7 @@
 # accepts any mix of files, directories, and globs.
 - id: archforge
   name: archforge pptx lint
-  description: Lint built .pptx files for silent Korean font fallback, collisions, and AI-tell defects.
+  description: Lint built .pptx files for silent font fallback, collisions, and AI-tell defects.
   entry: archforge scan
   language: python
   files: \.pptx$

@@ -185,7 +185,7 @@ MESSAGES = {
     # ---- CLI help
     "prog_desc": {
         "ko": "빌드된 .pptx를 배포 전에 기계로 검사하는 한글 특화 품질 린터 (서브커맨드: scan = 다중 파일/디렉터리, demo = 첫 실행 투어, skill = 에이전트 스킬팩)",
-        "en": "Korean-typography-aware quality linter for built .pptx files (subcommands: scan = many files/dirs, demo = first-run tour, skill = agent skill pack)",
+        "en": "Preflight quality linter for built .pptx files, deep CJK font coverage (subcommands: scan = many files/dirs, demo = first-run tour, skill = agent skill pack)",
     },
     "help_hard_min": {"ko": "E3 판독 불가 하한(pt, 기본 5.0)", "en": "E3 unreadable hard floor in pt (default 5.0)"},
     "help_body_min": {"ko": "W1 본문급 권장 하한(pt, 기본 9.0)", "en": "W1 body-class recommended floor in pt (default 9.0)"},

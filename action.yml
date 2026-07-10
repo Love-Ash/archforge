@@ -1,6 +1,6 @@
 name: 'archforge pptx lint'
 description: >-
-  Lint built .pptx files for silent Korean font fallback, unreadable sizes,
+  Lint built .pptx files for silent font fallback, unreadable sizes,
   text collisions, off-canvas bleed, and AI-generated deck tells.
 author: 'Minjae Kwon (Ash)'
 branding:

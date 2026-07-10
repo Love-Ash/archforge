@@ -2,8 +2,8 @@
 
 > The preflight linter for AI-generated PowerPoint (.pptx). It reads the built file
 > (XML, font-resolution chain, geometry, image alpha; no PowerPoint needed) and blocks
-> silent Korean font fallback, unreadable sizes, colliding frames, off-canvas text, and
-> AI-tell punctuation before a human sees a render.
+> silent font fallback (deep CJK coverage), unreadable sizes, colliding frames,
+> off-canvas text, and AI-tell punctuation before a human sees a render.
 
 Quick use for agents: `pip install archforge`, then `archforge deck.pptx --profile full --json`.
 Ship condition: `summary.error_count == 0` AND `summary.incomplete == false`. Findings carry a
