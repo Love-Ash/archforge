@@ -1952,7 +1952,7 @@ def test_scan_rejects_shared_baseline(tmp_path):
         save(p, d, name)
     bl = os.path.join(str(tmp_path), "bl.json")
     with open(bl, "w") as f:
-        f.write('{"schema_version": "2", "findings": []}')
+        f.write('{"schema_version": "3", "findings": []}')
     r = run_cli(["scan", d, "--baseline", bl])
     assert r.returncode == 2, (r.returncode, r.stdout, r.stderr)
 
@@ -2325,6 +2325,84 @@ def test_junit_reporter(tmp_path):
     root3 = ET.parse(out2).getroot()
     w16b = [c for c in root3.iter("testcase") if c.get("name").startswith("W16")][0]
     assert w16b.find("failure") is not None
+
+
+# ---------------------------------------------------------------- 0.7: schema 2.0 + baseline v3
+def test_schema_2_shape(tmp_path):
+    """--schema 2: single findings[] with severity + structured data, plus capabilities
+    and abstentions; the verdict (which codes) matches schema 1."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 6.9, 5, 0.3, "src", size=4, ea="맑은 고딕")   # E3
+    tb(s, 1, 1, 8, 0.6, "핵심 개선" + EM_DASH + "특히", size=14, ea="맑은 고딕")  # E2
+    deck = save(p, tmp_path, "s2.pptx")
+    v1 = json.loads(run_cli([deck, "--profile", "full", "--json"]).stdout)
+    v2 = json.loads(run_cli([deck, "--profile", "full", "--schema", "2", "--json"]).stdout)
+    assert v2["schema_version"] == "2.0"
+    assert "findings" in v2 and "errors" not in v2
+    v1codes = sorted(f["code"] for f in v1["errors"] + v1["warnings"])
+    v2codes = sorted(f["code"] for f in v2["findings"])
+    assert v1codes == v2codes                      # verdict-identical across schemas
+    e3 = [f for f in v2["findings"] if f["code"] == "E3"][0]
+    assert e3["severity"] == "error"
+    assert e3["data"]["effective_pt"] == 4.0 and e3["data"]["hard_min_pt"] == 5.0
+    assert set(v2["capabilities"]) == {"typography", "geometry", "structure",
+                                       "render_contrast"}
+
+
+def test_schema_2_abstentions(tmp_path):
+    """A vertical-text frame abstains: schema 2 lists it in abstentions[] with the
+    affected rules and marks geometry partial, alongside the W18 finding."""
+    p = new_prs()
+    s = add_slide(p)
+    box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(2), Inches(4))
+    r = box.text_frame.paragraphs[0].add_run()
+    r.text = "세로쓰기"
+    r.font.size = Pt(18)
+    r._r.get_or_add_rPr().append(box._element.makeelement(qn("a:ea"), {"typeface": "맑은 고딕"}))
+    box.text_frame._txBody.find(qn("a:bodyPr")).set("vert", "eaVert")
+    deck = save(p, tmp_path, "vt.pptx")
+    v2 = json.loads(run_cli([deck, "--profile", "full", "--schema", "2", "--json"]).stdout)
+    assert v2["capabilities"]["geometry"] == "partial"
+    reasons = {a["reason"] for a in v2["abstentions"]}
+    assert "vertical_text" in reasons
+
+
+def test_baseline_v3_move_not_resuppressed(tmp_path):
+    """v3 structural fingerprint: a defect that disappears and reappears in a genuinely
+    different shape is NOT silently re-suppressed (external review). Same shape/position
+    stays suppressed."""
+    p = new_prs()
+    box = tb(p.slides.add_slide(p.slide_layouts[6]) if False else add_slide(p),
+             1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    box.name = "KPI title"
+    deck = save(p, tmp_path, "b.pptx")
+    bl = os.path.join(str(tmp_path), "bl.json")
+    run_cli([deck, "--write-baseline", bl])
+    # same shape name + position: suppressed
+    doc = json.loads(run_cli([deck, "--json", "--baseline", bl]).stdout)
+    assert doc["summary"]["baseline_suppressed"] == 1 and doc["summary"]["error_count"] == 0
+    # same defect on a differently-named shape far away: a new finding, not suppressed
+    p2 = new_prs()
+    b2 = tb(add_slide(p2), 9, 5, 3, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    b2.name = "Footnote source"
+    moved = save(p2, tmp_path, "moved.pptx")
+    doc = json.loads(run_cli([moved, "--json", "--baseline", bl]).stdout)
+    assert doc["summary"]["error_count"] == 1, doc["summary"]
+
+
+def test_baseline_v2_rejected(tmp_path):
+    """A v2 baseline is rejected with a regenerate message (the one migration ADR 004
+    committed to)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    deck = save(p, tmp_path, "b.pptx")
+    bl = os.path.join(str(tmp_path), "v2.json")
+    with open(bl, "w", encoding="utf-8") as f:
+        f.write('{"schema_version": "2", "findings": [{"code": "E1", "fingerprint": "x", "count": 1}]}')
+    r = run_cli([deck, "--baseline", bl])
+    assert r.returncode == 2 and "regenerate" in (r.stderr or "").lower()
 
 
 if __name__ == "__main__":

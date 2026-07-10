@@ -203,6 +203,10 @@ MESSAGES = {
         "en": "print the ghost deck (per-page titles only) to eyeball the horizontal logic",
     },
     "help_json": {"ko": "기계 판독용 JSON 출력(에이전트·CI 연동)", "en": "machine-readable JSON output (agents/CI)"},
+    "help_schema": {
+        "ko": "JSON 스키마 버전(1.0 기본=errors/warnings 분리, 2.0=findings[] 단일배열+severity+data+capabilities+abstentions)",
+        "en": "JSON schema version (1.0 default: split errors/warnings; 2.0: single findings[] with severity+data, plus capabilities and abstentions)",
+    },
     "help_skip": {
         "ko": "억제할 WARN 코드 콤마 목록(예 --skip W14,W6). ERROR 코드는 불가, 적용 내역은 JSON summary.skipped_codes에 기록",
         "en": "comma list of WARN codes to suppress (e.g. --skip W14,W6). ERROR codes are refused; applied skips are recorded in JSON summary.skipped_codes",

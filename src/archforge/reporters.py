@@ -20,7 +20,28 @@ def _tool_version() -> str:
         return "unknown"
 
 
-def build_json_doc(path: str, errors: List, warns: List, ghost, summary: Dict) -> Dict:
+def build_json_doc(path: str, errors: List, warns: List, ghost, summary: Dict,
+                   schema: str = "1.0", capabilities: Optional[Dict] = None,
+                   abstentions: Optional[List] = None) -> Dict:
+    """schema "1.0" (default, stable through 1.x): split errors[]/warnings[], no per-item
+    severity. schema "2.0" (0.7, opt-in via --schema 2): a single findings[] array with
+    severity and structured `data` on each item, plus `capabilities` and structured
+    `abstentions[]` in place of reading the W18 blob. Both shapes carry the same verdict."""
+    if schema == "2.0":
+        findings = ([f.to_dict("2.0") for f in errors] +
+                    [f.to_dict("2.0") for f in warns])
+        return {
+            "schema_version": "2.0",
+            "tool": {"name": "archforge", "version": _tool_version()},
+            "target_renderer": "powerpoint-windows",
+            "file": path,
+            "lang": get_lang(),
+            "findings": findings,
+            "capabilities": capabilities or {},
+            "abstentions": abstentions or [],
+            "ghost": [{"page": si, "title": t} for si, t in (ghost or [])],
+            "summary": summary,
+        }
     return {
         "schema_version": "1.0",
         "tool": {"name": "archforge", "version": _tool_version()},

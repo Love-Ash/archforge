@@ -2689,7 +2689,10 @@ def main():
     if a.json:
         import json
         doc = _reporters.build_json_doc(a.pptx, res["errors"], res["warns"],
-                                        res["ghost"], res["summary"])
+                                        res["ghost"], res["summary"],
+                                        schema=res["schema"],
+                                        capabilities=res["capabilities"],
+                                        abstentions=res["abstentions"])
         print(json.dumps(doc, ensure_ascii=False, indent=2))
         sys.exit(1 if res["fail"] else 0)
 
@@ -2701,6 +2704,68 @@ def main():
         print(line)
 
     sys.exit(1 if res["fail"] else 0)
+
+
+# Maps a W18 skip-reason key (machine string, stable) to the rules it prevented and the
+# capability it degrades (0.7 schema 2.0). Reasons not listed default to no affected rules
+# and the "meta" capability. Keys mirror the Counter keys written at each guard.
+_REASON_RULES = {
+    "vertical_text": (["W15", "W16", "W17"], "geometry"),
+    "complex_script": (["W15", "W16", "W17"], "geometry"),
+    "glyph_boxes": (["W15", "W16", "W17"], "geometry"),
+    "pic_boxes": (["W16", "W17"], "geometry"),
+    "w15": (["W15"], "geometry"),
+    "w16_w17": (["W16", "W17"], "geometry"),
+    "image_decode": (["W16", "W17"], "geometry"),
+    "image_decode_budget": (["W16", "W17"], "geometry"),
+    "frames": (["E1", "E3", "E4", "W1", "W5", "W8"], "typography"),
+    "frame": (["E1", "E3", "E4", "W1", "W5", "W8"], "typography"),
+    "para": (["E1", "E2", "E3", "E4"], "typography"),
+    "para_size": (["E3"], "typography"),
+    "run": (["E1", "E2", "E3", "E4"], "typography"),
+    "w7": (["W7"], "render"),
+    "w7_no_render": (["W7"], "render"),
+    "w7_color_unknown": (["W7"], "render"),
+    "render_dir_missing": (["W7"], "render"),
+    "w9": (["W9"], "structure"),
+    "w6_sig": (["W6"], "structure"),
+    "w10_tokens": (["W10"], "structure"),
+    "w12_w13": (["W12", "W13"], "structure"),
+    "theme_parse": (["E1"], "typography"),
+}
+
+
+def _capabilities_and_abstentions(warns, render_requested):
+    """Turns the W18 findings into a structured capabilities map and abstentions list
+    (0.7 schema 2.0). W18 detail is a machine-key Counter string ('vertical_text=1, ...'),
+    so parsing it back is deterministic. Verdict is untouched; this is a richer view of the
+    same incompleteness signal."""
+    abstentions = []
+    degraded = set()
+    for f in warns:
+        if f.code != "W18":
+            continue
+        for part in (f.detail or "").split(","):
+            part = part.strip()
+            if "=" not in part:
+                continue
+            key, _, cnt = part.partition("=")
+            key = key.strip()
+            try:
+                count = int(cnt)
+            except ValueError:
+                count = 1
+            rules, cap = _REASON_RULES.get(key, ([], "meta"))
+            degraded.add(cap)
+            abstentions.append({"reason": key, "page": f.page, "count": count,
+                                "affected_rules": rules})
+    caps = {}
+    caps["typography"] = "partial" if "typography" in degraded else "complete"
+    caps["geometry"] = "partial" if "geometry" in degraded else "complete"
+    caps["structure"] = "partial" if "structure" in degraded else "complete"
+    caps["render_contrast"] = ("partial" if "render" in degraded
+                               else ("complete" if render_requested else "not_requested"))
+    return caps, abstentions
 
 
 def _validate_cli_globals(a):
@@ -2764,6 +2829,8 @@ def _add_common_flags(ap):
     ap.add_argument("--small-min", type=float, default=None, help=M("help_small_min"))
     ap.add_argument("--ghost", action="store_true", help=M("help_ghost"))
     ap.add_argument("--json", action="store_true", help=M("help_json"))
+    ap.add_argument("--schema", default="1.0", choices=("1.0", "2.0", "1", "2"),
+                    help=M("help_schema"))
     ap.add_argument("--skip", default=None, metavar="CODES", help=M("help_skip"))
     ap.add_argument("--profile", default=None, choices=sorted(PROFILES), help=M("help_profile"))
     ap.add_argument("--lang", default=None, choices=("ko", "en"), help=M("help_lang"))
@@ -2884,7 +2951,10 @@ def _lint_one(path, a):
     if getattr(a, "write_baseline", None):
         n = _config.write_baseline(a.write_baseline,
                                    [f for f in list(errors) + list(warns) if f.code != "W18"],
-                                   profile=profile, lang=get_lang())
+                                   profile=profile, lang=get_lang(),
+                                   thresholds={"hard_min": hard_min, "body_min": body_min,
+                                               "small_min": small_min, "w6_sim": w6_sim,
+                                               "w6_cluster": w6_cluster})
         print(M("baseline_written") % (n, a.write_baseline))
         return None
 
@@ -2908,6 +2978,16 @@ def _lint_one(path, a):
         cur_v = _pkg_version()
         if rec_v and cur_v != "unknown" and rec_v.split(".")[:2] != cur_v.split(".")[:2]:
             print(M("note_baseline_meta") % ("tool_version", rec_v, cur_v), file=sys.stderr)
+        rec_thr = meta.get("threshold_hash")
+        if rec_thr:
+            import hashlib as _hl
+            cur_thr = {"hard_min": hard_min, "body_min": body_min, "small_min": small_min,
+                       "w6_sim": w6_sim, "w6_cluster": w6_cluster}
+            cur_hash = _hl.sha1((",".join("%s=%r" % (k, cur_thr[k]) for k in sorted(cur_thr)))
+                                .encode("utf-8")).hexdigest()[:12]
+            if cur_hash != rec_thr:
+                print(M("note_baseline_meta") % ("thresholds", rec_thr, cur_hash),
+                      file=sys.stderr)
         errors, s1 = _config.apply_baseline(errors, known)
         warns, s2 = _config.apply_baseline(warns, known)
         baseline_suppressed = s1 + s2
@@ -2918,6 +2998,8 @@ def _lint_one(path, a):
     if skip:
         warns = [w for w in warns if w[1] not in skip]
 
+    schema = "2.0" if str(getattr(a, "schema", "1.0")) in ("2", "2.0") else "1.0"
+    caps, abstentions = _capabilities_and_abstentions(warns, bool(a.render))
     fail = bool(errors or (fail_on_warning and warns) or (fail_incomplete and has_w18))
     summary = {"error_count": len(errors), "warn_count": len(warns),
                "pass": not fail,
@@ -2938,7 +3020,8 @@ def _lint_one(path, a):
             "fail": fail,
             "profile": profile, "profile_excl": profile_excl, "skip": skip,
             "cfg_path": cfg_path, "baseline_suppressed": baseline_suppressed,
-            "baseline_path": baseline_path}
+            "baseline_path": baseline_path,
+            "schema": schema, "capabilities": caps, "abstentions": abstentions}
 
 
 def _expand_scan_paths(patterns):
@@ -3071,7 +3154,9 @@ def scan_main(argv=None):
                 docs.append({"file": p, "status": "error", "error": e})
             else:
                 doc = _reporters.build_json_doc(p, r["errors"], r["warns"], r["ghost"],
-                                                r["summary"])
+                                                r["summary"], schema=r["schema"],
+                                                capabilities=r["capabilities"],
+                                                abstentions=r["abstentions"])
                 doc["status"] = "fail" if r["fail"] else "pass"
                 docs.append(doc)
         agg = {"schema_version": "1.0",

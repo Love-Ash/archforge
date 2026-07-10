@@ -121,16 +121,18 @@ def load_config(path: str) -> Tuple[Dict, List[str]]:
     return out, warnings
 
 
-def write_baseline(path: str, findings, profile: str = "", lang: str = "") -> int:
-    """Fingerprint v2 (schema 2): page-independent fingerprint + occurrence count +
-    run-condition metadata. Fixes v1's three defects (language-dependent detail, fragility
-    to page insertion, lost multiset info) (fourth review)."""
+def write_baseline(path: str, findings, profile: str = "", lang: str = "",
+                   thresholds: Optional[Dict] = None) -> int:
+    """Fingerprint v3 (schema 3): the v2 page-free content key plus a structural location
+    bucket, so a defect that moves to a genuinely different place is treated as new rather
+    than silently re-suppressed (external review). Records policy identity (profile,
+    lang, tool version, threshold hash) that the reader checks on load."""
     from collections import Counter
     counts = Counter()
     codes = {}
     total = 0
     for f in findings:
-        fp = f.fingerprint()
+        fp = f.structural_fp()
         counts[fp] += 1
         codes[fp] = f.code
         total += 1
@@ -139,11 +141,17 @@ def write_baseline(path: str, findings, profile: str = "", lang: str = "") -> in
         tool_ver = version("archforge")
     except Exception:
         tool_ver = "unknown"
+    thr_hash = ""
+    if thresholds:
+        import hashlib
+        payload = ",".join("%s=%r" % (k, thresholds[k]) for k in sorted(thresholds))
+        thr_hash = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
     doc = {
-        "schema_version": "2",
+        "schema_version": "3",
         "tool_version": tool_ver,
         "profile": profile,
         "lang": lang,
+        "threshold_hash": thr_hash,
         "findings": [{"code": codes[fp], "fingerprint": fp, "count": counts[fp]}
                      for fp in sorted(counts)],
     }
@@ -153,23 +161,24 @@ def write_baseline(path: str, findings, profile: str = "", lang: str = "") -> in
 
 
 def load_baseline_meta(path: str) -> Dict:
-    """The baseline's recorded run conditions (tool_version/profile/lang). Callers compare
-    these against the current run and warn on mismatch (0.6.0: recorded-only metadata was
-    an audit comment, not a check)."""
+    """The baseline's recorded run conditions (tool_version/profile/lang/threshold_hash).
+    Callers compare these against the current run and warn on mismatch (0.6.0:
+    recorded-only metadata was an audit comment, not a check)."""
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-        return {k: data.get(k) for k in ("tool_version", "profile", "lang")}
+        return {k: data.get(k) for k in ("tool_version", "profile", "lang",
+                                         "threshold_hash")}
     except Exception:
         return {}
 
 
 def load_baseline(path: str) -> Dict[str, int]:
-    """Fingerprint -> allowed occurrence count. v1 (schema 1.0) files require regeneration
-    (the fingerprint scheme changed)."""
+    """Structural fingerprint -> allowed occurrence count. v1/v2 files require
+    regeneration (the fingerprint now includes a location bucket)."""
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    if str(data.get("schema_version")) != "2":
+    if str(data.get("schema_version")) != "3":
         raise RuntimeError(
             "baseline schema %r is outdated; regenerate with --write-baseline"
             % data.get("schema_version"))
@@ -181,13 +190,13 @@ def load_baseline(path: str) -> Dict[str, int]:
 
 def apply_baseline(findings, known: Dict[str, int]):
     """(new findings list, suppressed count). Suppresses only up to the allowed occurrence
-    count per fingerprint (multiset semantics). W18 is not eligible for baseline
+    count per structural fingerprint (multiset semantics). W18 is not eligible for baseline
     suppression (it signals incompleteness)."""
     budget = dict(known)
     kept, suppressed = [], 0
     for f in findings:
         if f.code != "W18":
-            fp = f.fingerprint()
+            fp = f.structural_fp()
             if budget.get(fp, 0) > 0:
                 budget[fp] -= 1
                 suppressed += 1

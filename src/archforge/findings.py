@@ -18,6 +18,30 @@ except ImportError:   # fallback for standalone file execution
     from messages import M
 
 
+# Structured data field names per message id, applied positionally to a finding's args
+# (0.7). This derives numeric data (effective size, ratio, overflow...) from the args the
+# detectors already pass, so agents and non-text reporters key on numbers, not on parsing
+# a rendered sentence, with zero changes at the detection sites and zero effect on the
+# verdict. A None entry in a tuple skips that arg (e.g. e3's already-rendered autofit note).
+_DATA_FIELDS = {
+    "e3": ("effective_pt", "hard_min_pt", None),
+    "e4": ("tracking",),
+    "w1": ("effective_pt", "body_min_pt"),
+    "w6": ("cluster_size",),
+    "w7": ("contrast_ratio",),
+    "w8": ("effective_pt", "small_min_pt"),
+    "w9": ("bar_count",),
+    "w10": ("page_count",),
+    "w11_buzz": ("buzzword_types",),
+    "w12": ("house_baseline_in", "off_page_count"),
+    "w13": ("effect_count", "page_count"),
+    "w14": ("nominal_titles", "total_titles"),
+    "w15": ("overlap_pct",),
+    "w16": ("overflow_in",),
+    "w17": ("inside_pct",),
+}
+
+
 class Finding:
     """A single check result. msg_id+args is canonical and message is a view rendered in the
     current language.
@@ -70,11 +94,34 @@ class Finding:
     def __repr__(self):
         return "Finding(p%02d %s %s)" % (self.page, self.code, self.msg_id)
 
-    def to_dict(self) -> Dict:
+    def data(self) -> Dict:
+        """Structured numeric payload derived from args via _DATA_FIELDS (0.7). Numbers,
+        not a parsed sentence. Empty when the code carries no numeric args (E1/E2)."""
+        fields = _DATA_FIELDS.get(self.msg_id)
+        if not fields:
+            return {}
+        out = {}
+        for name, val in zip(fields, self.args):
+            if name is None:
+                continue
+            out[name] = val
+        return out
+
+    def to_dict(self, schema: str = "1.0") -> Dict:
         d = {"page": self.page, "code": self.code, "message": self.message,
              "detail": self.detail}
         if self.loc:
             d["location"] = self.loc
+        if schema != "1.0":
+            # v2 adds severity (single findings[] array) and structured data
+            try:
+                from .rules import severity
+            except ImportError:
+                from rules import severity
+            d["severity"] = "error" if severity(self.code) == "error" else "warning"
+            data = self.data()
+            if data:
+                d["data"] = data
         return d
 
     def fingerprint(self) -> str:
@@ -88,6 +135,42 @@ class Finding:
         (a source map), which is the 0.5+ roadmap."""
         import hashlib
         raw = "%s|%s" % (self.code, self.fp_key if self.fp_key is not None else self.detail)
+        return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+    def _location_bucket(self) -> str:
+        """A page-free, coarse structural key for the finding's location (0.7 baseline v3).
+        Page is excluded so slide insertion/reorder does not invalidate it; a normalized
+        shape name (trailing counter digits stripped) plus cell/paragraph/field, or a
+        0.5in bbox grid when only geometry is known, so a finding that moves to a
+        genuinely different place gets a different key and is not re-suppressed. Empty
+        when there is no location (locationless deck-level rules fall back to content)."""
+        loc = self.loc or {}
+        parts = []
+        name = loc.get("shape_name")
+        if name:
+            import re
+            parts.append("n=" + re.sub(r"[\s\d]+$", "", str(name)).strip().lower())
+        if "cell" in loc:
+            parts.append("c=%s" % (loc["cell"],))
+        if "paragraph" in loc:
+            parts.append("p=%s" % loc["paragraph"])
+        if loc.get("field"):
+            parts.append("fld")
+        if not parts and "bbox" in loc:
+            try:
+                bx = loc["bbox"]
+                parts.append("g=%d,%d" % (round(bx[0] * 2), round(bx[1] * 2)))
+            except Exception:
+                pass
+        return "|".join(parts)
+
+    def structural_fp(self) -> str:
+        """Baseline v3 fingerprint: the content fingerprint plus the location bucket.
+        Stricter than v2 (which pooled same-content findings regardless of place), so a
+        defect that disappears and reappears elsewhere is treated as new rather than
+        silently re-suppressed (external review). Still page-free."""
+        import hashlib
+        raw = "%s|%s" % (self.fingerprint(), self._location_bucket())
         return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
