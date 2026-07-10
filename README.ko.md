@@ -1,18 +1,20 @@
 <div align="center">
 
-# Archforge
+<img src="docs/assets/social-preview.jpg" alt="Archforge" width="760">
 
 **AI가 만든 파워포인트를 배포 전에 검사하는 프리플라이트 린터**
 
 조용한 한글 폰트 폴백, 판독 불가 크기, 프레임 충돌, 화면 밖 잘림, AI 티 문장부호를
 사람이 렌더를 보기 전에 `.pptx` 파일에서 잡아냅니다.
 
+[![pypi](https://img.shields.io/pypi/v/archforge)](https://pypi.org/project/archforge/)
 ![python](https://img.shields.io/badge/python-3.9%2B-3776AB)
 ![license](https://img.shields.io/badge/license-MIT-green)
-![status](https://img.shields.io/badge/status-beta-orange)
 [![ci](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml)
 
-[English README](README.md)
+[30초 시작](#30초) · [무엇을 잡나](#무엇을-잡나) · [CI](#ci) · [실측 기록](docs/CALIBRATION.md) · [English README](README.md)
+
+**AI 에이전트:** `pip install archforge` 후 `archforge skill --install` 이면 에이전트가 빌드-린트-수정 루프를 배웁니다.
 
 ![demo](docs/assets/demo-ko.gif)
 

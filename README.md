@@ -1,6 +1,6 @@
 <div align="center">
 
-# Archforge
+<img src="docs/assets/social-preview.jpg" alt="Archforge" width="760">
 
 **The preflight linter for AI-generated PowerPoint.**
 
@@ -8,12 +8,14 @@ Catches silent Korean font fallback, unreadable sizes, colliding frames,
 off-canvas text, and AI-tell punctuation in built `.pptx` files,
 before a human ever sees a render.
 
+[![pypi](https://img.shields.io/pypi/v/archforge)](https://pypi.org/project/archforge/)
 ![python](https://img.shields.io/badge/python-3.9%2B-3776AB)
 ![license](https://img.shields.io/badge/license-MIT-green)
-![status](https://img.shields.io/badge/status-beta-orange)
 [![ci](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml)
 
-[한국어 README](README.ko.md)
+[Quickstart](#30-seconds) · [What it catches](#what-it-catches) · [CI](#ci) · [Calibration record](docs/CALIBRATION.md) · [한국어 README](README.ko.md)
+
+**AI agents:** `pip install archforge` then `archforge skill --install` teaches your agent the build-lint-fix loop.
 
 ![demo](docs/assets/demo-en.gif)
 
