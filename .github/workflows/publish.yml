@@ -1,13 +1,20 @@
 name: publish
 
 # PyPI trusted publishing (OIDC): no long-lived token in secrets. One-time setup on
-# PyPI is required before this works: pypi.org -> project archforge -> Publishing ->
-# add GitHub publisher (owner Love-Ash, repo archforge, workflow publish.yml,
-# environment pypi). Until that is configured, releases are uploaded manually with
-# twine and this workflow's upload step will fail cleanly.
+# PyPI is required: pypi.org -> project archforge -> Publishing -> add a GitHub
+# publisher with owner Love-Ash, repo archforge, workflow publish.yml, and the
+# Environment name left BLANK (this workflow sends no environment; the OIDC subject is
+# repo:Love-Ash/archforge, so the PyPI publisher must not require an environment).
+# workflow_dispatch lets a failed publish be retried for an existing tag without cutting
+# a new release.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and publish (e.g. v0.6.2)'
+        required: true
 
 jobs:
   build:
@@ -15,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.inputs.tag || github.event.release.tag_name }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -35,7 +42,7 @@ jobs:
           print("ok:", whl)
           EOF
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -44,7 +51,6 @@ jobs:
   pypi:
     needs: build
     runs-on: ubuntu-latest
-    environment: pypi
     permissions:
       id-token: write
     steps:
