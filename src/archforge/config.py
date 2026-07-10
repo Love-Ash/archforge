@@ -14,11 +14,14 @@ Supported keys:
   baseline: baseline file path (recorded existing violations are suppressed; only new ones
     are reported)
 
-The baseline file has the shape {"findings": [{"code","page","fingerprint"}...]}, produced by
-`archforge deck.pptx --write-baseline PATH`. The fingerprint is based on page+code+detail, so
-it is independent of the message language.
+The baseline file (schema 2) has the shape {"findings": [{"code","fingerprint","count"}...]}
+plus run-condition metadata, produced by `archforge deck.pptx --write-baseline PATH`. The v2
+fingerprint is code + a locale-neutral content key with the page number deliberately
+excluded (multiple occurrences are managed by count), so it survives both message-language
+changes and slide insertion.
 """
 import json
+import math
 import os
 from typing import Dict, List, Optional, Tuple
 
@@ -77,6 +80,11 @@ def load_config(path: str) -> Tuple[Dict, List[str]]:
             v = float(out[key])
         except (TypeError, ValueError):
             raise RuntimeError("config %r must be a number, got %r" % (key, out[key]))
+        # NaN passes every ordinary comparison below (NaN <= 0 is False) and json.load
+        # accepts a bare NaN literal, which would silently disable gates like E3: the
+        # exact failure mode this validation exists to block (0.6.0, external finding)
+        if not math.isfinite(v):
+            raise RuntimeError("config %r must be finite, got %r" % (key, out[key]))
         if lo is not None and (v <= lo if not lo_incl else v < lo):
             raise RuntimeError("config %r out of range: %r" % (key, out[key]))
         if hi is not None and v > hi:
@@ -133,6 +141,18 @@ def write_baseline(path: str, findings, profile: str = "", lang: str = "") -> in
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
     return total
+
+
+def load_baseline_meta(path: str) -> Dict:
+    """The baseline's recorded run conditions (tool_version/profile/lang). Callers compare
+    these against the current run and warn on mismatch (0.6.0: recorded-only metadata was
+    an audit comment, not a check)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return {k: data.get(k) for k in ("tool_version", "profile", "lang")}
+    except Exception:
+        return {}
 
 
 def load_baseline(path: str) -> Dict[str, int]:

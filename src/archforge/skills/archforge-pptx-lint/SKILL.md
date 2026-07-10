@@ -28,7 +28,10 @@ pip install -e <repo-path>       # or from the repo, for development
 archforge deck.pptx --profile full --json   # THE agent command: machine-made decks
                                             # need the AI-tell rules (default is core)
 archforge deck.pptx              # objective defects only (core, the 0.4.0 default)
-archforge deck.pptx --strict     # WARNs also fail + numeric-dash exemptions off
+archforge deck.pptx --fail-incomplete   # incomplete checks (W18) fail: use this in CI
+archforge deck.pptx --fail-on-warning   # WARNs fail too
+archforge deck.pptx --e2-no-exemptions  # E2 numeric exemptions off (full profile)
+archforge deck.pptx --strict     # union of the three flags above (compatibility alias)
 archforge deck.pptx --ghost      # per-page title list (horizontal-logic review)
 archforge deck.pptx --render pages/   # + on-image contrast check (W7); needs p01.png/p02.png-named PNGs
 archforge deck.pptx --skip W14,W6     # suppress specific WARNs (WARN-only; recorded in JSON)
@@ -72,7 +75,10 @@ frame, table `cell` as `[row, col]`, `field: true` when the text lives in an `a:
 auto field (slide number/date; no `run` index there), `part` (the slide XML part), and
 for pair findings (W15 overlap, W17 straddle) a `related` counterpart with the same keys.
 `archforge scan --json` wraps one per-file document per deck plus an aggregate summary
-(`summary.file_count`, `failed_files`, `pass`, `incomplete`).
+(`summary.file_count`, `failed_files`, `error_files`, `pass`, `incomplete`). A broken or
+misconfigured file becomes a per-file `status: "error"` entry and the scan continues;
+`--baseline` under scan requires exactly one matched file (fingerprints carry no file
+identity, so a shared baseline would suppress findings across unrelated decks).
 
 `ghost` lists the largest (>=18pt) title on each page that has one, in any language, so
 you can read the titles top-to-bottom and check the horizontal logic. Pages with no
@@ -174,6 +180,11 @@ Two rules of thumb learned the hard way:
 - Auto fields (`a:fld`: slide numbers, dates) are gated like regular runs (E1/E3/E4);
   they are excluded from ghost/W14 title collection. Line breaks (`a:br`) count as
   line breaks in E2's paragraph context.
+- Geometry accounts for text-frame insets (lIns/tIns/rIns/bIns), explicit line breaks
+  (`a:br`), field text (`a:fld`), real table column widths, and merged cells (the
+  origin cell spans its merged region; continuation cells are not double-counted).
+  Rotated text frames are out of scope for geometry by design and do not mark the
+  result incomplete.
 - Known limit: placeholders inheriting alignment from a layout's list style are
   measured as left-aligned. If W15/W16 flags look wrong on template placeholders,
   verify on the render before acting.

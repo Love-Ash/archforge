@@ -1888,5 +1888,218 @@ def test_cli_scan_sarif_multi(tmp_path):
     assert any(u.endswith("broken.pptx") for u in uris), uris
 
 
+# ---------------------------------------------------------------- 0.6.0: hardening batch
+def test_nan_thresholds_rejected(tmp_path):
+    """NaN slipped through every range comparison (NaN <= 0 is False) and json.load even
+    accepts a bare NaN literal, silently disabling E3 via CLI or an attacker-controlled
+    config. Both paths must exit 2 now (external verification finding)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "tiny", size=3)
+    deck = save(p, tmp_path, "nan.pptx")
+    r = run_cli([deck, "--hard-min", "nan"])
+    assert r.returncode == 2, (r.returncode, r.stderr)
+    cfgdir = os.path.join(str(tmp_path), "cfg")
+    os.makedirs(cfgdir)
+    shutil.copy(deck, os.path.join(cfgdir, "deck.pptx"))
+    with open(os.path.join(cfgdir, ".archforge.json"), "w", encoding="utf-8") as f:
+        f.write('{"hard_min": NaN}')
+    r = run_cli([os.path.join(cfgdir, "deck.pptx")])
+    assert r.returncode == 2, (r.returncode, r.stderr)
+
+
+def test_scan_isolates_broken_files(tmp_path):
+    """One corrupt deck must not abort the batch (external review P0): it becomes a
+    per-file error entry, the rest is still checked, and the aggregate JSON survives."""
+    d = os.path.join(str(tmp_path), "batch")
+    os.makedirs(d)
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "clean deck", size=14)
+    save(p, d, "ok.pptx")
+    with open(os.path.join(d, "corrupt.pptx"), "w") as f:
+        f.write("not a zip")
+    r = run_cli(["scan", d, "--json"])
+    assert r.returncode == 1, r.stderr
+    doc = json.loads(r.stdout)
+    assert doc["summary"]["file_count"] == 2
+    assert doc["summary"]["error_files"] == 1
+    statuses = {os.path.basename(f["file"]): f["status"] for f in doc["files"]}
+    assert statuses["corrupt.pptx"] == "error"
+    assert statuses["ok.pptx"] == "pass"
+
+
+def test_scan_rejects_shared_baseline(tmp_path):
+    """A single CLI baseline across multiple decks would suppress findings across
+    unrelated files (fingerprints carry no file identity): exit 2."""
+    d = os.path.join(str(tmp_path), "two")
+    os.makedirs(d)
+    for name in ("a.pptx", "b.pptx"):
+        p = new_prs()
+        s = add_slide(p)
+        tb(s, 1, 1, 4, 1, "x", size=14)
+        save(p, d, name)
+    bl = os.path.join(str(tmp_path), "bl.json")
+    with open(bl, "w") as f:
+        f.write('{"schema_version": "2", "findings": []}')
+    r = run_cli(["scan", d, "--baseline", bl])
+    assert r.returncode == 2, (r.returncode, r.stdout, r.stderr)
+
+
+def test_scan_config_lang_does_not_leak(tmp_path):
+    """A deck folder config's lang must not change the language of later files or the
+    aggregate report (external verification finding: lazy rendering made the last
+    file's language dominate everything)."""
+    d1 = os.path.join(str(tmp_path), "en_deck")
+    d2 = os.path.join(str(tmp_path), "plain")
+    os.makedirs(d1)
+    os.makedirs(d2)
+    for d in (d1, d2):
+        p = new_prs()
+        s = add_slide(p)
+        tb(s, 1, 1, 4, 1, "x", size=14)
+        save(p, d, "deck.pptx")
+    with open(os.path.join(d1, ".archforge.json"), "w") as f:
+        f.write('{"lang": "en"}')
+    r = run_cli(["scan", os.path.join(d1, "deck.pptx"), os.path.join(d2, "deck.pptx"),
+                 "--json"], lang="ko")
+    assert r.returncode == 0, r.stderr
+    doc = json.loads(r.stdout)
+    assert doc["lang"] == "ko", doc["lang"]
+
+
+def test_strict_split_flags(tmp_path):
+    """--fail-on-warning fails a WARN-only deck; the default does not. --strict stays
+    the union alias."""
+    from archforge import demo as jdemo
+    p = os.path.join(str(tmp_path), "warn.pptx")
+    jdemo.build_warnings(p)
+    r = run_cli([p, "--profile", "full"])
+    assert r.returncode == 0, r.stdout + r.stderr
+    r = run_cli([p, "--profile", "full", "--fail-on-warning"])
+    assert r.returncode == 1
+    r = run_cli([p, "--profile", "full", "--strict"])
+    assert r.returncode == 1
+    doc = json.loads(run_cli([p, "--profile", "full", "--fail-on-warning", "--json"]).stdout)
+    assert doc["summary"]["pass"] is False
+
+
+def test_write_baseline_validates_flags_first(tmp_path):
+    """A typo'd --skip used to record a baseline as if nothing were wrong: validation
+    now precedes recording (external review)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    deck = save(p, tmp_path, "v.pptx")
+    bl = os.path.join(str(tmp_path), "out_bl.json")
+    r = run_cli([deck, "--write-baseline", bl, "--skip", "E1"])
+    assert r.returncode == 2
+    assert not os.path.exists(bl)
+    r = run_cli([deck, "--write-baseline", bl, "--skip", "W999"])
+    assert r.returncode == 2
+    assert not os.path.exists(bl)
+
+
+def test_config_no_config_conflict(tmp_path):
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    deck = save(p, tmp_path, "c.pptx")
+    cfg = os.path.join(str(tmp_path), "x.json")
+    with open(cfg, "w") as f:
+        f.write("{}")
+    r = run_cli([deck, "--config", cfg, "--no-config"])
+    assert r.returncode == 2
+
+
+def test_version_flag():
+    r = run_cli(["--version"])
+    assert r.returncode == 0
+    assert "archforge" in r.stdout
+
+
+def test_br_starts_new_visual_line_in_geometry(tmp_path):
+    """An explicit a:br splits the visual line: without the split, this no-wrap line
+    would run past the canvas edge and fire W16 (external review: br was in E2 context
+    but lost in geometry)."""
+    long_half = "wide segment text " * 2
+    p = new_prs()
+    s = add_slide(p)
+    box = tb(s, 8.0, 3.0, 2.0, 1.0, long_half, size=18)
+    para = box.text_frame.paragraphs[0]
+    para._p.append(para._p.makeelement(qn("a:br"), {}))
+    r2 = para.add_run()
+    r2.text = long_half
+    r2.font.size = Pt(18)
+    _e, warns = lint_full(save(p, tmp_path, "br_geo.pptx"))
+    assert "W16" not in codes(warns), codes(warns)
+    # Control: the same text without the break does overflow
+    p2 = new_prs()
+    s2 = add_slide(p2)
+    tb(s2, 8.0, 3.0, 2.0, 1.0, long_half + " " + long_half, size=18)
+    _e2, warns2 = lint_full(save(p2, tmp_path, "br_geo_ctrl.pptx"))
+    assert "W16" in codes(warns2), codes(warns2)
+
+
+def test_insets_shift_glyph_origin(tmp_path):
+    """A huge lIns pushes the glyph start right of the frame edge: only inset-aware
+    geometry sees this short text cross the canvas (external review: insets ignored)."""
+    p = new_prs()
+    s = add_slide(p)
+    box = tb(s, 11.0, 3.0, 2.3, 0.6, "clipped by inset", size=16)
+    bodyPr = box.text_frame._txBody.find(qn("a:bodyPr"))
+    bodyPr.set("lIns", str(int(1.5 * 914400)))
+    _e, warns = lint_full(save(p, tmp_path, "inset.pptx"))
+    assert "W16" in codes(warns), codes(warns)
+
+
+def test_merged_cells_single_count(tmp_path):
+    """Continuation cells of a merged region mirror the origin's text: walking them
+    double-counted findings (external review)."""
+    p = new_prs()
+    s = add_slide(p)
+    gfx = s.shapes.add_table(2, 2, Inches(1), Inches(1), Inches(6), Inches(2))
+    tbl = gfx.table
+    tbl.cell(0, 0).merge(tbl.cell(0, 1))
+    tbl.cell(0, 0).text = "한글"
+    r = tbl.cell(0, 0).text_frame.paragraphs[0].runs[0]
+    r.font.name = "Arial"
+    r.font.size = Pt(12)
+    errors, _w = lint_full(save(p, tmp_path, "merge.pptx"))
+    e1 = [f for f in errors if f.code == "E1"]
+    assert len(e1) == 1, codes(errors)
+
+
+def test_zip_preflight_blocks_bomb(tmp_path):
+    """A pptx-shaped decompression bomb is a usage error with a stated reason, not a
+    hang (external review: no package-level budgets existed)."""
+    import zipfile
+    bomb = os.path.join(str(tmp_path), "bomb.pptx")
+    with zipfile.ZipFile(bomb, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("ppt/huge.bin", b"\x00" * 30_000_000)
+    r = run_cli([bomb])
+    assert r.returncode == 2
+    assert "preflight" in (r.stderr or "")
+
+
+def test_sarif_rule_metadata_static(tmp_path):
+    """SARIF rule titles must be static (no %-placeholders) and results carry
+    partialFingerprints for cross-run tracking (external review)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "tiny", size=3)
+    deck = save(p, tmp_path, "s.pptx")
+    out = os.path.join(str(tmp_path), "o.sarif")
+    r = run_cli([deck, "--sarif", out])
+    assert r.returncode == 1
+    with open(out, encoding="utf-8") as f:
+        doc = json.load(f)
+    run0 = doc["runs"][0]
+    for rule in run0["tool"]["driver"]["rules"]:
+        assert "%" not in rule["shortDescription"]["text"], rule
+        assert rule["helpUri"].startswith("https://")
+    assert all("partialFingerprints" in res for res in run0["results"])
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))

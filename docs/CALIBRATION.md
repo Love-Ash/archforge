@@ -233,11 +233,39 @@ Resolved in 0.5.0 and locked in as regression fixtures:
   ink) used to judge the overlap, and pairwise judgments (W15/W17) also identify the
   counterpart shape via `related`.
 
+Resolved in 0.6.0 (external review of 0.5.0, locked in as regression fixtures):
+
+- Geometry now models text-frame insets (lIns/tIns/rIns/bIns; OOXML defaults 0.1in
+  left/right, 0.05in top/bottom, scaled under group transforms), explicit line breaks
+  (`a:br` starts a new visual line instead of being measured as one overlong line),
+  field text (`a:fld` occupies real width), real table column widths, and merged cells
+  (continuation cells are skipped; the origin cell spans its merged region). Glyph
+  boxes from table cells carry their `cell`=[row, col] identity into W15-W17 locations.
+- Rotated text frames are explicitly out of scope for geometry (rotation is
+  overwhelmingly decorative practice) and deliberately do not mark the result
+  incomplete; the docs now state this contract instead of implying W18 coverage.
+- W6/W10 fingerprints no longer embed page numbers (they broke the page-independent
+  fingerprint contract on slide insertion); W6 keys on the layout-skeleton signature
+  and W10 on the cloned diagram's shared fill tokens.
+- NaN could bypass every threshold-range validation (NaN comparisons are always False,
+  and json.load accepts a bare NaN literal), silently disabling E3 through --hard-min
+  or an attacker-controlled config; finiteness is now validated on both paths.
+- A zip preflight bounds entry count, total uncompressed size, and per-entry
+  compression ratio before python-pptx parses the package, and non-budget image decode
+  failures now surface through W18 (`image_decode`) instead of being swallowed.
+
 Remaining limitations:
 
 - Lifting E2's exceptions via `--strict` is only meaningful in the profile where E2 runs
-  (full). In the default profile (core), --strict handles only WARN escalation and W18
-  failure.
+  (full).
+- Paragraph spacing (spaceBefore/spaceAfter), indents, bullets, tab stops, and text
+  columns are still not modeled in geometry; list-heavy decks can accumulate vertical
+  drift in glyph boxes. Insets and explicit breaks (the two largest error sources) are
+  in as of 0.6.0.
+- W7 samples the text-frame rectangle and uses the first resolved run color; it does
+  not yet share the W15-W17 effective-glyph geometry or evaluate per-run contrast.
+- E1 remains a font-name registry (curated Latin-only tables plus Hangul-complete
+  exceptions), not a glyph-coverage engine: embedded-font cmaps are not inspected.
 - baseline is beta. Fingerprint v2 uses a code + locale-neutral content key
   (page-independent, occurrence-count-managed), which is safe against language changes and
   slide insertion, but full identity for output that is regenerated every time is not

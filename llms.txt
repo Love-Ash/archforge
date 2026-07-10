@@ -2,14 +2,14 @@
 
 > The preflight linter for AI-generated PowerPoint (.pptx). It reads the built file
 > (XML, font-resolution chain, geometry, image alpha; no PowerPoint needed) and blocks
-> silent font fallback (deep CJK coverage), unreadable sizes, colliding frames,
+> silent font fallback (Hangul-deep, CJK-aware), unreadable sizes, colliding frames,
 > off-canvas text, and AI-tell punctuation before a human sees a render.
 
 Quick use for agents: `pip install archforge`, then `archforge deck.pptx --profile full --json`.
 Ship condition: `summary.error_count == 0` AND `summary.incomplete == false`. Findings carry a
 `location` payload (shape id, absolute bbox in inches, paragraph/run, table cell, `related`
-counterpart) so you can fix the exact shape without text search. Rule codes (E1..E4, W1..W18)
-are stable language-independent identifiers; message language follows `--lang` (en/ko).
+counterpart) so you can fix the exact shape without text search. Rule codes (E1-E4; W1 and
+W5-W18) are stable language-independent identifiers; message language follows `--lang` (en/ko).
 
 ## Docs
 

@@ -32,6 +32,31 @@ RULES = {
 
 ALL_CODES = frozenset(RULES)
 
+# Static rule titles for machine-facing metadata (SARIF rules[].shortDescription).
+# Finding messages are parameterized templates; a rule TITLE must not carry format
+# placeholders like %.1fpt (0.6.0, external review). English by SARIF convention.
+TITLES = {
+    "E1": "Hangul rendered by a Latin-only font (silent fallback)",
+    "E2": "Dash-family character used as punctuation",
+    "E3": "Unreadable effective font size",
+    "E4": "Positive tracking on Hangul/Hanja",
+    "W1": "Body-class text below the recommended floor",
+    "W5": "No font size anywhere in the inheritance chain",
+    "W6": "Layout skeleton repeated across pages",
+    "W7": "Low text-over-image contrast",
+    "W8": "Small CJK text in a narrow frame",
+    "W9": "Accent vertical bars repeated as list markers",
+    "W10": "Hand-drawn diagram cloned across pages",
+    "W11": "AI-tell copy (buzzwords, stock openings)",
+    "W12": "Footer baseline drift",
+    "W13": "Native PowerPoint shadow/glow/3D effects",
+    "W14": "Titles are noun phrases, not claims",
+    "W15": "Estimated text-on-text overlap",
+    "W16": "Text or picture ink off-canvas",
+    "W17": "Text straddling a picture ink edge",
+    "W18": "Some spans could not be checked (incomplete result)",
+}
+
 # Profile = engine execution policy (since 0.3.1, excluded rules simply do not run).
 # 0.4.0: the default profile changed to core (a breaking change). Only objective defects
 # run by default; AI-tell/house-style rules (E2, W6, W9-W14) are full opt-in.

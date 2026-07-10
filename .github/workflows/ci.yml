@@ -51,22 +51,85 @@ jobs:
           assert target in names, "%s not in wheel: %s" % (target, names)
           print("ok:", whl)
           EOF
+      - name: Metadata check (twine)
+        run: |
+          python -m pip install twine
+          python -m twine check dist/*
       - name: Install wheel and smoke
         run: |
-          python -m pip install dist/*.whl python-pptx
+          python -m pip install dist/*.whl
+          archforge --version
           archforge skill --path
           archforge skill > /tmp/skill.md
           grep -q "archforge-pptx-lint" /tmp/skill.md
+          # First-run tour from the installed wheel: broken must fail, fixed must pass
+          archforge demo --dir /tmp/tour --lang en
+          archforge /tmp/tour/fixed.pptx --profile full --json > /tmp/fixed.json
+          python -c "import json; d=json.load(open('/tmp/fixed.json')); assert d['summary']['pass'] and not d['summary']['incomplete']"
+          if archforge /tmp/tour/broken.pptx --profile full > /dev/null; then
+            echo "broken.pptx unexpectedly passed" && exit 1
+          fi
+          # Multi-file scan + multi-file SARIF from the installed wheel
+          if archforge scan /tmp/tour --profile full --sarif /tmp/out.sarif --json > /tmp/scan.json; then
+            echo "scan over a broken deck unexpectedly exited 0" && exit 1
+          fi
           python - <<'EOF'
-          from pptx import Presentation
-          from pptx.util import Inches, Pt
-          p = Presentation()
-          s = p.slides.add_slide(p.slide_layouts[6])
-          box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(5), Inches(1))
-          r = box.text_frame.paragraphs[0].add_run()
-          r.text = "smoke"
-          r.font.size = Pt(20)
-          p.save("/tmp/smoke.pptx")
+          import json
+          scan = json.load(open("/tmp/scan.json"))
+          assert scan["summary"]["file_count"] == 2 and scan["summary"]["failed_files"] == 1, scan["summary"]
+          sarif = json.load(open("/tmp/out.sarif"))
+          assert sarif["runs"][0]["results"], "empty SARIF results"
+          assert all("partialFingerprints" in r for r in sarif["runs"][0]["results"])
           EOF
-          archforge /tmp/smoke.pptx --json > /tmp/out.json
-          python -c "import json; d=json.load(open('/tmp/out.json')); assert d['summary']['pass']"
+
+  action-self-test:
+    # The action itself is a release artifact: exercise `uses: ./` with the shapes the
+    # docs promise (newline file lists, paths with spaces, globs handled by scan, the
+    # config trust boundary, SARIF output, and failure propagation).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare decks (path with spaces)
+        run: |
+          mkdir -p "decks dir/sub dir"
+          cp examples/fixed.pptx "decks dir/sub dir/deck one.pptx"
+      - name: Clean decks pass (source install, dir with spaces)
+        uses: ./
+        with:
+          files: |
+            decks dir
+          profile: full
+      - name: Glob input is expanded by scan, not the shell
+        uses: ./
+        with:
+          files: |
+            examples/fixed*.pptx
+          profile: full
+      - name: Broken deck fails and writes SARIF
+        id: broken
+        continue-on-error: true
+        uses: ./
+        with:
+          files: |
+            examples/broken.pptx
+            examples/fixed.pptx
+          profile: full
+          sarif: af.sarif
+      - name: Assert failure propagated and SARIF is real
+        run: |
+          test "${{ steps.broken.outcome }}" = "failure"
+          python3 -c "import json; d=json.load(open('af.sarif')); assert d['runs'][0]['results']"
+      - name: Deck-folder config cannot weaken the gate by default
+        run: |
+          mkdir cfgtest
+          cp examples/broken.pptx cfgtest/
+          printf '{"skip": ["W15", "W16"], "hard_min": 1}' > cfgtest/.archforge.json
+      - id: cfg
+        continue-on-error: true
+        uses: ./
+        with:
+          files: |
+            cfgtest
+          profile: full
+      - name: Assert config was ignored (gate still failed)
+        run: test "${{ steps.cfg.outcome }}" = "failure"

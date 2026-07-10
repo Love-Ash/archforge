@@ -6,10 +6,10 @@ from typing import Dict, List, Optional
 
 try:
     from .messages import M, get_lang
-    from .rules import RULES, severity
+    from .rules import RULES, TITLES, severity
 except ImportError:
     from messages import M, get_lang
-    from rules import RULES, severity
+    from rules import RULES, TITLES, severity
 
 
 def _tool_version() -> str:
@@ -77,10 +77,15 @@ def build_sarif_multi(items: List) -> Dict:
     rules_meta = []
     used = sorted({f.code for (_p, errs, ws) in items for f in list(errs) + list(ws)})
     for code in used:
-        sev, cat, msg_id = RULES.get(code, ("warning", "unknown", None))
+        sev, cat, _msg_id = RULES.get(code, ("warning", "unknown", None))
+        # Static titles, not parameterized finding templates: a rule shortDescription
+        # with raw %.1fpt placeholders leaked into code-scanning UIs (0.6.0, external
+        # review)
         rules_meta.append({
             "id": code,
-            "shortDescription": {"text": M(msg_id) if msg_id else code},
+            "shortDescription": {"text": TITLES.get(code, code)},
+            "helpUri": "https://github.com/Love-Ash/archforge#what-it-catches",
+            "defaultConfiguration": {"level": "error" if sev == "error" else "warning"},
             "properties": {"category": cat},
         })
     results = []
@@ -96,6 +101,10 @@ def build_sarif_multi(items: List) -> Dict:
                     },
                     "logicalLocations": [{"name": "slide %d" % f.page, "kind": "module"}],
                 }],
+                # The baseline fingerprint doubles as a cross-run identity so GitHub code
+                # scanning can track a finding between runs instead of re-opening it on
+                # every push (0.6.0, external review)
+                "partialFingerprints": {"archforgeFinding/v2": f.fingerprint()},
             }
             if f.loc:
                 res["properties"] = {"target": f.loc}

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "archforge"
-version = "0.5.0"
-description = "Preflight quality linter for AI-generated PowerPoint: catches silent font fallback (deep CJK coverage), tracking damage, text collisions, off-canvas bleed, and AI-generated deck tells in built .pptx files"
+version = "0.6.0"
+description = "Preflight quality linter for AI-generated PowerPoint: catches silent font fallback (Hangul-deep, CJK-aware), tracking damage, text collisions, off-canvas bleed, and AI-generated deck tells in built .pptx files"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
@@ -19,6 +19,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "Natural Language :: English",
     "Natural Language :: Korean",
     "Programming Language :: Python :: 3",
     "Topic :: Office/Business :: Office Suites",
@@ -31,6 +32,10 @@ yaml = ["PyYAML>=6"]   # .archforge.yml 설정용(JSON 설정은 의존성 없�
 
 [project.urls]
 Homepage = "https://github.com/Love-Ash/archforge"
+Documentation = "https://github.com/Love-Ash/archforge#readme"
+Changelog = "https://github.com/Love-Ash/archforge/blob/main/CHANGELOG.md"
+Issues = "https://github.com/Love-Ash/archforge/issues"
+Source = "https://github.com/Love-Ash/archforge"
 
 [project.scripts]
 archforge = "archforge.lint:main"

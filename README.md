@@ -46,7 +46,8 @@ archforge deck.pptx --json          # machine-readable JSON (agents / CI)
 archforge scan decks/ --profile full   # many files, directories, or globs in one run
 ```
 
-The three decks in [examples/](examples/) show every gate with expected outputs.
+The decks in [examples/](examples/) demonstrate the flagship defects and the profile
+split, each with expected outputs.
 
 ## Why
 
@@ -65,7 +66,10 @@ succeeded" and "a human would sign off on the render."
 ## Usage
 
 ```bash
-archforge deck.pptx --strict        # WARNs also fail + numeric-dash exemptions off
+archforge deck.pptx --fail-incomplete   # incomplete checks (W18) fail: recommended in CI
+archforge deck.pptx --fail-on-warning   # WARNs fail too
+archforge deck.pptx --e2-no-exemptions  # E2 numeric-range/minus exemptions off (full profile)
+archforge deck.pptx --strict            # union of the three flags above
 archforge deck.pptx --ghost         # per-page title list (horizontal-logic review)
 archforge deck.pptx --render pages/ # add on-image contrast check (W7) from p01.png-style renders
 archforge deck.pptx --skip W14,W6   # suppress specific WARNs (recorded in JSON)
@@ -121,7 +125,13 @@ locale), which follows the user, not the deck.
 
 ## CI
 
-GitHub Action (composite, installs from PyPI):
+GitHub Action (composite). Pinning the action tag pins the linter: by default it
+installs the exact source checked out at that ref, not whatever PyPI's latest is.
+Deck-folder config files are ignored (`--no-config`) and incomplete checks fail
+(`fail-incomplete: true`) unless you opt out, so a PR cannot weaken the gate by
+committing a config next to its deck. `files` takes one path, directory, or glob per
+line; globs are expanded by `archforge scan` itself, so paths with spaces and `**`
+both behave.
 
 ```yaml
 jobs:
@@ -129,9 +139,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Love-Ash/archforge@v0.5.0
+      - uses: Love-Ash/archforge@v0.6.0
         with:
-          files: decks/
+          files: |
+            decks/
           profile: full
           sarif: archforge.sarif
       - uses: github/codeql-action/upload-sarif@v3
@@ -145,7 +156,7 @@ pre-commit:
 ```yaml
 repos:
   - repo: https://github.com/Love-Ash/archforge
-    rev: v0.5.0
+    rev: v0.6.0
     hooks:
       - id: archforge
         # args: [--profile, full]
@@ -224,8 +235,10 @@ guard skips surfaces as `W18` in the JSON output plus a machine-readable
 > other scripts are never falsely flagged (script detection is per text run, via Unicode
 > code points), and per-script coverage tables are the extension path for JP/CN depth.
 > Geometry estimation skips vertical text and RTL/complex scripts honestly (W18) instead
-> of guessing. The render model targets PowerPoint for Windows; other renderers
-> (Mac/web/LibreOffice) may resolve fonts differently.
+> of guessing. Rotated text frames are out of scope for geometry by design (rotation is
+> overwhelmingly decorative practice) and do not mark the result incomplete. The render
+> model targets PowerPoint for Windows; other renderers (Mac/web/LibreOffice) may
+> resolve fonts differently.
 
 ## Agent integration
 

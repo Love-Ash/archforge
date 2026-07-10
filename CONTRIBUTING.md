@@ -26,10 +26,13 @@ can be). Confirmed false positives become regression fixtures in
 ```bash
 git clone https://github.com/Love-Ash/archforge
 cd archforge
-pip install -e .[yaml]
+pip install -e ".[test,yaml]"
 python -m pytest tests -q          # full suite; must stay green
 python benchmarks/run_benchmarks.py   # regression harness (synthetic corpus)
 ```
+
+Commit messages are in English, imperative mood, describing the change itself (no
+internal process notes).
 
 Python 3.9+ is supported; run the suite on 3.9 semantics if you use newer
 syntax. Dependencies stay minimal: python-pptx and Pillow only.

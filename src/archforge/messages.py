@@ -190,8 +190,8 @@ MESSAGES = {
     "help_hard_min": {"ko": "E3 판독 불가 하한(pt, 기본 5.0)", "en": "E3 unreadable hard floor in pt (default 5.0)"},
     "help_body_min": {"ko": "W1 본문급 권장 하한(pt, 기본 9.0)", "en": "W1 body-class recommended floor in pt (default 9.0)"},
     "help_strict": {
-        "ko": "WARN도 exit 1. E2 숫자 맥락 예외 해제는 E2가 실행되는 프로파일(full)에서만 의미",
-        "en": "WARNs also exit 1. Lifting E2 numeric exemptions only matters in profiles that run E2 (full)",
+        "ko": "--fail-on-warning + --fail-incomplete + --e2-no-exemptions 세 정책의 합집합(호환 별칭)",
+        "en": "union of --fail-on-warning, --fail-incomplete, and --e2-no-exemptions (compatibility alias)",
     },
     "help_small_min": {"ko": "W8 좁은 프레임 소형 CJK 상한(pt)", "en": "W8 small-CJK ceiling in narrow frames (pt)"},
     "help_render": {
@@ -278,6 +278,30 @@ MESSAGES = {
     "scan_summary": {
         "ko": "=== 스캔 요약: 파일 %d개, 실패 %d개 ===",
         "en": "=== scan summary: %d file(s), %d failed ===",
+    },
+    "err_scan_baseline": {
+        "ko": "archforge: scan에서 --baseline은 대상이 1개 파일일 때만 허용됩니다(지문에 파일 정체성이 없어 덱 A의 수용이 덱 B의 동일 결함을 숨김). 덱별 baseline은 각 덱 폴더의 설정 파일로 지정하세요",
+        "en": "archforge: --baseline under scan is allowed only when exactly one file matched (fingerprints carry no file identity, so deck A's acceptance would suppress the same finding in deck B). Point each deck at its own baseline via its folder config",
+    },
+    "scan_file_error": {
+        "ko": "== 오류: %s == %s (이 파일은 건너뛰고 스캔을 계속했습니다)",
+        "en": "== ERROR: %s == %s (file skipped; scan continued)",
+    },
+    "note_baseline_meta": {
+        "ko": "archforge: 경고: baseline의 기록 조건과 현재 실행이 다릅니다(%s: 기록 %r, 현재 %r). 억제 결과가 기대와 다를 수 있습니다",
+        "en": "archforge: warning: baseline was recorded under different conditions (%s: recorded %r, current %r); suppression may not match expectations",
+    },
+    "help_fail_on_warning": {
+        "ko": "WARN이 하나라도 있으면 exit 1 (권고를 차단으로 승격)",
+        "en": "exit 1 if any WARN is present (promotes advisories to blockers)",
+    },
+    "help_fail_incomplete": {
+        "ko": "검사 불완전(W18/summary.incomplete)이면 exit 1. CI 게이트에 권장",
+        "en": "exit 1 when checking was incomplete (W18/summary.incomplete). Recommended for CI gates",
+    },
+    "help_e2_no_exemptions": {
+        "ko": "E2 숫자 맥락 예외(범위·음수) 해제. E2가 실행되는 프로파일(full)에서만 의미",
+        "en": "lift E2's numeric-context exemptions (ranges, minus). Only meaningful in profiles that run E2 (full)",
     },
     "subcmd_conflict": {
         "ko": "archforge: 참고: 현재 폴더에 %r 파일이 있지만 서브커맨드를 실행합니다. 그 파일을 린트하려면 `archforge ./%s`",

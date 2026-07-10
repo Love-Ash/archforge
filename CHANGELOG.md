@@ -1,5 +1,112 @@
 # Changelog
 
+## 0.6.0 (2026-07-11)
+
+A hardening release for the integration layer. An external structural review of 0.5.0
+and an independent verification session agreed on the diagnosis: the engine is solid,
+but the new delivery surfaces (GitHub Action, scan) shipped with trust and failure-
+semantics gaps. This release fixes those before wider announcement, plus the geometry
+model's largest remaining error sources.
+
+### GitHub Action (rewritten)
+
+- Pinning the action tag now pins the linter: the default install is the action's own
+  checked-out source (`source: action`), not PyPI latest. `source: pypi` plus `version`
+  remains as an explicit opt-in.
+- Inputs travel through env into a Python runner and become argv entries directly;
+  nothing is interpolated into a shell script body. `files` and `extra-args` are one
+  entry per line, so paths with spaces survive and globs (including `**`) are expanded
+  by `archforge scan` itself rather than the shell.
+- Deck-folder configs are ignored by default (`allow-config: false` passes
+  `--no-config`): a PR cannot weaken the CI gate by committing a config next to its
+  deck. Incomplete checks fail by default (`fail-incomplete: true`).
+- The action is now itself CI-tested (`uses: ./`): newline file lists, a directory with
+  spaces, glob inputs, SARIF output, failure propagation, and the config trust boundary.
+
+### scan batch semantics
+
+- One broken or misconfigured file no longer aborts the batch: usage errors become
+  per-file `status: "error"` entries (text, JSON `files[]`, and `summary.error_files`),
+  and the remaining files are still checked. Exit stays 1 when anything failed.
+- A single CLI `--baseline` across multiple files is refused (fingerprints carry no
+  file identity, so deck A's acceptances would suppress deck B's findings); per-deck
+  baselines via deck-folder configs are unaffected.
+- A deck config's `lang` no longer leaks across later files and the aggregate report
+  (the report renders in the invocation language).
+- Directory walks sort both directories and files: aggregate output order is now
+  deterministic across filesystems.
+
+### Validation and input hardening
+
+- NaN no longer bypasses threshold validation: `--hard-min nan` and a bare `NaN`
+  literal in `.archforge.json` (which `json.load` accepts) both exit 2. This closed a
+  re-opening of the exact `--hard-min 0` bypass fixed in 0.5.0.
+- All flag and config validation now runs before linting and before `--write-baseline`
+  records anything (a typo'd `--skip` used to record a baseline as if valid).
+- `--config` combined with `--no-config` is a contradiction and now errors instead of
+  silently dropping the explicit config.
+- A zip preflight bounds entry count (20k), total uncompressed size (2GB), and
+  per-entry compression ratio before python-pptx parses untrusted input; violations
+  are usage errors with a stated reason. Non-budget image decode failures now count
+  into W18 (`image_decode`) instead of being silently swallowed.
+- Baseline run-condition metadata is checked on load, not just recorded: a profile or
+  tool-version mismatch prints a warning.
+- W6/W10 fingerprints no longer embed page numbers (they violated the
+  page-independent fingerprint contract).
+
+### Strict policy split
+
+- `--fail-on-warning`, `--fail-incomplete`, and `--e2-no-exemptions` are now separate
+  flags; failing every advisory and failing on unchecked spans are different policies.
+  `--strict` remains as the union (compatibility alias). `summary.pass` reflects the
+  active policy.
+
+### Geometry model
+
+- Text-frame insets (lIns/tIns/rIns/bIns, OOXML defaults applied, group-scale aware)
+  now offset and shrink the usable frame area: glyph boxes no longer start at the
+  frame edge or overstate usable width.
+- Explicit line breaks (`a:br`) start a new visual line in geometry (previously a
+  br-split sentence was measured as one overlong line), and field text (`a:fld`)
+  occupies real width.
+- Table geometry uses real column widths, skips merged-region continuation cells, and
+  spans the origin cell across its merged columns/rows; glyph boxes carry
+  `cell`=[row, col] into W15-W17 locations (including `related`).
+- Rotated text frames are documented as out of scope for geometry by design and do not
+  mark the result incomplete (the previous docs implied otherwise).
+
+### SARIF
+
+- Rule `shortDescription` uses static titles (parameterized `%.1fpt` templates no
+  longer leak into code-scanning UIs), plus `helpUri` and `defaultConfiguration`.
+- Every result carries `partialFingerprints` (the baseline fingerprint), so GitHub
+  code scanning can track findings across runs instead of re-opening them each push.
+
+### CLI and metadata
+
+- `archforge --version`.
+- PyPI metadata: project URLs (Documentation/Changelog/Issues/Source) and the English
+  natural-language classifier alongside Korean.
+- CI additionally verifies the built wheel end to end (`demo`, single-file fail/pass,
+  `scan` with aggregate JSON and multi-file SARIF) and runs `twine check`.
+
+### Docs
+
+- Removed the "every gate" overclaim from the examples pointer, replaced "deep CJK
+  coverage" with the accurate "Hangul-deep, CJK-aware" phrasing, fixed the `W1..W18`
+  code-range notation (W2-W4 do not exist), fixed CONTRIBUTING's install command to
+  include the test extra, and updated the stale v1 fingerprint description in
+  config.py's module docstring.
+
+### Deferred (recorded, not shipped)
+
+- Structured `Finding.data` (numbers instead of pre-rendered message args) and
+  location-bucketed fingerprints: both change public contracts and deserve their own
+  design pass.
+- W7 sharing the effective-glyph geometry and per-run colors; an embedded-font
+  cmap-based E1; detector module decomposition; a multi-generator public corpus. These
+  are the 0.7 candidates, deliberately not squeezed into a hardening release.
+
 ## 0.5.0 (2026-07-10)
 
 This is a deployment and onboarding release. It addresses the bottleneck that all 3

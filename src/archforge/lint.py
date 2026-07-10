@@ -98,6 +98,7 @@ import os
 import re
 import sys
 import glob
+import math
 import argparse
 import colorsys
 from collections import Counter, namedtuple
@@ -579,9 +580,24 @@ def collect_frames(shapes, xf=(1.0, 0.0, 1.0, 0.0)):
         if getattr(sp, "has_table", False):
             tbl = sp.table
             ncol = len(tbl.columns) or 1
+            try:
+                col_w = [(c.width or 0) for c in tbl.columns]
+            except Exception:
+                col_w = []
             for ri, row in enumerate(tbl.rows):
                 for ci, cell in enumerate(row.cells):
-                    out.append((cell.text_frame, (sp.width or 0) // ncol, sp, (ri, ci), xf))
+                    # Merged regions (0.6.0): continuation cells mirror their origin's
+                    # text frame, so walking them double-counted the same runs. The
+                    # origin's usable width spans the merged columns (real column widths
+                    # when available; the old even-split approximation as fallback).
+                    try:
+                        if cell.is_spanned:
+                            continue
+                        w_emu = sum(col_w[ci:ci + max(1, cell.span_width)]) \
+                            or (sp.width or 0) // ncol
+                    except Exception:
+                        w_emu = (sp.width or 0) // ncol
+                    out.append((cell.text_frame, w_emu, sp, (ri, ci), xf))
             continue
         if sp.has_text_frame:
             out.append((sp.text_frame, sp.width or 0, sp, None, xf))
@@ -1262,8 +1278,8 @@ _W_CJK, _W_LAT, _W_SP = 0.96, 0.52, 0.28   # character-width/font-size ratio app
 # (external review, 2026-07-10).
 # sp (owning shape) is for the loc payload of W15-W17 findings (0.5.0); the coordinates are
 # already the group's absolute coordinates.
-GlyphBox = namedtuple("GlyphBox", "x0 y0 x1 y1 rep max_pt frame_id sp")
-GlyphBox.__new__.__defaults__ = (None,)
+GlyphBox = namedtuple("GlyphBox", "x0 y0 x1 y1 rep max_pt frame_id sp cell")
+GlyphBox.__new__.__defaults__ = (None, None)
 
 
 def _glyph_w(s, size_pt):
@@ -1323,7 +1339,7 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
     import math
     out = []
 
-    def emit_frame(tframe, fx, fy, fw, fh, fid, owner_sp):
+    def emit_frame(tframe, fx, fy, fw, fh, fid, owner_sp, cell=None, sx=1.0, sy=1.0):
         try:
             bodyPr = tframe._txBody.find(NS + "bodyPr")
             vert = bodyPr.get("vert") if bodyPr is not None else None
@@ -1332,7 +1348,25 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
                     skipped["vertical_text"] += 1
                 return
         except Exception:
+            bodyPr = None
+        # Text-frame insets (0.6.0, external review): glyphs start inside the frame, not
+        # at its edge. OOXML defaults are lIns/rIns 91440 EMU (0.1in) and tIns/bIns 45720
+        # (0.05in), the same order of magnitude as W16's 0.15in tolerance, so ignoring
+        # them shifted every glyph box left/up and overstated usable width. Insets live
+        # in shape-local units, so group scale (sx/sy) applies.
+        li, ri_, ti, bi = 91440, 91440, 45720, 45720
+        try:
+            if bodyPr is not None:
+                li = int(bodyPr.get("lIns", li))
+                ri_ = int(bodyPr.get("rIns", ri_))
+                ti = int(bodyPr.get("tIns", ti))
+                bi = int(bodyPr.get("bIns", bi))
+        except Exception:
             pass
+        fx += sx * li / EMU_PER_IN
+        fy += sy * ti / EMU_PER_IN
+        fw = max(fw - sx * (li + ri_) / EMU_PER_IN, 0.0)
+        fh = max(fh - sy * (ti + bi) / EMU_PER_IN, 0.0)
         try:
             frame_text = "".join(r.text for para in tframe.paragraphs for r in para.runs)
             if _geometry_unsupported(frame_text):
@@ -1350,10 +1384,38 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
             if para.alignment is not None:
                 frame_align = para.alignment
                 break
-        paras = []   # (pw, pmx, ptxt, factor, n, align)
+        paras = []   # (line_w, pmx, ptxt, factor, n, align)
         for para in tframe.paragraphs:
-            pw, pmx, ptxt = 0.0, 0.0, ""
-            for r in para.runs:
+            pmx, ptxt = 0.0, ""
+            segs = [0.0]   # widths of a:br-separated visual lines
+            # Document-order walk over a:r / a:fld / a:br (0.6.0, external review): fld
+            # text occupies real width and an explicit line break starts a new visual
+            # line. Before this, a br-split sentence was measured as one overlong line
+            # (width overstated, height understated). Falls back to para.runs on any
+            # structural surprise.
+            items = []
+            try:
+                runs_l = list(para.runs)
+                r_seen = 0
+                for child in para._p:
+                    tag = child.tag
+                    if tag == NS + "r":
+                        if r_seen < len(runs_l):
+                            items.append(runs_l[r_seen])
+                            r_seen += 1
+                    elif tag == NS + "br":
+                        items.append(None)
+                    elif tag == NS + "fld":
+                        items.append(_FldRun(child))
+                if r_seen != len(runs_l):
+                    items = list(runs_l)
+            except Exception:
+                items = list(para.runs)
+            for r in items:
+                if r is None:   # a:br: next visual line
+                    segs.append(0.0)
+                    ptxt += " "
+                    continue
                 t = r.text
                 if not t:
                     continue
@@ -1371,7 +1433,7 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
                     if sz is None:
                         sz = default_pt
                 sz *= scale
-                pw += _glyph_w(t, sz)
+                segs[-1] += _glyph_w(t, sz)
                 ptxt += t
                 if sz > pmx:
                     pmx = sz
@@ -1388,9 +1450,13 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
                     factor = ls.pt / pmx if pmx else 1.2
                 except Exception:
                     factor = 1.2
-            n = max(1, math.ceil(pw / (fw2 * 1.04))) if wrap else 1
+            if wrap:
+                n = sum(max(1, math.ceil(w / (fw2 * 1.04))) for w in segs)
+            else:
+                n = len(segs)
+            line_w = max(segs)
             al = para.alignment if para.alignment is not None else frame_align
-            paras.append((pw, pmx, ptxt, factor, n, al))
+            paras.append((line_w, pmx, ptxt, factor, n, al))
         gh_total = sum(n * pmx * max(f, 0.95) * (1.0 - lnred) / 72.0
                        for (pw, pmx, ptxt, f, n, al) in paras)
         if gh_total <= 0:
@@ -1413,7 +1479,8 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
                     x0 = fx + fw2 - gw
                 else:
                     x0 = fx
-                out.append(GlyphBox(x0, cy, x0 + gw, cy + ph, ptxt[:24], pmx, fid, owner_sp))
+                out.append(GlyphBox(x0, cy, x0 + gw, cy + ph, ptxt[:24], pmx, fid,
+                                    owner_sp, cell))
             cy += ph
 
     for sp, _z, xf in iter_shapes_geo(slide.shapes):
@@ -1441,6 +1508,17 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
                     cw = col_w[ci] if ci < len(col_w) else 0
                     rh = row_h[ri] if ri < len(row_h) else 0
                     try:
+                        # Merged regions (0.6.0, external review): continuation cells are
+                        # covered by their origin; the origin's rectangle spans the merged
+                        # column widths and row heights instead of a single grid cell.
+                        if cell.is_spanned:
+                            cx_off += cw
+                            continue
+                        span_w = sum(col_w[ci:ci + max(1, cell.span_width)]) or cw
+                        span_h = sum(row_h[ri:ri + max(1, cell.span_height)]) or rh
+                    except Exception:
+                        span_w, span_h = cw, rh
+                    try:
                         ctf = cell.text_frame
                     except Exception:
                         cx_off += cw
@@ -1448,9 +1526,9 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
                     emit_frame(ctf,
                                tx + ax * cx_off / EMU_PER_IN,
                                ty + ay * cy_off / EMU_PER_IN,
-                               ax * cw / EMU_PER_IN,
-                               ay * rh / EMU_PER_IN,
-                               id(cell._tc), sp)
+                               ax * span_w / EMU_PER_IN,
+                               ay * span_h / EMU_PER_IN,
+                               id(cell._tc), sp, cell=(ri, ci), sx=ax, sy=ay)
                     cx_off += cw
                 cy_off += row_h[ri] if ri < len(row_h) else 0
             continue
@@ -1462,7 +1540,7 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
         fx, fy, fw, fh, rotated = geo
         if rotated:
             continue
-        emit_frame(sp.text_frame, fx, fy, fw, fh, id(sp), sp)
+        emit_frame(sp.text_frame, fx, fy, fw, fh, id(sp), sp, sx=xf[0], sy=xf[2])
     return out
 
 
@@ -1506,8 +1584,8 @@ def text_overlap_check(slide, si, warns, boxes: Optional[List[GlyphBox]] = None)
         # used to judge the overlap, as-is.
         # related carries the counterpart frame so an agent can pinpoint which pair to move
         # (0.5.0).
-        loc = shape_loc(a.sp, bbox=[a.x0, a.y0, a.x1 - a.x0, a.y1 - a.y0]) or {}
-        rel = shape_loc(b.sp, bbox=[b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0])
+        loc = shape_loc(a.sp, bbox=[a.x0, a.y0, a.x1 - a.x0, a.y1 - a.y0], cell=a.cell) or {}
+        rel = shape_loc(b.sp, bbox=[b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0], cell=b.cell)
         if rel:
             loc["related"] = rel
         warns.append(Finding(si, "W15", "w15", (frac * 100,), "%r ~ %r" % (a.rep, b.rep),
@@ -1574,8 +1652,13 @@ def _pic_boxes(slide, sw_in, sh_in, skipped=None):
                     ww, wh = (wr - wl) or 1.0, (wb - wt) or 1.0
                     x, y, w, h = (x + w * (l - wl) / ww, y + h * (t - wt) / wh,
                                   w * (r - l) / ww, h * (b - t) / wh)
-            except Exception:
-                pass
+            except Exception as ex:
+                # The frame bbox is kept as the fallback either way, but a real decode
+                # failure is no longer silent (0.6.0, external review: "nothing dies
+                # silently" only held for the budget path). The budget path already
+                # tallied itself above.
+                if skipped is not None and str(ex) != "image decode budget":
+                    skipped["image_decode"] += 1
         out.append((x, y, x + w, y + h, z, sp))
     return out
 
@@ -1599,7 +1682,8 @@ def overflow_check(slide, si, sw_in, sh_in, warns,
         over = max(-gb.x0, -gb.y0, gb.x1 - sw_in, gb.y1 - sh_in)
         if over > TOL_T:
             hits.append((over, M("w16_text") % gb.rep, "t|%r" % gb.rep,
-                         shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0])))
+                         shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0],
+                                   cell=gb.cell)))
     for (px0, py0, px1, py1, _z, psp) in pics:
         over = max(-px0, -py0, px1 - sw_in, py1 - sh_in)
         if over > TOL_S:
@@ -1686,7 +1770,8 @@ def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
                 hits.append((frac, gb, (px0, py0, px1, py1, psp)))
     # Sort key is frac only (sp field isn't comparable, 0.5.0)
     for frac, gb, pic in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
-        loc = shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0]) or {}
+        loc = shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0],
+                        cell=gb.cell) or {}
         rel = shape_loc(pic[4], bbox=[pic[0], pic[1], pic[2] - pic[0], pic[3] - pic[1]])
         if rel:
             loc["related"] = rel
@@ -1913,6 +1998,29 @@ def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors
                   # W7 actually fired)
 
 
+def _zip_preflight(path):
+    """A cheap decompression-bomb screen before python-pptx parses the package (0.6.0,
+    external review: the linter takes untrusted input, and the only budgets so far were
+    per-image decode and pair caps). Entry count, total uncompressed size, and per-entry
+    compression ratio are bounded. A violation raises ValueError (a hostile or broken
+    file is a usage error, not a deck finding); budgets sit far above any real deck."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(path) as z:
+            infos = z.infolist()
+    except (OSError, zipfile.BadZipFile) as e:
+        raise ValueError("not a readable pptx package: %s" % e)
+    if len(infos) > 20000:
+        raise ValueError("zip preflight: too many entries (%d > 20000)" % len(infos))
+    total = sum(i.file_size for i in infos)
+    if total > 2_000_000_000:
+        raise ValueError("zip preflight: uncompressed size %d exceeds the 2GB budget" % total)
+    for i in infos:
+        if i.file_size > 10_000_000 and i.compress_size \
+                and i.file_size / i.compress_size > 200:
+            raise ValueError("zip preflight: suspicious compression ratio in %r" % i.filename)
+
+
 def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost=None,
          strict=False, w6_sim=0.90, w6_min_cluster=3, profile=DEFAULT_PROFILE):
     """profile is an execution policy (third external review P0: applied at the engine stage,
@@ -1929,6 +2037,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
         # Fixes a typo'd profile silently behaving like full (an empty exclusion set)
         # (fourth review)
         raise ValueError("unknown profile %r (choices: %s)" % (profile, ", ".join(sorted(PROFILES))))
+    _zip_preflight(path)
     prs = Presentation(path)
     sw, sh = prs.slide_width, prs.slide_height
     errors, warns = [], []
@@ -2302,8 +2411,14 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             worst_p, worst = max(adj.items(), key=lambda kv: len(kv[1]))
             if len(worst) >= w6_min_cluster:
                 ex = " ".join("p%d~p%d(%.2f)" % (worst_p, b, s) for b, s in sorted(worst, key=lambda x: -x[1])[:4])
+                # fp_key from the skeleton signature itself, not the page list: page
+                # numbers in the fingerprint broke baseline suppression on slide
+                # insertion, the exact failure fingerprint v2 exists to prevent
+                # (0.6.0, external verification finding)
+                sig_map = dict(content)
+                fpk = "w6|" + ",".join("%.2f" % v for v in sig_map.get(worst_p, ()))
                 warns.append(Finding(0, "W6", "w6", (len(worst) + 1,), M("w6_detail") % ex,
-                                     fp_key=ex))
+                                     fp_key=fpk))
     except Exception as e:
         deck_skipped["w6"] += 1
         print("W6 skipped: %s" % e, file=sys.stderr)
@@ -2350,8 +2465,17 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             if len(cwl) >= 1:
                 grp = sorted({cw, *cwl})
                 pages_key = ",".join("p%d" % p for p in grp)
+                # fp_key from the cloned diagram's shared fill tokens, not the page list
+                # (page-independent fingerprint contract, 0.6.0)
+                try:
+                    inter = set(toks[grp[0]])
+                    for p in grp[1:]:
+                        inter &= set(toks[p])
+                    fpk = "w10|" + ",".join(sorted(str(t) for t in inter))[:120]
+                except Exception:
+                    fpk = "w10|n=%d" % len(grp)
                 warns.append(Finding(0, "W10", "w10", (len(grp),),
-                                     M("w10_detail") % pages_key, fp_key=pages_key))
+                                     M("w10_detail") % pages_key, fp_key=fpk))
     except Exception as e:
         deck_skipped["w10"] += 1
         print("W10 skipped: %s" % e, file=sys.stderr)
@@ -2453,7 +2577,11 @@ def main():
     _add_common_flags(ap)
     a = ap.parse_args(argv)
 
-    res = _lint_one(a.pptx, a)
+    try:
+        res = _lint_one(a.pptx, a)
+    except UsageError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(2)
     if res is None:   # --write-baseline: exit after recording
         sys.exit(0)
 
@@ -2480,12 +2608,35 @@ def main():
     sys.exit(1 if res["fail"] else 0)
 
 
+class UsageError(Exception):
+    """A per-file usage/config error (missing file, bad config, invalid pptx, bad flags).
+
+    Single-file mode prints it and exits 2, preserving the existing contract. scan mode
+    converts it into a per-file result and keeps scanning: one broken deck must not kill
+    the batch or swallow the aggregate report (0.6.0, external review P0)."""
+
+
+def _pkg_version():
+    try:
+        from importlib.metadata import version
+        return version("archforge")
+    except Exception:
+        return "unknown"
+
+
 def _add_common_flags(ap):
     """Flags shared by single-file mode and scan mode (prevents duplicate-definition drift,
     0.5.0)."""
+    ap.add_argument("--version", action="version", version="archforge " + _pkg_version())
     ap.add_argument("--hard-min", type=float, default=None, help=M("help_hard_min"))
     ap.add_argument("--body-min", type=float, default=None, help=M("help_body_min"))
     ap.add_argument("--strict", action="store_true", help=M("help_strict"))
+    # --strict split into orthogonal policies (0.6.0, external review): failing every
+    # advisory warning, failing on incomplete checks, and lifting E2's numeric exemptions
+    # are three different decisions. --strict remains as the union for compatibility.
+    ap.add_argument("--fail-on-warning", action="store_true", help=M("help_fail_on_warning"))
+    ap.add_argument("--fail-incomplete", action="store_true", help=M("help_fail_incomplete"))
+    ap.add_argument("--e2-no-exemptions", action="store_true", help=M("help_e2_no_exemptions"))
     ap.add_argument("--small-min", type=float, default=None, help=M("help_small_min"))
     ap.add_argument("--ghost", action="store_true", help=M("help_ghost"))
     ap.add_argument("--json", action="store_true", help=M("help_json"))
@@ -2502,13 +2653,21 @@ def _add_common_flags(ap):
 
 def _lint_one(path, a):
     """One file's config resolution -> check -> filter -> summary. Shared by main (single
-    mode) and scan_main (0.5.0).
-    Usage errors (config, flags) exit 2 immediately per the existing contract. If
-    --write-baseline is set, returns None after recording. Returned dict: errors/warns/ghost/
-    summary/fail/profile/profile_excl/skip/cfg_path/baseline_suppressed/baseline_path."""
+    mode) and scan_main.
+    Usage errors (missing file, bad config, invalid pptx, bad flags) raise UsageError:
+    single-file mode turns that into exit 2 (unchanged contract), scan mode turns it into
+    a per-file result and keeps going (0.6.0). All flag/config validation happens BEFORE
+    the lint run and before --write-baseline recording (0.6.0: a typo'd --skip used to
+    record a baseline as if nothing were wrong). If --write-baseline is set, returns None
+    after recording. Returned dict: errors/warns/ghost/summary/fail/profile/profile_excl/
+    skip/cfg_path/baseline_suppressed/baseline_path."""
     if not os.path.exists(path):
-        print(M("err_notfound") % path, file=sys.stderr)
-        sys.exit(2)
+        raise UsageError(M("err_notfound") % path)
+
+    # Explicit --config combined with --no-config used to silently drop the explicit
+    # config; that contradiction is now an error (0.6.0, external review).
+    if a.config and a.no_config:
+        raise UsageError(M("err_config") % "--config conflicts with --no-config")
 
     # Config file (.archforge.json/.yml): CLI flags always win (0.4.0).
     # Trust boundary (fourth review): since a config file in the deck folder could weaken the
@@ -2517,16 +2676,14 @@ def _lint_one(path, a):
     cfg = {}
     cfg_path = None if a.no_config else _config.find_config(path, a.config)
     if a.config and not a.no_config and cfg_path is None:
-        print(M("err_config") % a.config, file=sys.stderr)
-        sys.exit(2)
+        raise UsageError(M("err_config") % a.config)
     if cfg_path:
         try:
             cfg, cfg_warns = _config.load_config(cfg_path)
             for wmsg in cfg_warns:
                 print("archforge: %s (%s)" % (wmsg, cfg_path), file=sys.stderr)
         except Exception as e:
-            print(M("err_config") % ("%s (%s)" % (cfg_path, e)), file=sys.stderr)
-            sys.exit(2)
+            raise UsageError(M("err_config") % ("%s (%s)" % (cfg_path, e)))
 
     def pick(cli_val, cfg_key, default):
         if cli_val is not None:
@@ -2540,18 +2697,21 @@ def _lint_one(path, a):
         w6_sim = float(pick(a.w6_sim, "w6_sim", 0.90))
         w6_cluster = int(pick(a.w6_cluster, "w6_cluster", 3))
     except (TypeError, ValueError) as e:
-        print(M("err_config") % ("threshold: %s" % e), file=sys.stderr)
-        sys.exit(2)
+        raise UsageError(M("err_config") % ("threshold: %s" % e))
     # Range validation: closes a bypass where --hard-min 0 silently disabled E3 (the
-    # unreadable-text block) (formerly X1)
-    if hard_min <= 0 or body_min <= 0 or small_min <= 0 or not (0 < w6_sim <= 1) or w6_cluster < 1:
-        print(M("err_config") % ("threshold out of range (hard_min/body_min/small_min > 0, "
-                                 "0 < w6_sim <= 1, w6_cluster >= 1)"), file=sys.stderr)
-        sys.exit(2)
+    # unreadable-text block) (formerly X1). NaN slips through ordinary comparisons
+    # (NaN <= 0 is False), which re-opened the same bypass via --hard-min nan or a bare
+    # NaN literal in .archforge.json (json.load accepts it), so finiteness is checked
+    # explicitly (0.6.0, external verification finding).
+    if not all(math.isfinite(v) for v in (hard_min, body_min, small_min, w6_sim)) \
+            or hard_min <= 0 or body_min <= 0 or small_min <= 0 \
+            or not (0 < w6_sim <= 1) or w6_cluster < 1:
+        raise UsageError(M("err_config") % (
+            "threshold out of range (hard_min/body_min/small_min > 0, "
+            "0 < w6_sim <= 1, w6_cluster >= 1, all finite)"))
     profile = pick(a.profile, "profile", DEFAULT_PROFILE)
     if profile not in PROFILES:
-        print(M("err_config") % ("profile=%r" % profile), file=sys.stderr)
-        sys.exit(2)
+        raise UsageError(M("err_config") % ("profile=%r" % profile))
     lang_final = pick(a.lang, "lang", None)
     if lang_final:
         set_lang(lang_final)
@@ -2560,17 +2720,41 @@ def _lint_one(path, a):
     if isinstance(skip_raw, list):
         skip_raw = ",".join(str(c) for c in skip_raw)
 
+    # --skip validation happens BEFORE the run and before baseline recording (0.6.0).
+    # --skip is WARN-only: silently swallowing even E codes would be a footgun that turns
+    # off the deployment-blocking gate without a trace (second external re-check). Unknown
+    # codes are typos that would make CI look normal (third review P1), and W18 is an
+    # incompleteness signal, not something to suppress (third review P1).
+    skip = {c.strip().upper() for c in skip_raw.split(",") if c.strip()}
+    bad_skip = sorted(c for c in skip if not c.startswith("W"))
+    if bad_skip:
+        raise UsageError(M("err_skip_e") % ",".join(bad_skip))
+    unknown_skip = sorted(c for c in skip if c not in ALL_CODES)
+    if unknown_skip:
+        raise UsageError(M("err_skip_unknown") % ",".join(unknown_skip))
+    if "W18" in skip:
+        raise UsageError(M("err_skip_w18"))
+
+    # --strict = the union of the three orthogonal policies (compatibility alias)
+    fail_on_warning = a.strict or a.fail_on_warning
+    fail_incomplete = a.strict or a.fail_incomplete
+    e2_no_exemptions = a.strict or a.e2_no_exemptions
+
     ghost = [] if (a.ghost or a.json) else None
     try:
         errors, warns = lint(path, hard_min, body_min, small_min, render_dir=a.render,
-                             ghost=ghost, strict=a.strict, w6_sim=w6_sim,
+                             ghost=ghost, strict=e2_no_exemptions, w6_sim=w6_sim,
                              w6_min_cluster=w6_cluster, profile=profile)
     except Exception as e:
-        print(M("err_open") % (path, type(e).__name__), file=sys.stderr)
-        sys.exit(2)
+        # ValueError carries an intentional diagnosis (zip preflight budgets); other
+        # exception types stay name-only to avoid echoing arbitrary parser internals
+        reason = type(e).__name__
+        if isinstance(e, ValueError) and str(e):
+            reason = "%s: %s" % (reason, e)
+        raise UsageError(M("err_open") % (path, reason))
 
     # Baseline recording mode: saves current violations (excluding the W18 incompleteness
-    # signal) as a fingerprint and exits
+    # signal) as a fingerprint and exits. Runs only after all validation above.
     if getattr(a, "write_baseline", None):
         n = _config.write_baseline(a.write_baseline,
                                    [f for f in list(errors) + list(warns) if f.code != "W18"],
@@ -2586,38 +2770,31 @@ def _lint_one(path, a):
         try:
             known = _config.load_baseline(baseline_path)
         except Exception as e:
-            print(M("err_config") % ("baseline %s (%s)" % (baseline_path, e)), file=sys.stderr)
-            sys.exit(2)
+            raise UsageError(M("err_config") % ("baseline %s (%s)" % (baseline_path, e)))
+        # Recorded run conditions are checked, not just stored (0.6.0, external review):
+        # a baseline made under a different profile or tool version suppresses different
+        # things than the reader expects. Warning, not error: baselines are beta.
+        meta = _config.load_baseline_meta(baseline_path)
+        if meta.get("profile") not in (None, "", profile):
+            print(M("note_baseline_meta") % ("profile", meta.get("profile"), profile),
+                  file=sys.stderr)
+        rec_v = str(meta.get("tool_version") or "")
+        cur_v = _pkg_version()
+        if rec_v and cur_v != "unknown" and rec_v.split(".")[:2] != cur_v.split(".")[:2]:
+            print(M("note_baseline_meta") % ("tool_version", rec_v, cur_v), file=sys.stderr)
         errors, s1 = _config.apply_baseline(errors, known)
         warns, s2 = _config.apply_baseline(warns, known)
         baseline_suppressed = s1 + s2
-    skip = {c.strip().upper() for c in skip_raw.split(",") if c.strip()}
-    # --skip is WARN-only: silently swallowing even E codes would be a footgun that turns off
-    # the deployment-blocking gate without a trace (confirmed in the second external
-    # re-check). The applied skip is recorded in the JSON summary to leave a trace.
-    bad_skip = sorted(c for c in skip if not c.startswith("W"))
-    if bad_skip:
-        print(M("err_skip_e") % ",".join(bad_skip), file=sys.stderr)
-        sys.exit(2)
-    # Rejects nonexistent codes (if a typo silently passed, CI would look normal: third
-    # review P1)
-    unknown_skip = sorted(c for c in skip if c not in ALL_CODES)
-    if unknown_skip:
-        print(M("err_skip_unknown") % ",".join(unknown_skip), file=sys.stderr)
-        sys.exit(2)
-    # W18 is an incompleteness signal, not something to suppress (third review P1)
-    if "W18" in skip:
-        print(M("err_skip_w18"), file=sys.stderr)
-        sys.exit(2)
     # Profile exclusions were already not run at the engine stage (0.3.1). Only --skip is
-    # filtered here.
+    # filtered here; the applied skip is recorded in the JSON summary to leave a trace.
     profile_excl = PROFILES[profile]
     excluded = skip | profile_excl
     if skip:
         warns = [w for w in warns if w[1] not in skip]
 
+    fail = bool(errors or (fail_on_warning and warns) or (fail_incomplete and has_w18))
     summary = {"error_count": len(errors), "warn_count": len(warns),
-               "pass": not errors and not (a.strict and warns),
+               "pass": not fail,
                "incomplete": has_w18,
                "profile": profile,
                "skipped_codes": sorted(excluded),
@@ -2626,7 +2803,7 @@ def _lint_one(path, a):
                                      # (trust boundary)
 
     return {"errors": errors, "warns": warns, "ghost": ghost, "summary": summary,
-            "fail": bool(errors or (a.strict and warns)),
+            "fail": fail,
             "profile": profile, "profile_excl": profile_excl, "skip": skip,
             "cfg_path": cfg_path, "baseline_suppressed": baseline_suppressed,
             "baseline_path": baseline_path}
@@ -2640,7 +2817,11 @@ def _expand_scan_paths(patterns):
     out = []
     for pat in patterns:
         if os.path.isdir(pat):
-            for root, _dirs, files in os.walk(pat):
+            for root, dirs, files in os.walk(pat):
+                # os.walk's directory order is filesystem-dependent; sorting both lists
+                # makes aggregate output deterministic across machines (0.6.0, external
+                # review: matters for snapshot tests and CI diffs)
+                dirs.sort()
                 for fn in sorted(files):
                     if fn.lower().endswith(".pptx") and not fn.startswith("~$"):
                         out.append(os.path.join(root, fn))
@@ -2662,8 +2843,10 @@ def _expand_scan_paths(patterns):
 def scan_main(argv=None):
     """`archforge scan PATHS...`: lints multiple files, directories, and globs in one run
     (0.5.0, for CI/pre-commit use). Per-file judgment goes through the same path as single
-    mode (_lint_one), and the exit is 1 if even one fails. Zero matches is not a silent pass;
-    it exits 2 (prevents a CI footgun)."""
+    mode (_lint_one). Batch failure semantics (0.6.0, external review P0): a broken or
+    misconfigured file becomes a per-file "error" entry and the scan continues; it never
+    aborts the batch or swallows the aggregate report. Exit is 1 if any file fails or
+    errors. Zero matches is not a silent pass; it exits 2 (prevents a CI footgun)."""
     ap = argparse.ArgumentParser(prog="archforge scan", description=M("scan_desc"))
     ap.add_argument("paths", nargs="+", help=M("help_scan_paths"))
     _add_common_flags(ap)
@@ -2678,37 +2861,71 @@ def scan_main(argv=None):
         print(M("err_scan_none") % " ".join(a.paths), file=sys.stderr)
         return 2
 
-    results = []   # (path, res)
-    for path in files:
-        results.append((path, _lint_one(path, a)))
+    # A single CLI baseline applied across many decks is unsafe: fingerprints carry no
+    # file identity, so a finding accepted in deck A would suppress the same finding in
+    # deck B (0.6.0, external review P0). Per-deck baselines still work via each deck
+    # folder's config file.
+    if a.baseline and len(files) > 1:
+        print(M("err_scan_baseline"), file=sys.stderr)
+        return 2
 
-    failed = sum(1 for (_p, r) in results if r["fail"])
+    # A deck folder's config may set "lang"; without restoration it would leak into every
+    # later file and, because messages render lazily, into the whole aggregate report
+    # (0.6.0, external verification finding). The scan report renders in the language the
+    # scan was invoked with; per-deck config lang is a single-file-mode feature.
+    lang0 = get_lang()
+    results = []   # (path, res_dict_or_None, usage_error_message_or_None)
+    for path in files:
+        try:
+            res = _lint_one(path, a)
+            results.append((path, res, None))
+        except UsageError as e:
+            print(str(e), file=sys.stderr)
+            results.append((path, None, str(e)))
+        finally:
+            set_lang(lang0)
+
+    ok = [(p, r) for (p, r, _e) in results if r is not None]
+    errored = [(p, e) for (p, r, e) in results if r is None]
+    failed = sum(1 for (_p, r) in ok if r["fail"]) + len(errored)
 
     if a.sarif:
         import json
         sarif_doc = _reporters.build_sarif_multi(
-            [(p, r["errors"], r["warns"]) for (p, r) in results])
+            [(p, r["errors"], r["warns"]) for (p, r) in ok])
         with open(a.sarif, "w", encoding="utf-8", newline="\n") as f:
             json.dump(sarif_doc, f, ensure_ascii=False, indent=2)
 
     if a.json:
         import json
-        docs = [_reporters.build_json_doc(p, r["errors"], r["warns"], r["ghost"], r["summary"])
-                for (p, r) in results]
+        docs = []
+        for p, r, e in results:
+            if r is None:
+                docs.append({"file": p, "status": "error", "error": e})
+            else:
+                doc = _reporters.build_json_doc(p, r["errors"], r["warns"], r["ghost"],
+                                                r["summary"])
+                doc["status"] = "fail" if r["fail"] else "pass"
+                docs.append(doc)
         agg = {"schema_version": "1.0",
                "tool": {"name": "archforge", "version": _reporters._tool_version()},
                "lang": get_lang(),
                "scan": {"inputs": list(a.paths)},
                "files": docs,
                "summary": {"file_count": len(results), "failed_files": failed,
-                           "error_count": sum(len(r["errors"]) for (_p, r) in results),
-                           "warn_count": sum(len(r["warns"]) for (_p, r) in results),
+                           "error_files": len(errored),
+                           "error_count": sum(len(r["errors"]) for (_p, r) in ok),
+                           "warn_count": sum(len(r["warns"]) for (_p, r) in ok),
                            "pass": failed == 0,
-                           "incomplete": any(r["summary"]["incomplete"] for (_p, r) in results)}}
+                           "incomplete": any(r["summary"]["incomplete"] for (_p, r) in ok)}}
         print(json.dumps(agg, ensure_ascii=False, indent=2))
         return 1 if failed else 0
 
-    for p, r in results:
+    for p, r, e in results:
+        if r is None:
+            print(M("scan_file_error") % (p, e))
+            print()
+            continue
         for line in _reporters.render_text(p, r["errors"], r["warns"], r["ghost"],
                                            r["profile"], r["profile_excl"], r["skip"],
                                            config_path=r["cfg_path"],

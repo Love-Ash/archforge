@@ -7,32 +7,62 @@ branding:
   icon: 'check-square'
   color: 'orange'
 
+# Inputs reach the runner through env, never through shell interpolation, and the
+# default install is this action's own checked-out source, so pinning the action tag
+# pins the linter it runs (0.6.0, external review P0: `@v0.5.0` used to install
+# whatever PyPI's latest was, and inputs were expanded as shell words).
 inputs:
   files:
     description: >-
-      Files, directories, or glob patterns to lint (passed to `archforge scan`).
-      Example: "decks/" or "out/**/*.pptx".
+      Files, directories, or glob patterns to lint, one per line. Paths with spaces are
+      safe, and globs (including **) are expanded by `archforge scan` itself, not by the
+      shell.
     required: true
   profile:
     description: 'Rule profile: core (objective defects), full (plus AI-tell/style rules), editorial.'
     required: false
     default: 'core'
-  strict:
-    description: 'Set "true" to fail on WARNs and on incomplete checks (W18) too.'
+  allow-config:
+    description: >-
+      Set "true" to let deck-folder .archforge.json/.yml files adjust thresholds,
+      skips, and baselines. Off by default: in CI, a config file committed next to a
+      PR's deck could weaken the gate, so the action passes --no-config unless you
+      explicitly trust repository-owned configs.
     required: false
     default: 'false'
-  args:
-    description: 'Extra CLI arguments appended verbatim (e.g. "--skip W14 --lang en").'
+  fail-incomplete:
+    description: >-
+      Fail when part of a deck could not be checked (W18 / summary.incomplete). On by
+      default: a gate that silently passes half-checked decks is not a gate.
     required: false
-    default: ''
-  version:
-    description: 'archforge version to install (empty = latest release on PyPI).'
+    default: 'true'
+  fail-on-warning:
+    description: 'Fail on any WARN (promotes advisories to blockers).'
     required: false
-    default: ''
+    default: 'false'
+  strict:
+    description: 'Union of fail-on-warning, fail-incomplete, and E2 exemption lifting (compatibility alias).'
+    required: false
+    default: 'false'
   sarif:
     description: >-
       Path to write a SARIF 2.1.0 report. Upload it with
       github/codeql-action/upload-sarif to surface findings in code scanning.
+    required: false
+    default: ''
+  source:
+    description: >-
+      Where archforge is installed from. "action" (default) installs the exact source
+      checked out at this action's ref: pinning `uses: ...@vX.Y.Z` pins the linter.
+      "pypi" installs from PyPI instead (the `version` input, or latest).
+    required: false
+    default: 'action'
+  version:
+    description: 'PyPI version to install when source is "pypi" (empty = latest release).'
+    required: false
+    default: ''
+  extra-args:
+    description: 'Extra CLI arguments, one per line (passed as argv entries, never shell-parsed).'
     required: false
     default: ''
   python-version:
@@ -56,27 +86,30 @@ runs:
 
     - name: Install archforge
       shell: bash
+      env:
+        AF_SOURCE: ${{ inputs.source }}
+        AF_VERSION: ${{ inputs.version }}
       run: |
-        if [ -n "${{ inputs.version }}" ]; then
-          python3 -m pip install --disable-pip-version-check "archforge==${{ inputs.version }}"
+        set -euo pipefail
+        if [ "$AF_SOURCE" = "pypi" ]; then
+          if [ -n "$AF_VERSION" ]; then
+            python3 -m pip install --disable-pip-version-check "archforge==$AF_VERSION"
+          else
+            python3 -m pip install --disable-pip-version-check archforge
+          fi
         else
-          python3 -m pip install --disable-pip-version-check archforge
+          python3 -m pip install --disable-pip-version-check "$GITHUB_ACTION_PATH"
         fi
 
     - name: Lint decks
       shell: bash
-      run: |
-        set -o pipefail
-        CMD=(python3 -m archforge.lint scan ${{ inputs.files }} --profile "${{ inputs.profile }}")
-        if [ "${{ inputs.strict }}" = "true" ]; then
-          CMD+=(--strict)
-        fi
-        if [ -n "${{ inputs.sarif }}" ]; then
-          CMD+=(--sarif "${{ inputs.sarif }}")
-        fi
-        if [ -n "${{ inputs.args }}" ]; then
-          # shellcheck disable=SC2206
-          CMD+=(${{ inputs.args }})
-        fi
-        echo "+ ${CMD[*]}"
-        "${CMD[@]}"
+      env:
+        AF_FILES: ${{ inputs.files }}
+        AF_PROFILE: ${{ inputs.profile }}
+        AF_ALLOW_CONFIG: ${{ inputs.allow-config }}
+        AF_FAIL_INCOMPLETE: ${{ inputs.fail-incomplete }}
+        AF_FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}
+        AF_STRICT: ${{ inputs.strict }}
+        AF_SARIF: ${{ inputs.sarif }}
+        AF_EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: python3 "$GITHUB_ACTION_PATH/action_runner.py"
