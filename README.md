@@ -53,16 +53,27 @@ archforge skill --install DIR    # install anywhere
 ## Usage
 
 ```bash
-archforge deck.pptx                 # human-readable report, exit 1 on any ERROR
+archforge deck.pptx                 # objective defects only (core profile, the default)
+archforge deck.pptx --profile full  # + AI-tell / style rules (em dash, layout repetition, ...)
 archforge deck.pptx --json          # machine-readable JSON (agents / CI)
 archforge deck.pptx --strict        # WARNs also fail + numeric-dash exemptions off
 archforge deck.pptx --ghost         # per-page title list (horizontal-logic review)
 archforge deck.pptx --render pages/ # add on-image contrast check (W7) from p01.png-style renders
-archforge deck.pptx --profile core  # objective defects only (style/convention rules off)
 archforge deck.pptx --skip W14,W6   # suppress specific WARNs (recorded in JSON)
 archforge deck.pptx --lang en       # report language (default: ARCHFORGE_LANG, then OS locale)
+archforge deck.pptx --sarif out.sarif        # SARIF 2.1.0 (GitHub code scanning)
+archforge deck.pptx --write-baseline bl.json # adopt an existing deck as-is
+archforge deck.pptx --baseline bl.json       # report only new findings after that
 archforge deck.pptx --hard-min 5 --body-min 9 --small-min 7.5   # size gate thresholds
 archforge deck.pptx --w6-sim 0.95 --w6-cluster 5                # W6 repetition thresholds
+```
+
+Project defaults live in `.archforge.json` (or `.archforge.yml` with
+`pip install archforge[yaml]`) next to the deck or in the working directory; CLI flags
+override the config file.
+
+```json
+{ "profile": "full", "skip": ["W14"], "baseline": ".archforge-baseline.json" }
 ```
 
 JSON output:
@@ -116,10 +127,13 @@ WARNs are advisory:
 | `W17` | Text straddling an image ink edge |
 | `W18` | Some spans could not be checked (malformed input): results incomplete. Fails under `--strict` |
 
-Profiles separate objective defects from style policy: `core` keeps only the mechanical
-gates (E1/E3/E4, W1/W5/W7/W8, W15-W18); `editorial` drops W6/W14 for editorial and
-portfolio decks; `full` (default) runs everything. Profile choices are recorded in the
-JSON summary, so nothing is silently bypassed.
+Profiles separate objective defects from style policy, and since 0.4.0 the default is
+`core`: only the mechanical gates (E1/E3/E4, W1/W5/W7/W8, W15-W18) run unless you opt in.
+`full` adds the AI-tell and convention rules (E2 dashes, W6 repetition, W9-W14) and is the
+right mode for agent build-loops linting machine-generated decks; `editorial` drops W6/W14
+for editorial and portfolio decks. Excluded rules are not merely hidden, they are not
+executed, and every choice is recorded in the JSON summary, so nothing is silently
+bypassed.
 
 ## How it works
 
@@ -163,7 +177,7 @@ Designed for LLM-agent build-lint-fix loops:
 ```
 build deck.pptx
 loop:
-    result = archforge deck.pptx --json
+    result = archforge deck.pptx --profile full --json   # machine-made decks: AI-tell rules on
     if result.summary.error_count == 0 and not result.summary.incomplete: break
     fix listed defects, rebuild
 review WARNs against renders

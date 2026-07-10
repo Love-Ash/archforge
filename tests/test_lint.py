@@ -116,6 +116,13 @@ def png(d, name, size=(400, 300), opaque_box=None):
     return path
 
 
+def lint_full(*args, **kw):
+    """0.4.0에서 기본 프로파일이 core로 바뀌어, 스타일 규칙까지 전제하는 기존
+    픽스처들은 full을 명시한다(기본값 자체는 test_default_profile_core가 검증)."""
+    kw.setdefault("profile", "full")
+    return jl.lint(*args, **kw)
+
+
 def codes(items):
     return [c for (_si, c, _m, _d) in items]
 
@@ -175,7 +182,7 @@ def test_line_gates_positive(tmp_path):
     tb(s, 1, 1, 5, 0.5, "no size run", font="Wanted Sans", no_size=True)
     s = add_slide(p)   # p8: W8 좁은 프레임 소형 한글 6pt
     tb(s, 1, 1, 2, 0.4, "목업 안 작은 한글", font="Wanted Sans", size=6)
-    errors, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     ec = codes(errors)
     assert "E1" in ec and by_code(errors, "E1")[0][0] == 1
     assert "E2" in ec and by_code(errors, "E2")[0][0] == 2
@@ -197,7 +204,7 @@ def test_e1_nofont_empty_theme_slot(tmp_path):
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "폰트 미지정 한글", size=12)
-    errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, _w = lint_full(save(p, tmp_path, "fx.pptx"))
     assert any(c == "E1" for (_si, c, m, _d) in errors), errors
 
 
@@ -215,7 +222,7 @@ def test_e1_render_model_slots(tmp_path):
     tb(s, 1, 1, 5, 0.5, "원티드 산스 한글", font="Wanted Sans", size=12)
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "이에이 승리 한글", font="IBM Plex Mono", ea="Wanted Sans", size=12)
-    errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, _w = lint_full(save(p, tmp_path, "fx.pptx"))
     e1_pages = [si for (si, m, d) in by_code(errors, "E1")]
     assert 1 in e1_pages and 2 in e1_pages
     assert 3 not in e1_pages and 4 not in e1_pages
@@ -230,7 +237,7 @@ def test_e1_theme_ea_korean_suppresses_latin(tmp_path):
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "폰트 미지정 한글", size=12)
     path = patch_theme_ea(save(p, tmp_path, "fx.pptx"), "Malgun Gothic")
-    errors, _w = jl.lint(path)
+    errors, _w = lint_full(path)
     assert not by_code(errors, "E1"), errors
 
 
@@ -241,7 +248,7 @@ def test_e1_theme_ea_latin_only_flags(tmp_path):
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "폰트 미지정 한글", size=12)
     path = patch_theme_ea(save(p, tmp_path, "fx.pptx"), "Consolas")
-    errors, _w = jl.lint(path)
+    errors, _w = lint_full(path)
     assert any(c == "E1" and "Consolas" in d for (_si, c, m, d) in errors), errors
 
 
@@ -292,11 +299,11 @@ def test_e2_numeric_context(tmp_path):
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "안 됨", font="Wanted Sans", size=12)
     path = save(p, tmp_path, "fx.pptx")
-    errors, _w = jl.lint(path)
+    errors, _w = lint_full(path)
     e2_pages = [si for (si, m, d) in by_code(errors, "E2")]
     assert e2_pages == [3], errors
     # strict: 예외 해제, 세 페이지 전부 차단
-    errors_s, _w = jl.lint(path, strict=True)
+    errors_s, _w = lint_full(path, strict=True)
     assert sorted(si for (si, m, d) in by_code(errors_s, "E2")) == [1, 2, 3]
 
 
@@ -317,7 +324,7 @@ def test_e4_universal_measure_spc(tmp_path):
     tb(s, 1, 1, 5, 0.5, "자간 벌어진 한글", font="Wanted Sans", size=12, spc="1.5pt")
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "정상 자간 한글", font="Wanted Sans", size=12, spc="garbage")
-    errors, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     e4_pages = [si for (si, m, d) in by_code(errors, "E4")]
     assert e4_pages == [1], errors
 
@@ -347,7 +354,7 @@ def test_partial_salvage_on_bad_frame(tmp_path):
     r2.font.size = _Pt(12)
     s = add_slide(p)   # p2: 정상 E1 결함(페이지 간 생존도 함께 고정)
     tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
-    errors, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     e1_pages = [si for (si, m, d) in by_code(errors, "E1")]
     assert 1 in e1_pages, errors          # 같은 프레임 이웃 run의 위반 생존
     assert 2 in e1_pages, errors
@@ -365,7 +372,7 @@ def test_w18_geometry_decoupling(tmp_path):
     bodyPr.set("anchor", "bogusvalue")   # MSO_VERTICAL_ANCHOR 매핑 없는 값 -> tboxes 예외
     s.shapes.add_picture(png(tmp_path, "over.png"), Inches(12.8), Inches(2.0),
                          Inches(2.0), Inches(1.5))   # 우측 1.47in 넘침
-    errors, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert any("그림" in d for (_si, m, d) in by_code(warns, "W16")), warns
     assert by_code(warns, "W18"), warns
 
@@ -382,7 +389,7 @@ def test_w6_page_numbers_survive_token_failure(tmp_path, monkeypatch):
         tb(s, 1, 0.8, 8, 0.6, "Title block %d" % i, font="Wanted Sans", size=24)
         tb(s, 1, 2.0, 6, 2.5, "Body block", font="Wanted Sans", size=12)
         tb(s, 8, 2.0, 4, 2.5, "Side block", font="Wanted Sans", size=12)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     w6 = by_code(warns, "W6")
     assert w6, warns
     pages = [int(m) for m in re.findall(r"p(\d+)", w6[0][2])]
@@ -400,7 +407,7 @@ def test_e1_theme_token_resolution(tmp_path):
     box = tb(s, 1, 1, 5, 0.5, "토큰 한글", size=12)
     rPr = box.text_frame.paragraphs[0].runs[0]._r.get_or_add_rPr()
     rPr.append(rPr.makeelement(qn("a:latin"), {"typeface": "+mn-lt"}))
-    errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, _w = lint_full(save(p, tmp_path, "fx.pptx"))
     assert any("Calibri" in d for (_si, m, d) in by_code(errors, "E1")), errors
 
 
@@ -430,10 +437,10 @@ def test_e2_run_boundary_split(tmp_path):
     r1 = para.add_run(); r1.text = "말"; r1.font.size = Pt(14)
     r2 = para.add_run(); r2.text = EM_DASH + "이음"; r2.font.size = Pt(14)
     path = save(p, tmp_path, "fx.pptx")
-    errors, _w = jl.lint(path)
+    errors, _w = lint_full(path)
     e2_pages = [si for (si, m, d) in by_code(errors, "E2")]
     assert e2_pages == [2], errors
-    errors_s, _w = jl.lint(path, strict=True)   # strict는 분리 여부 무관 전부 차단
+    errors_s, _w = lint_full(path, strict=True)   # strict는 분리 여부 무관 전부 차단
     assert sorted(set(si for (si, m, d) in by_code(errors_s, "E2"))) == [1, 2]
 
 
@@ -460,7 +467,7 @@ def test_size_inheritance_placeholder_gates(tmp_path):
     s = p.slides.add_slide(lay)
     s.shapes.title.text_frame.text = "판독 불가 제목"
     s.placeholders[1].text_frame.text = "본문이 레이아웃 상속 크기로 해석되는지 보는 사십자 이상의 충분히 긴 문장입니다"
-    errors, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert not by_code(warns, "W5"), warns
     assert any("4.0pt" in m for (_si, m, _d) in by_code(errors, "E3")), errors       # 제목 4pt
     assert any("8.0pt" in m for (_si, m, _d) in by_code(warns, "W1")), warns          # 본문 8pt
@@ -492,7 +499,7 @@ def test_w5_when_chain_fully_absent(tmp_path):
     dts = pres_el.find(qn("p:defaultTextStyle"))
     assert dts is not None
     pres_el.remove(dts)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert by_code(warns, "W5"), warns
 
 
@@ -511,7 +518,7 @@ def test_table_cell_e1(tmp_path):
     r2 = ok.text_frame.paragraphs[0].runs[0]
     r2.font.name = "Wanted Sans"
     r2.font.size = Pt(12)
-    errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, _w = lint_full(save(p, tmp_path, "fx.pptx"))
     e1 = by_code(errors, "E1")
     assert len(e1) == 1 and "Consolas" in e1[0][2], errors
 
@@ -524,7 +531,7 @@ def test_w6_layout_clones(tmp_path):
         tb(s, 1, 0.8, 8, 0.6, "Title block %d" % i, font="Wanted Sans", size=24)
         tb(s, 1, 2.0, 6, 2.5, "Body block", font="Wanted Sans", size=12)
         tb(s, 8, 2.0, 4, 2.5, "Side block", font="Wanted Sans", size=12)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert "W6" in codes(warns)
 
 
@@ -537,10 +544,10 @@ def test_w6_tunables_suppress(tmp_path):
         tb(s, 1, 2.0, 6, 2.5, "Body block", font="Wanted Sans", size=12)
         tb(s, 8, 2.0, 4, 2.5, "Side block", font="Wanted Sans", size=12)
     path = save(p, tmp_path, "fx.pptx")
-    _e, warns = jl.lint(path, w6_min_cluster=10)
+    _e, warns = lint_full(path, w6_min_cluster=10)
     assert "W6" not in codes(warns)
     # 완전 클론은 코사인이 정확히 1.00이라 sim 임계는 1.0으로 줘야 배제된다(파라미터 관통 확인)
-    _e, warns = jl.lint(path, w6_sim=1.0)
+    _e, warns = lint_full(path, w6_sim=1.0)
     assert "W6" not in codes(warns)
 
 
@@ -556,7 +563,7 @@ def test_w7_low_contrast_needs_render(tmp_path):
     pages = os.path.join(str(tmp_path), "pages")
     os.makedirs(pages)
     Image.new("RGB", (1600, 900), (240, 240, 240)).save(os.path.join(pages, "p01.png"))
-    _e, warns = jl.lint(path, render_dir=pages)
+    _e, warns = lint_full(path, render_dir=pages)
     assert "W7" in codes(warns)
 
 
@@ -572,7 +579,7 @@ def test_render_on_textonly_deck_no_crash(tmp_path):
     os.makedirs(pages)
     from PIL import Image
     Image.new("RGB", (1600, 900), (240, 240, 240)).save(os.path.join(pages, "slide-1.png"))  # 규약과 다른 이름
-    errors, warns = jl.lint(save(p, tmp_path, "fx.pptx"), render_dir=pages)  # NameError 나면 실패
+    errors, warns = lint_full(save(p, tmp_path, "fx.pptx"), render_dir=pages)  # NameError 나면 실패
     assert isinstance(errors, list) and isinstance(warns, list)
 
 
@@ -583,7 +590,7 @@ def test_w9_accent_vbars(tmp_path):
         y = 1.5 + i * 1.1
         vconn(s, 5.0, y, y + 0.65, "E6A94E")
         tb(s, 5.2, y, 5.5, 0.6, "callout item %d body" % i, font="Wanted Sans", size=12)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert "W9" in codes(warns)
 
 
@@ -595,7 +602,7 @@ def test_w10_diagram_clone_marks(tmp_path):
         for i in range(9):
             rect(s, 2.5 + i * 0.8, 3.0, 0.18, 0.18, "5B6470")
         tb(s, 1, 0.8, 8, 0.6, "diagram page", font="Wanted Sans", size=20)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert "W10" in codes(warns)
 
 
@@ -605,7 +612,7 @@ def test_w11_ai_copy(tmp_path):
     tb(s, 1, 1, 10, 0.8, "오늘날 급변하는 시장 환경에서", font="Wanted Sans", size=24)
     s = add_slide(p)
     tb(s, 1, 1, 10, 0.8, "두 사업의 시너지 효과를 극대화", font="Wanted Sans", size=14)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     w11 = by_code(warns, "W11")
     assert any("오프닝" in m for (_si, m, _d) in w11)
     assert any("버즈워드" in m for (_si, m, _d) in w11)
@@ -620,7 +627,7 @@ def test_w12_footer_baseline(tmp_path):
         tb(s, 1, 1, 8, 0.6, "Content %d" % i, font="Wanted Sans", size=20)
         fy = 7.05 if i == 3 else 6.9
         tb(s, 1, fy, 5, 0.3, "footer text", font="Wanted Sans", size=8)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert "W12" in codes(warns)
 
 
@@ -634,7 +641,7 @@ def test_w13_native_effects(tmp_path):
         sh = spPr.makeelement(qn("a:outerShdw"), {"blurRad": "40000", "dist": "20000"})
         eff.append(sh)
         spPr.append(eff)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert "W13" in codes(warns)
 
 
@@ -646,7 +653,7 @@ def test_w14_nominal_titles_and_ghost(tmp_path):
         tb(s, 1, 0.8, 9, 0.8, t, font="Wanted Sans", size=26)
         tb(s, 1, 2.2, 10, 3, "본문 내용", font="Wanted Sans", size=12)
     ghost = []
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"), ghost=ghost)
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"), ghost=ghost)
     assert "W14" in codes(warns)
     assert len(ghost) == 6
 
@@ -659,7 +666,7 @@ def test_w14_numeric_claim_titles_pass(tmp_path):
         s = add_slide(p)
         tb(s, 1, 0.8, 9, 0.8, t, font="Wanted Sans", size=26)
         tb(s, 1, 2.2, 10, 3, "본문 내용", font="Wanted Sans", size=12)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert "W14" not in codes(warns), by_code(warns, "W14")
 
 
@@ -675,7 +682,7 @@ def test_w15_overlap_and_intentional_layers(tmp_path):
     s = add_slide(p)  # p3: 동일 텍스트 에코 = 의도
     tb(s, 2, 2, 4, 1, "떠난 뒤에야", font="Wanted Sans", size=30)
     tb(s, 2.05, 2.05, 4, 1, "떠난 뒤에야", font="Wanted Sans", size=30)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     w15 = by_code(warns, "W15")
     assert any(si == 1 for (si, m, d) in w15)
     assert not any(si == 2 for (si, m, d) in w15)
@@ -699,7 +706,7 @@ def test_w16_overflow_and_negatives(tmp_path):
     s.shapes.add_picture(png(tmp_path, "chart.png", opaque_box=(0.1, 0.1, 0.5, 0.5)),
                          Inches(9.0), Inches(4.0), Inches(5.0), Inches(3.6))
     tb(s, 1, 1, 6, 0.6, "음성 페이지 본문", font="Wanted Sans", size=14)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     w16 = by_code(warns, "W16")
     assert any(si == 1 for (si, m, d) in w16)
     assert any(si == 2 for (si, m, d) in w16)
@@ -719,7 +726,7 @@ def test_w17_straddle_and_negatives(tmp_path):
     s.shapes.add_picture(png(tmp_path, "p3.png", opaque_box=(0.0, 0.0, 0.45, 1.0)),
                          Inches(4.0), Inches(2.0), Inches(4.0), Inches(3.0))
     tb(s, 6.5, 3.0, 3.0, 0.4, "투명부 위 캡션 예시", font="Wanted Sans", size=14)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     w17 = by_code(warns, "W17")
     assert any(si == 1 for (si, m, d) in w17)
     assert not any(si == 2 for (si, m, d) in w17)
@@ -759,7 +766,7 @@ def test_geo_robustness_no_false_positives(tmp_path):
     s.shapes.add_picture(png(tmp_path, "photo.png"), Inches(4.0), Inches(0.5), Inches(6.0), Inches(6.5))
     rect(s, 6.0, 2.5, 4.0, 1.5, "FFFFFF")
     tb(s, 6.3, 3.0, 3.4, 0.4, "카드 위 캡션 문장", font="Wanted Sans", size=14)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     geo = [x for x in warns if x[1] in ("W15", "W16", "W17")]
     assert not geo, geo
 
@@ -792,7 +799,7 @@ def test_clean_deck_no_flags(tmp_path):
     tb(s, 1, 3.5, 5.5, 2.5, "Different grid here.", font="Wanted Sans", size=13)
     s = add_slide(p)
     tb(s, 4, 3.2, 6, 0.8, "Closing page", font="Wanted Sans", size=26)
-    errors, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert not errors and not warns, (codes(errors), codes(warns))
 
 
@@ -858,8 +865,8 @@ def test_cli_strict_gates(tmp_path):
     s = add_slide(p)
     tb(s, 1, 1, 6, 0.5, "FY2020" + EN_DASH + "2024 실적", font="Wanted Sans", size=14)
     ranged = save(p, tmp_path, "range.pptx")
-    assert run_cli([ranged]).returncode == 0
-    r = run_cli([ranged, "--strict", "--json"])
+    assert run_cli([ranged, "--profile", "full"]).returncode == 0
+    r = run_cli([ranged, "--strict", "--profile", "full", "--json"])
     doc = json.loads(r.stdout)
     assert r.returncode == 1
     assert any(e["code"] == "E2" for e in doc["errors"])
@@ -874,9 +881,9 @@ def test_cli_skip_codes(tmp_path):
         tb(s, 1, 0.8, 9, 0.8, t, font="Wanted Sans", size=26)
         tb(s, 1, 2.2, 10, 3, "본문 내용", font="Wanted Sans", size=12)
     path = save(p, tmp_path, "fx.pptx")
-    doc = json.loads(run_cli([path, "--json"]).stdout)
+    doc = json.loads(run_cli([path, "--json", "--profile", "full"]).stdout)
     assert any(w["code"] == "W14" for w in doc["warnings"])
-    doc = json.loads(run_cli([path, "--json", "--skip", "W14"]).stdout)
+    doc = json.loads(run_cli([path, "--json", "--profile", "full", "--skip", "W14"]).stdout)
     assert not any(w["code"] == "W14" for w in doc["warnings"])
 
 
@@ -911,7 +918,7 @@ def test_title_flood_regression(tmp_path):
     for i, txt in enumerate(("본문 첫 문장입니다", "본문 둘째 문장입니다", "표 안 텍스트 셋째")):
         tb(s, 1, 1 + i, 8, 0.5, txt, font="Wanted Sans", no_size=True)
     ghost = []
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"), ghost=ghost)
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"), ghost=ghost)
     assert ghost == [], ghost
     assert "W14" not in codes(warns)
 
@@ -923,7 +930,7 @@ def test_title_collection_keeps_placeholder_sizes(tmp_path):
     s.shapes.title.text_frame.text = "진짜 제목"
     s.placeholders[1].text_frame.text = "본문"
     ghost = []
-    jl.lint(save(p, tmp_path, "fx.pptx"), ghost=ghost)
+    lint_full(save(p, tmp_path, "fx.pptx"), ghost=ghost)
     assert any("진짜 제목" in t for _si, t in ghost), ghost
 
 
@@ -945,7 +952,7 @@ def test_script_layer_two_tier(tmp_path):
     tb(s, 1, 1, 5, 0.5, "大韓民國", font="맑은 고딕", size=12, spc=100)
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "フリーレン", font="IBM Plex Mono", size=12)
-    errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, _w = lint_full(save(p, tmp_path, "fx.pptx"))
     e1_pages = sorted(si for (si, m, d) in by_code(errors, "E1"))
     assert e1_pages == [2, 4, 6], errors
     e4_pages = sorted(si for (si, m, d) in by_code(errors, "E4"))
@@ -977,7 +984,7 @@ def test_title_own_lststyle_not_flooded(tmp_path):
     lst.append(lvl1)
     txBody.insert(1, lst)
     ghost = []
-    jl.lint(save(p, tmp_path, "fx.pptx"), ghost=ghost)
+    lint_full(save(p, tmp_path, "fx.pptx"), ghost=ghost)
     assert ghost == [], ghost
 
 
@@ -1046,7 +1053,7 @@ def test_e2_v2_range_forms(tmp_path):
     tb(s, 1, 1, 6, 0.5, "매출 5%" + EN_DASH + "10% 구간", font="Wanted Sans", size=14)
     s = add_slide(p)
     tb(s, 1, 1, 6, 0.5, "성장 " + EN_DASH + " 2024년에는 확대", font="Wanted Sans", size=14)
-    errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, _w = lint_full(save(p, tmp_path, "fx.pptx"))
     assert [si for (si, m, d) in by_code(errors, "E2")] == [2], errors
 
 
@@ -1058,7 +1065,7 @@ def test_skip_rejects_error_codes(tmp_path):
     path = save(p, tmp_path, "fx.pptx")
     r = run_cli([path, "--skip", "E1"])
     assert r.returncode == 2 and "WARN" in r.stderr
-    doc = json.loads(run_cli([path, "--json", "--skip", "W14"]).stdout)
+    doc = json.loads(run_cli([path, "--json", "--profile", "full", "--skip", "W14"]).stdout)
     assert doc["summary"]["skipped_codes"] == ["W14"]
     assert any(e["code"] == "E1" for e in doc["errors"])   # E1은 여전히 살아있음
 
@@ -1087,9 +1094,9 @@ def test_e1_master_lststyle_font_inheritance(tmp_path):
         body.text_frame.text = "마스터 상속 한글"
         return save(p, tmp_path, "fx_%s.pptx" % ("bad" if "Mono" in ea_font else "ok"))
 
-    errors, _w = jl.lint(build("IBM Plex Mono"))
+    errors, _w = lint_full(build("IBM Plex Mono"))
     assert any("IBM Plex Mono" in d for (_si, m, d) in by_code(errors, "E1")), errors
-    errors, _w = jl.lint(build("맑은 고딕"))
+    errors, _w = lint_full(build("맑은 고딕"))
     assert not by_code(errors, "E1"), errors
 
 
@@ -1101,7 +1108,7 @@ def test_e1_title_uses_major_font(tmp_path):
     s.placeholders[1].text_frame.text = "본문 한글"
     path = save(p, tmp_path, "fx.pptx")
     patch_theme_fonts(path, major_ea="Consolas", minor_ea="맑은 고딕")
-    errors, _w = jl.lint(path)
+    errors, _w = lint_full(path)
     e1 = by_code(errors, "E1")
     assert any("제목" in d for (_si, m, d) in e1), errors     # major=Consolas -> E1
     assert not any("본문" in d for (_si, m, d) in e1), errors  # minor=맑은 고딕 -> 통과
@@ -1118,7 +1125,7 @@ def test_vertical_and_complex_script_geometry_skip(tmp_path):
     s = add_slide(p)   # p2: 아랍어 텍스트 -> 기하 스킵 + W18
     tb(s, 11.0, 1.0, 4.0, 0.6, "مرحبا بالعالم",
        font="Arial", size=18)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     w16_text = [d for (_si, m, d) in by_code(warns, "W16") if "텍스트" in d]
     assert not w16_text, warns
     w18 = by_code(warns, "W18")
@@ -1158,8 +1165,8 @@ def test_profile_core_drops_style_rules(tmp_path):
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "차단", font="Wanted Sans", size=12)   # E2만
     path = save(p, tmp_path, "fx.pptx")
-    doc = json.loads(run_cli([path, "--json"]).stdout)
-    assert any(e["code"] == "E2" for e in doc["errors"])           # full(기본)은 차단
+    doc = json.loads(run_cli([path, "--json", "--profile", "full"]).stdout)
+    assert any(e["code"] == "E2" for e in doc["errors"])           # full 명시 시 차단(0.4.0: 기본은 core)
     doc = json.loads(run_cli([path, "--json", "--profile", "core"]).stdout)
     assert not doc["errors"] and doc["summary"]["pass"]
     assert doc["summary"]["profile"] == "core"
@@ -1204,7 +1211,7 @@ def test_e1_para_defrpr_inheritance(tmp_path):
     para = box.text_frame.paragraphs[0]
     add_para_ea(para, "맑은 고딕")
     r = para.add_run(); r.text = "문단 상속 한글"; r.font.size = Pt(14)
-    errors, _w = jl.lint(save(p, tmp_path, "a.pptx"))
+    errors, _w = lint_full(save(p, tmp_path, "a.pptx"))
     assert not by_code(errors, "E1"), errors
 
     # 케이스B: 미탐 검증(마스터 lstStyle 한글폰트 + 문단 Consolas)
@@ -1227,7 +1234,7 @@ def test_e1_para_defrpr_inheritance(tmp_path):
     para = body.text_frame.paragraphs[0]
     add_para_ea(para, "Consolas")
     r = para.add_run(); r.text = "문단이 이기는 한글"; r.font.size = Pt(14)
-    errors, _w = jl.lint(save(p, tmp_path, "b.pptx"))
+    errors, _w = lint_full(save(p, tmp_path, "b.pptx"))
     assert any("Consolas" in d for (_si, m, d) in by_code(errors, "E1")), errors
 
 
@@ -1256,7 +1263,7 @@ def test_geometry_uses_style_resolver(tmp_path):
     body.width, body.height = Inches(1.2), Inches(0.8)
     body.text_frame.word_wrap = False
     body.text_frame.text = "Revenue ABC"   # 12pt면 0.95in(통과), 40pt면 3.2in(넘침)
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert any("텍스트" in d for (_si, m, d) in by_code(warns, "W16")), warns
 
 
@@ -1270,7 +1277,7 @@ def test_table_cell_geometry(tmp_path):
     r = cell.text_frame.paragraphs[0].runs[0]
     r.font.size = Pt(24)
     cell.text_frame.word_wrap = False
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert any("텍스트" in d for (_si, m, d) in by_code(warns, "W16")), warns
 
 
@@ -1303,17 +1310,17 @@ def test_profile_is_engine_policy(tmp_path, monkeypatch):
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "차단", font="Wanted Sans", size=12)
     path = save(p, tmp_path, "fx.pptx")
-    errors, _w = jl.lint(path, profile="core")
+    errors, _w = lint_full(path, profile="core")
     assert not by_code(errors, "E2"), errors            # 라이브러리 API에서 프로파일 동작
-    errors, _w = jl.lint(path)
+    errors, _w = lint_full(path)
     assert by_code(errors, "E2"), errors                # 기본 full은 차단 유지
 
     def boom(*a, **kw):
         raise RuntimeError("w9 fail")
     monkeypatch.setattr(jl, "accent_vbars_check", boom)
-    _e, warns = jl.lint(path, profile="core")           # W9 제외 -> 실행 안 함 -> W18 누출 없음
+    _e, warns = lint_full(path, profile="core")           # W9 제외 -> 실행 안 함 -> W18 누출 없음
     assert not any("w9" in d for (_si, m, d) in by_code(warns, "W18")), warns
-    _e, warns = jl.lint(path)                           # full -> 실행 -> 가드 -> W18
+    _e, warns = lint_full(path)                           # full -> 실행 -> 가드 -> W18
     assert any("w9" in d for (_si, m, d) in by_code(warns, "W18")), warns
 
 
@@ -1333,7 +1340,7 @@ def test_e4_hanja_message(tmp_path):
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "大韓民國", font="맑은 고딕", size=12, spc=100)
-    errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
+    errors, _w = lint_full(save(p, tmp_path, "fx.pptx"))
     e4 = by_code(errors, "E4")
     assert e4 and "한자" in e4[0][1], e4
 
@@ -1343,7 +1350,7 @@ def test_w8_extended_hangul(tmp_path):
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 2, 0.4, chr(0xFFA1) * 6, font="Wanted Sans", size=6)   # 반각 ㄱ x6
-    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert by_code(warns, "W8"), warns
 
 
@@ -1360,7 +1367,7 @@ def test_ghost_prefers_title_placeholder(tmp_path):
     r.text = "300억"
     r.font.size = Pt(60)
     ghost = []
-    jl.lint(save(p, tmp_path, "fx.pptx"), ghost=ghost)
+    lint_full(save(p, tmp_path, "fx.pptx"), ghost=ghost)
     assert ghost and "시장 규모" in ghost[0][1], ghost
 
 
@@ -1383,9 +1390,113 @@ def test_w6_detail_english(tmp_path):
         tb(s, 1, 0.8, 8, 0.6, "Title block %d" % i, font="Wanted Sans", size=24)
         tb(s, 1, 2.0, 6, 2.5, "Body block", font="Wanted Sans", size=12)
         tb(s, 8, 2.0, 4, 2.5, "Side block", font="Wanted Sans", size=12)
-    doc = json.loads(run_cli([save(p, tmp_path, "fx.pptx"), "--json"], lang="en").stdout)
+    doc = json.loads(run_cli([save(p, tmp_path, "fx.pptx"), "--json", "--profile", "full"], lang="en").stdout)
     w6 = [w for w in doc["warnings"] if w["code"] == "W6"]
     assert w6 and w6[0]["detail"].startswith("e.g."), w6
+
+
+# ---------------------------------------------------------------- 0.4.0 구조 개편
+def test_default_profile_is_core(tmp_path):
+    """0.4.0 파괴적 변경: 무옵션 기본은 core(객관 결함만). 스타일 규칙 E2는 옵트인,
+    객관 결함 E1은 기본에서도 차단."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "정상 통과", font="Wanted Sans", size=12)
+    dash_deck = save(p, tmp_path, "dash.pptx")
+    errors, _w = jl.lint(dash_deck)              # 라이브러리 기본값
+    assert not by_code(errors, "E2"), errors
+    r = run_cli([dash_deck, "--json"])           # CLI 기본값
+    doc = json.loads(r.stdout)
+    assert r.returncode == 0 and doc["summary"]["profile"] == "core"
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    assert run_cli([save(p, tmp_path, "e1.pptx")]).returncode == 1   # 객관 결함은 차단 유지
+
+
+def test_config_file(tmp_path):
+    """.archforge.json: 덱 폴더에서 자동 발견, CLI 플래그가 설정을 이긴다."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "차단", font="Wanted Sans", size=12)
+    deck = save(p, tmp_path, "fx.pptx")
+    with open(os.path.join(str(tmp_path), ".archforge.json"), "w", encoding="utf-8") as f:
+        json.dump({"profile": "full"}, f)
+    doc = json.loads(run_cli([deck, "--json"]).stdout)
+    assert any(e["code"] == "E2" for e in doc["errors"])    # 설정의 full 적용
+    doc = json.loads(run_cli([deck, "--json", "--profile", "core"]).stdout)
+    assert not doc["errors"]                                 # CLI가 설정을 이김
+    # 알 수 없는 키는 경고 후 무시(치명 아님)
+    with open(os.path.join(str(tmp_path), ".archforge.json"), "w", encoding="utf-8") as f:
+        json.dump({"profile": "full", "no_such_key": 1}, f)
+    r = run_cli([deck, "--json"])
+    assert r.returncode == 1 and "no_such_key" in r.stderr
+
+
+def test_baseline_flow(tmp_path):
+    """baseline: 기존 위반 수용 후 신규만 보고. 억제 수는 summary에 기록."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    deck = save(p, tmp_path, "fx.pptx")
+    bl = os.path.join(str(tmp_path), "baseline.json")
+    r = run_cli([deck, "--write-baseline", bl])
+    assert r.returncode == 0 and os.path.exists(bl)
+    doc = json.loads(run_cli([deck, "--json", "--baseline", bl]).stdout)
+    assert doc["summary"]["pass"] and doc["summary"]["baseline_suppressed"] == 1
+    # 신규 결함 추가 -> 신규만 보고
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "새 결함 한글", font="Consolas", size=12)
+    deck2 = save(p, tmp_path, "fx2.pptx")
+    doc = json.loads(run_cli([deck2, "--json", "--baseline", bl]).stdout)
+    assert doc["summary"]["error_count"] == 1
+    assert "Consolas" in doc["errors"][0]["detail"]
+
+
+def test_sarif_output(tmp_path):
+    """SARIF 2.1.0 최소 계약: version·rules·results·ruleId·level."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    deck = save(p, tmp_path, "fx.pptx")
+    out = os.path.join(str(tmp_path), "out.sarif")
+    run_cli([deck, "--json", "--sarif", out])
+    with open(out, encoding="utf-8") as f:
+        doc = json.load(f)
+    assert doc["version"] == "2.1.0"
+    run0 = doc["runs"][0]
+    assert run0["tool"]["driver"]["name"] == "archforge"
+    res = run0["results"]
+    assert res and res[0]["ruleId"] == "E1" and res[0]["level"] == "error"
+    assert any(r["id"] == "E1" for r in run0["tool"]["driver"]["rules"])
+
+
+def test_finding_location_payload(tmp_path):
+    """구조화 위치(3차 리뷰): shape_id·bbox·part·paragraph·run이 JSON location에 실린다."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    doc = json.loads(run_cli([save(p, tmp_path, "fx.pptx"), "--json"]).stdout)
+    e1 = [e for e in doc["errors"] if e["code"] == "E1"][0]
+    loc = e1["location"]
+    assert isinstance(loc["shape_id"], int)
+    assert loc["part"].endswith("slide1.xml")
+    assert len(loc["bbox"]) == 4 and abs(loc["bbox"][0] - 1.0) < 0.01
+    assert loc["paragraph"] == 0 and loc["run"] == 0
+
+
+def test_finding_tuple_compat_and_lazy_message():
+    """Finding의 4튜플 하위호환과 로케일 중립성(같은 finding을 두 언어로 렌더)."""
+    from archforge.findings import Finding
+    f = Finding(3, "E2", "e2", (), "cp=U+2014")
+    page, code, msg, detail = f
+    assert (page, code, detail) == (3, "E2", "cp=U+2014") and f[1] == "E2" and len(f) == 4
+    jmsg.set_lang("ko")
+    ko = f.message
+    jmsg.set_lang("en")
+    en = f.message
+    jmsg.set_lang("ko")
+    assert ko != en and "Dash" in en
 
 
 # ---------------------------------------------------------------- skill packaging

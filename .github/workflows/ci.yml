@@ -25,6 +25,8 @@ jobs:
         run: python -m pip install -e ".[test]"
       - name: Test
         run: python -m pytest tests -q
+      - name: Benchmark expectations
+        run: python benchmarks/run_benchmarks.py
 
   package:
     # 배포 회귀 게이트: wheel에 스킬팩이 실제로 동봉되고, 설치본에서 skill 서브커맨드와

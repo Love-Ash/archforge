@@ -70,8 +70,16 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 try:
     from .messages import M, set_lang, get_lang
+    from .findings import Finding, shape_loc
+    from .rules import RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE
+    from . import config as _config
+    from . import reporters as _reporters
 except ImportError:   # 파일 단독 실행(python lint.py) 폴백
     from messages import M, set_lang, get_lang
+    from findings import Finding, shape_loc
+    from rules import RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE
+    import config as _config
+    import reporters as _reporters
 
 EMU_PER_IN = 914400
 NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
@@ -118,22 +126,8 @@ LONG_DASHES = {chr(c) for c in (0x2012, 0x2013, 0x2014, 0x2015, 0x2212, 0xFF0D, 
 _EN_DASH = chr(0x2013)
 _MINUS = chr(0x2212)
 
-# 규칙 프리셋(0.3.0): 객관 결함과 스타일·관행 정책의 분리(외부 전략 리뷰 반영).
-# --skip과 달리 이름 붙은 공개 정책이라 E2 같은 스타일성 ERROR 제외를 허용하되,
-# 선택이 JSON summary(profile, skipped_codes)에 남는다. 0.3.1부터 엔진 실행 정책이다
-# (제외 규칙은 아예 실행하지 않음: 3차 리뷰 P0).
-PROFILES = {
-    "full": frozenset(),                                    # 기본: 전부(현행 동작)
-    "core": frozenset({"E2", "W6", "W9", "W10", "W11",      # 객관 결함만: 스타일·관행 규칙 제외
-                       "W12", "W13", "W14"}),
-    "editorial": frozenset({"W6", "W14"}),                   # 에디토리얼·포트폴리오 덱
-}
-
-# 등록된 전체 코드(--skip 오타 검증용: 존재하지 않는 W코드가 조용히 통과하면
-# CI에서 W15를 끄려다 W51로 오타 내도 정상처럼 보인다: 3차 리뷰 P1)
-ALL_CODES = frozenset(
-    {"E1", "E2", "E3", "E4"} |
-    {"W%d" % i for i in (1, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18)})
+# 규칙 메타데이터·프로파일·전체 코드 목록은 rules.py 레지스트리로 이관(0.4.0 구조 분해).
+# PROFILES/ALL_CODES는 위 import로 이 모듈에서 계속 노출된다(하위호환).
 
 
 def is_cjk(ch):
@@ -282,24 +276,24 @@ def e1_violation(text: str, fonts: Dict[str, str], thm_ea: Optional[str],
         theme_ea = (thm_ea or "").strip()
         cand = fonts.get("ea") or theme_ea or fonts.get("latin")
         if cand and is_latin_only_font(cand, script):
-            return (M("e1_cjk_other"), "font=%r text=%r" % (cand, text[:24]))
+            return ("e1_cjk_other", "font=%r text=%r" % (cand, text[:24]))
         return None
     run_ea = fonts.get("ea")
     if run_ea:
         if is_latin_only_font(run_ea):
-            return (M("e1_run_ea"), "font=%r text=%r" % (run_ea, text[:24]))
+            return ("e1_run_ea", "font=%r text=%r" % (run_ea, text[:24]))
         return None
     theme_ea = (thm_ea or "").strip()
     if theme_ea:
         if is_latin_only_font(theme_ea):
-            return (M("e1_theme_ea"), "theme=%r text=%r" % (thm_ea, text[:24]))
+            return ("e1_theme_ea", "theme=%r text=%r" % (thm_ea, text[:24]))
         return None   # 비어있지 않은 한글 테마 ea가 렌더를 받는다(run latin은 못 이김: 실측)
     run_latin = fonts.get("latin")
     if run_latin:
         if is_latin_only_font(run_latin):
-            return (M("e1_latin_empty_theme"), "font=%r text=%r" % (run_latin, text[:24]))
+            return ("e1_latin_empty_theme", "font=%r text=%r" % (run_latin, text[:24]))
         return None   # 빈 테마 ea에선 한글 지원 latin이 실제로 한글을 그린다(실측)
-    return (M("e1_nofont"), "text=%r" % text[:24])
+    return ("e1_nofont", "text=%r" % text[:24])
 
 
 def _is_digit_ch(c: str) -> bool:
@@ -596,8 +590,8 @@ def accent_vbars_check(slide, si, sw, sh, warns):
                 rt += 1
                 break
     if rt >= len(bars) - 1:
-        warns.append((si, "W9", M("w9") % len(bars),
-                      "x=%.2fin hue=%s" % (min(xs), next(iter(hues)))))
+        warns.append(Finding(si, "W9", "w9", (len(bars),),
+                         "x=%.2fin hue=%s" % (min(xs), next(iter(hues)))))
 
 
 def _fill_tokens(slide, sw, sh):
@@ -982,13 +976,11 @@ def copy_cliche_check(page_texts, warns):
         low = blob.lower()
         hits = sorted({b for b in BUZZWORDS if b.lower() in low})
         if hits:
-            warns.append((si, "W11", M("w11_buzz") % len(hits),
-                          ", ".join(hits[:5])))
+            warns.append(Finding(si, "W11", "w11_buzz", (len(hits),), ", ".join(hits[:5])))
         if si <= 3:
             op = sorted({o for o in STALE_OPENINGS if o.lower() in low})
             if op:
-                warns.append((si, "W11", M("w11_open"),
-                              ", ".join(op[:5])))
+                warns.append(Finding(si, "W11", "w11_open", (), ", ".join(op[:5])))
 
 
 def footer_top(slide, sw, sh):
@@ -1030,8 +1022,7 @@ def footer_check(foot_tops, warns):
     off = [(si, t) for si, t in tops if 0.03 < abs(t - base) <= 0.25]
     if off:
         ex = " ".join("p%d=%.2f" % (si, t) for si, t in off[:4])
-        warns.append((0, "W12", M("w12") % (base, len(off)),
-                      ex))
+        warns.append(Finding(0, "W12", "w12", (base, len(off)), ex))
 
 
 _EFFECT_TAGS = tuple(NS + t for t in ("outerShdw", "innerShdw", "glow", "reflection"))
@@ -1069,8 +1060,8 @@ def effects_check_deck(per_page, warns):
     total = sum(n for _si, n, _k in hits)
     kinds = sorted(set().union(*[k for _si, _n, k in hits]))
     pages = ",".join("p%d" % si for si, _n, _k in hits[:6])
-    warns.append((0, "W13", M("w13") % (total, len(hits)),
-                  "%s | %s" % (pages, ",".join(kinds))))
+    warns.append(Finding(0, "W13", "w13", (total, len(hits)),
+                         "%s | %s" % (pages, ",".join(kinds))))
 
 
 # W15 텍스트 겹침: 생성 덱에서 가장 흔한 결함 축(수정 라운드마다 요소가 포개진다)인데
@@ -1296,14 +1287,15 @@ def text_overlap_check(slide, si, warns, boxes: Optional[List[GlyphBox]] = None)
             if amin > 0 and area > 0.45 * amin:
                 hits.append((area / amin, a.rep, b.rep))
     for frac, ta, tb in sorted(hits, reverse=True)[:2]:
-        warns.append((si, "W15", M("w15") % (frac * 100),
-                      "%r ~ %r" % (ta, tb)))
+        warns.append(Finding(si, "W15", "w15", (frac * 100,), "%r ~ %r" % (ta, tb)))
 
 
-def _pic_boxes(slide, sw_in, sh_in):
+def _pic_boxes(slide, sw_in, sh_in, skipped=None):
     """비배경 그림의 실효 잉크 bbox(in)와 z순서. 반환 [(x0,y0,x1,y1,z)].
     슬라이드의 70%+를 덮는 풀블리드·mesh 배경은 제외. 투명 PNG(matplotlib 차트 등)는
     프레임 bbox가 잉크보다 훨씬 커서 오탐 원천 → 알파 불투명 bbox로 트림.
+    성능 예산(0.4.0, 3차 리뷰): 25MP 초과 이미지는 알파 트림을 생략하고 프레임 bbox를
+    그대로 쓰며 skipped 카운터로 공개한다(대량 배치에서 디코드 폭주 방지).
     적대 검증 실측 반영(2026-07-03): P모드+tRNS는 RGBA 변환 후 트림, srcRect 크롭은
     보이는 소스 창으로 좁혀 매핑, flipH/flipV는 창 안에서 미러, 회전 그림은 축정렬
     확장 bbox를 쓰되 잉크 트림은 무효라 건너뜀, 그룹 자식은 절대좌표 변환."""
@@ -1322,6 +1314,10 @@ def _pic_boxes(slide, sw_in, sh_in):
                 from PIL import Image
                 import io as _io
                 im = Image.open(_io.BytesIO(sp.image.blob))
+                if im.width * im.height > 25_000_000:
+                    if skipped is not None:
+                        skipped["image_decode_budget"] += 1
+                    raise RuntimeError("image decode budget")   # 아래 except가 프레임 bbox 유지
                 if im.mode == "P" and "transparency" in im.info:
                     im = im.convert("RGBA")
                 if "A" in im.getbands():
@@ -1375,7 +1371,7 @@ def overflow_check(slide, si, sw_in, sh_in, warns,
         if over > TOL_S:
             hits.append((over, M("w16_pic") % (px1 - px0, py1 - py0)))
     for over, what in sorted(hits, reverse=True)[:2]:
-        warns.append((si, "W16", M("w16") % over, what))
+        warns.append(Finding(si, "W16", "w16", (over,), what))
 
 
 def _occluder_boxes(slide, sw_in, sh_in):
@@ -1446,8 +1442,7 @@ def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
             if not carded:
                 hits.append((frac, rep))
     for frac, rep in sorted(hits, reverse=True)[:2]:
-        warns.append((si, "W17", M("w17") % (frac * 100),
-                      "%r" % rep))
+        warns.append(Finding(si, "W17", "w17", (frac * 100,), "%r" % rep))
 
 
 def action_title_check(titles, warns):
@@ -1473,8 +1468,7 @@ def action_title_check(titles, warns):
     nominal = [(si, t) for si, t, c in entries if not c]
     if len(nominal) >= 3 and len(nominal) * 2 >= len(entries):
         ex = " ".join("p%d'%s'" % (si, t[:14]) for si, t in nominal[:4])
-        warns.append((0, "W14", M("w14")
-                      % (len(nominal), len(entries)), ex))
+        warns.append(Finding(0, "W14", "w14", (len(nominal), len(entries)), ex))
     return entries
 
 
@@ -1646,17 +1640,21 @@ def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors
         hi = max(L_bg, L_txt); lo = min(L_bg, L_txt)
         ratio = (hi + 0.05) / (lo + 0.05)
         if ratio < 2.5:
-            warns.append((si, "W7", M("w7") % ratio,
-                          "text=%r" % sp.text_frame.text[:20]))
+            warns.append(Finding(si, "W7", "w7", (ratio,),
+                                 "text=%r" % sp.text_frame.text[:20], loc=shape_loc(sp)))
             return "ok"
     return "ok"   # 이 페이지의 렌더 PNG를 찾아 검사했음(W7 발화 여부와 무관)
 
 
 def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost=None,
-         strict=False, w6_sim=0.90, w6_min_cluster=3, profile="full"):
+         strict=False, w6_sim=0.90, w6_min_cluster=3, profile=DEFAULT_PROFILE):
     """profile은 실행 정책이다(3차 외부 리뷰 P0: CLI 사후 필터가 아니라 엔진 단계 적용).
     제외된 규칙은 아예 실행하지 않으므로 O(S^2) 비교 비용도 안 들고, 제외 규칙의 내부
-    실패가 W18로 누출되지도 않으며, 라이브러리 호출에서도 프로파일을 쓸 수 있다."""
+    실패가 W18로 누출되지도 않으며, 라이브러리 호출에서도 프로파일을 쓸 수 있다.
+
+    0.4.0 파괴적 변경: 기본 프로파일이 core(객관 결함만)다. AI 티·하우스 스타일 규칙
+    (E2, W6, W9~W14)까지 원하면 profile="full"을 명시한다. 첫 사용자 무옵션 실행이
+    정상 문장부호로 exit 1을 받는 첫인상 문제의 교정(외부 전략 리뷰, 사용자 확정)."""
     prs = Presentation(path)
     sw, sh = prs.slide_width, prs.slide_height
     errors, warns = [], []
@@ -1696,6 +1694,10 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
         except Exception:
             pass
         skipped = Counter()   # W18: 검사 불능 구간 집계(조용한 저하를 JSON에 표면화)
+        try:
+            slide_part = str(slide.part.partname)   # finding location의 part 필드용
+        except Exception:
+            slide_part = None
         # sig와 toks는 각자 가드: 한 try에 묶으면 sig 성공 후 toks 실패 시 except의
         # 재append로 sigs가 밀려 W6 페이지 번호가 어긋난다(적대 패널 실측 재현).
         # 프로파일에서 제외된 규칙의 수집·검사는 아예 실행하지 않는다(3차 리뷰 P0).
@@ -1749,7 +1751,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             skipped["glyph_boxes"] += 1
             print("W15/W16/W17 glyph boxes skipped p%02d: %s" % (si, e), file=sys.stderr)
         try:
-            pboxes = _pic_boxes(slide, sw_in, sh_in)
+            pboxes = _pic_boxes(slide, sw_in, sh_in, skipped=skipped)
         except Exception as e:
             pboxes = None
             skipped["pic_boxes"] += 1
@@ -1790,7 +1792,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                 skipped["frame"] += 1
                 print("E1-E4 skipped p%02d frame: %s" % (si, e), file=sys.stderr)
                 continue
-            for para in paragraphs:
+            for pi, para in enumerate(paragraphs):
                 try:
                     runs = list(para.runs)
                     run_offs = []
@@ -1844,7 +1846,8 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                             eff_thm_ea = (thm_fonts or {}).get("mj-ea" if frame_fam == "title" else "mn-ea")
                             v = e1_violation(t, fonts, eff_thm_ea, script)
                             if v is not None:
-                                errors.append((si, "E1", v[0], v[1]))
+                                errors.append(Finding(si, "E1", v[0], (), v[1],
+                                                      loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
 
                         # E2: 긴 대시류. 문맥은 문단 전체(ptext)에서 보고 보고는 이 run 구간만:
                         # run 경계로 쪼개진 '2020'/'-2021' 범위 오탐 방지(적대 패널 확정)
@@ -1852,8 +1855,9 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                             dash_violations(ptext, strict=strict,
                                             span=(run_offs[ri], run_offs[ri] + len(t)))
                         if bad:
-                            errors.append((si, "E2", M("e2"),
-                                           "cp=%s text=%r" % (",".join("U+%04X" % ord(c) for c in sorted(set(bad))), t[:24])))
+                            errors.append(Finding(si, "E2", "e2", (),
+                                                  "cp=%s text=%r" % (",".join("U+%04X" % ord(c) for c in sorted(set(bad))), t[:24]),
+                                                  loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
 
                         # E3 / W1 / W5: 실효 폰트 크기(run → 문단 → placeholder 상속 체인, autofit 반영).
                         # size_src는 제목 수집 자격 판정용: defaultTextStyle 폴백(18pt)은 게이트엔
@@ -1885,21 +1889,21 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                                     cur[1].append(t)
                             if eff < hard_min:
                                 note = "" if scale == 1.0 else M("e3_note") % (base_pt, scale)
-                                errors.append((si, "E3", M("e3")
-                                               % (eff, hard_min, note), "text=%r" % t[:24]))
+                                errors.append(Finding(si, "E3", "e3", (eff, hard_min, note), "text=%r" % t[:24],
+                                                      loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
                             elif eff < body_min and fw_in > 4.0 and len(ptext) >= 40:
-                                warns.append((si, "W1", M("w1")
-                                              % (eff, body_min),
-                                              "w=%.1fin len=%d text=%r" % (fw_in, len(ptext), ptext[:24])))
+                                warns.append(Finding(si, "W1", "w1", (eff, body_min),
+                                                     "w=%.1fin len=%d text=%r" % (fw_in, len(ptext), ptext[:24]),
+                                                     loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
                             elif eff < small_min and has_cjk(t) and fw_in <= 4.0:
                                 # 좁은 프레임(<=4in)만: 넓은 프레임의 소형 한글은 목업·카드 내부가 아니라
                                 # 캡션·주석일 여지가 커 메시지(목업 추정)와 어긋난다(공개 위생 감사 반영).
-                                warns.append((si, "W8", M("w8")
-                                              % (eff, small_min),
-                                              "w=%.1fin text=%r" % (fw_in, t[:24])))
+                                warns.append(Finding(si, "W8", "w8", (eff, small_min),
+                                                     "w=%.1fin text=%r" % (fw_in, t[:24]),
+                                                     loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
                         else:
-                            warns.append((si, "W5", M("w5"),
-                                          "text=%r" % t[:24]))
+                            warns.append(Finding(si, "W5", "w5", (), "text=%r" % t[:24],
+                                                 loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
 
                         # E4: 연속 한글·한자 2자 이상 + 유의미 양수 트래킹. 가나가 섞인 런은
                         # 일본어라 제외(가나 자간 벌리기는 정상 디자인 관행). 한자 전용 런은
@@ -1908,8 +1912,8 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                                 sum(1 for c in t if is_hangul(c) or is_hanja(c)) >= 2:
                             tr = run_track(run)
                             if tr is not None and tr > 50:
-                                errors.append((si, "E4", M("e4") % tr,
-                                               "text=%r" % t[:24]))
+                                errors.append(Finding(si, "E4", "e4", (tr,), "text=%r" % t[:24],
+                                                      loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
                     except Exception as e:
                         skipped["run"] += 1
                         print("E1-E4 skipped p%02d run: %s" % (si, e), file=sys.stderr)
@@ -1919,8 +1923,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
         # (적대 패널 확정 2026-07-10). --strict에선 exit 1로 승격된다.
         if skipped:
             det = ", ".join("%s=%d" % (k, v) for k, v in sorted(skipped.items()))
-            warns.append((si, "W18", M("w18_page"),
-                          det))
+            warns.append(Finding(si, "W18", "w18_page", (), det))
 
     # 규약(p01.png) 매치가 0인데 다른 이름의 png가 있으면 파일명 규약을 안내.
     # 불완전성 자체는 페이지 단위 w7_no_render 카운터가 W18/incomplete로 표면화한다(0.3.1).
@@ -1937,6 +1940,10 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
     try:
         content = [] if "W6" in excl else \
             [(i + 1, sig) for i, (sig, n) in enumerate(sigs) if n >= 3]
+        if len(content) > 200:
+            # 성능 예산(0.4.0): O(S^2) 쌍 비교 상한. 잘림은 공개한다.
+            deck_skipped["w6_capped"] += 1
+            content = content[:200]
         if len(content) >= w6_min_cluster + 1:
             adj = {p: [] for p, _ in content}
             for a in range(len(content)):
@@ -1948,8 +1955,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             worst_p, worst = max(adj.items(), key=lambda kv: len(kv[1]))
             if len(worst) >= w6_min_cluster:
                 ex = " ".join("p%d~p%d(%.2f)" % (worst_p, b, s) for b, s in sorted(worst, key=lambda x: -x[1])[:4])
-                warns.append((0, "W6", M("w6") % (len(worst) + 1),
-                              M("w6_detail") % ex))
+                warns.append(Finding(0, "W6", "w6", (len(worst) + 1,), M("w6_detail") % ex))
     except Exception as e:
         deck_skipped["w6"] += 1
         print("W6 skipped: %s" % e, file=sys.stderr)
@@ -1978,6 +1984,9 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
     try:
         cadj = {} if "W10" in excl else {p: [] for p in toks}
         nums_t = sorted(cadj)
+        if len(nums_t) > 200:
+            deck_skipped["w10_capped"] += 1
+            nums_t = nums_t[:200]
         for ia in range(len(nums_t)):
             for ib in range(ia + 1, len(nums_t)):
                 pa, pb = nums_t[ia], nums_t[ib]
@@ -1987,8 +1996,8 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             cw, cwl = max(cadj.items(), key=lambda kv: len(kv[1]))
             if len(cwl) >= 1:
                 grp = sorted({cw, *cwl})
-                warns.append((0, "W10", M("w10") % len(grp),
-                              M("w10_detail") % ",".join("p%d" % p for p in grp)))
+                warns.append(Finding(0, "W10", "w10", (len(grp),),
+                                     M("w10_detail") % ",".join("p%d" % p for p in grp)))
     except Exception as e:
         deck_skipped["w10"] += 1
         print("W10 skipped: %s" % e, file=sys.stderr)
@@ -1998,8 +2007,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
     # (2차 외부 재점검 확정: W18 부분 구현의 교정).
     if deck_skipped:
         det = ", ".join("%s=%d" % (k, v) for k, v in sorted(deck_skipped.items()))
-        warns.append((0, "W18", M("w18_deck"),
-                      det))
+        warns.append(Finding(0, "W18", "w18_deck", (), det))
 
     return errors, warns
 
@@ -2072,38 +2080,94 @@ def main():
         sys.exit(skill_main(rest[1:]))
     ap = argparse.ArgumentParser(prog="archforge", description=M("prog_desc"))
     ap.add_argument("pptx")
-    ap.add_argument("--hard-min", type=float, default=5.0, help=M("help_hard_min"))
-    ap.add_argument("--body-min", type=float, default=9.0, help=M("help_body_min"))
+    ap.add_argument("--hard-min", type=float, default=None, help=M("help_hard_min"))
+    ap.add_argument("--body-min", type=float, default=None, help=M("help_body_min"))
     ap.add_argument("--strict", action="store_true", help=M("help_strict"))
-    ap.add_argument("--small-min", type=float, default=7.5, help=M("help_small_min"))
+    ap.add_argument("--small-min", type=float, default=None, help=M("help_small_min"))
     ap.add_argument("--render", default=None, help=M("help_render"))
     ap.add_argument("--ghost", action="store_true", help=M("help_ghost"))
     ap.add_argument("--json", action="store_true", help=M("help_json"))
-    ap.add_argument("--skip", default="", metavar="CODES", help=M("help_skip"))
-    ap.add_argument("--profile", default="full", choices=sorted(PROFILES), help=M("help_profile"))
+    ap.add_argument("--skip", default=None, metavar="CODES", help=M("help_skip"))
+    ap.add_argument("--profile", default=None, choices=sorted(PROFILES), help=M("help_profile"))
     ap.add_argument("--lang", default=None, choices=("ko", "en"), help=M("help_lang"))
-    ap.add_argument("--w6-sim", type=float, default=0.90, help=M("help_w6_sim"))
-    ap.add_argument("--w6-cluster", type=int, default=3, help=M("help_w6_cluster"))
+    ap.add_argument("--w6-sim", type=float, default=None, help=M("help_w6_sim"))
+    ap.add_argument("--w6-cluster", type=int, default=None, help=M("help_w6_cluster"))
+    ap.add_argument("--config", default=None, metavar="PATH", help=M("help_config"))
+    ap.add_argument("--sarif", default=None, metavar="PATH", help=M("help_sarif"))
+    ap.add_argument("--baseline", default=None, metavar="PATH", help=M("help_baseline"))
+    ap.add_argument("--write-baseline", default=None, metavar="PATH", help=M("help_write_baseline"))
     a = ap.parse_args(argv)
 
     if not os.path.exists(a.pptx):
         print(M("err_notfound") % a.pptx, file=sys.stderr)
         sys.exit(2)
 
+    # 설정 파일(.archforge.json/.yml): CLI 플래그가 항상 이긴다(0.4.0)
+    cfg = {}
+    cfg_path = _config.find_config(a.pptx, a.config)
+    if a.config and cfg_path is None:
+        print(M("err_config") % a.config, file=sys.stderr)
+        sys.exit(2)
+    if cfg_path:
+        try:
+            cfg, cfg_warns = _config.load_config(cfg_path)
+            for wmsg in cfg_warns:
+                print("archforge: %s (%s)" % (wmsg, cfg_path), file=sys.stderr)
+        except Exception as e:
+            print(M("err_config") % ("%s (%s)" % (cfg_path, e)), file=sys.stderr)
+            sys.exit(2)
+
+    def pick(cli_val, cfg_key, default):
+        if cli_val is not None:
+            return cli_val
+        return cfg.get(cfg_key, default)
+
+    hard_min = float(pick(a.hard_min, "hard_min", 5.0))
+    body_min = float(pick(a.body_min, "body_min", 9.0))
+    small_min = float(pick(a.small_min, "small_min", 7.5))
+    w6_sim = float(pick(a.w6_sim, "w6_sim", 0.90))
+    w6_cluster = int(pick(a.w6_cluster, "w6_cluster", 3))
+    profile = pick(a.profile, "profile", DEFAULT_PROFILE)
+    if profile not in PROFILES:
+        print(M("err_config") % ("profile=%r" % profile), file=sys.stderr)
+        sys.exit(2)
+    lang_final = pick(a.lang, "lang", None)
+    if lang_final:
+        set_lang(lang_final)
+    baseline_path = pick(a.baseline, "baseline", None)
+    skip_raw = pick(a.skip, "skip", "")
+    if isinstance(skip_raw, list):
+        skip_raw = ",".join(str(c) for c in skip_raw)
+
     ghost = [] if (a.ghost or a.json) else None
     try:
-        errors, warns = lint(a.pptx, a.hard_min, a.body_min, a.small_min, render_dir=a.render,
-                             ghost=ghost, strict=a.strict, w6_sim=a.w6_sim,
-                             w6_min_cluster=a.w6_cluster, profile=a.profile)
+        errors, warns = lint(a.pptx, hard_min, body_min, small_min, render_dir=a.render,
+                             ghost=ghost, strict=a.strict, w6_sim=w6_sim,
+                             w6_min_cluster=w6_cluster, profile=profile)
     except Exception as e:
         print(M("err_open") % (a.pptx, type(e).__name__), file=sys.stderr)
         sys.exit(2)
 
-    if a.lang:
-        set_lang(a.lang)   # 프리스캔과 동일 값이지만 argparse 검증을 거친 최종 확정
+    # baseline 기록 모드: 현재 위반(불완전성 신호 W18 제외)을 지문으로 저장하고 종료
+    if a.write_baseline:
+        n = _config.write_baseline(a.write_baseline,
+                                   [f for f in list(errors) + list(warns) if f.code != "W18"])
+        print(M("baseline_written") % (n, a.write_baseline))
+        sys.exit(0)
+
     # 검사 불완전 여부는 필터 전에 확정: W18을 --skip해도 기계 판독 신호는 남는다
     has_w18 = any(w[1] == "W18" for w in warns)
-    skip = {c.strip().upper() for c in a.skip.split(",") if c.strip()}
+    baseline_suppressed = 0
+    if baseline_path:
+        try:
+            known = _config.load_baseline(baseline_path)
+        except Exception as e:
+            print(M("err_config") % ("baseline %s (%s)" % (baseline_path, e)), file=sys.stderr)
+            sys.exit(2)
+        errors, s1 = _config.apply_baseline(errors, known)
+        warns, s2 = _config.apply_baseline(warns, known)
+        baseline_suppressed = s1 + s2
+    skip = {c.strip().upper() for c in skip_raw.split(",") if c.strip()}
     # --skip은 WARN 전용: E코드까지 조용히 삼키면 배포 차단 게이트가 흔적 없이 꺼지는
     # 풋건이 된다(2차 외부 재점검 확정). 적용된 skip은 JSON summary에 기록해 흔적을 남긴다.
     bad_skip = sorted(c for c in skip if not c.startswith("W"))
@@ -2120,52 +2184,32 @@ def main():
         print(M("err_skip_w18"), file=sys.stderr)
         sys.exit(2)
     # 프로파일 제외는 엔진 단계에서 이미 실행되지 않았다(0.3.1). 여기선 --skip만 필터.
-    profile_excl = PROFILES[a.profile]
+    profile_excl = PROFILES[profile]
     excluded = skip | profile_excl
     if skip:
         warns = [w for w in warns if w[1] not in skip]
 
+    summary = {"error_count": len(errors), "warn_count": len(warns),
+               "pass": not errors and not (a.strict and warns),
+               "incomplete": has_w18,
+               "profile": profile,
+               "skipped_codes": sorted(excluded),
+               "baseline_suppressed": baseline_suppressed}
+
+    if a.sarif:
+        import json
+        sarif_doc = _reporters.build_sarif(a.pptx, errors, warns)
+        with open(a.sarif, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(sarif_doc, f, ensure_ascii=False, indent=2)
+
     if a.json:
         import json
-        try:
-            from importlib.metadata import version as _pkg_version
-            tool_ver = _pkg_version("archforge")
-        except Exception:
-            tool_ver = "unknown"
-        doc = {
-            "schema_version": "1.0",
-            "tool": {"name": "archforge", "version": tool_ver},
-            "target_renderer": "powerpoint-windows",
-            "file": a.pptx,
-            "lang": get_lang(),
-            "errors": [{"page": si, "code": c, "message": m, "detail": d} for si, c, m, d in errors],
-            "warnings": [{"page": si, "code": c, "message": m, "detail": d} for si, c, m, d in warns],
-            "ghost": [{"page": si, "title": t} for si, t in (ghost or [])],
-            "summary": {"error_count": len(errors), "warn_count": len(warns),
-                        "pass": not errors and not (a.strict and warns),
-                        "incomplete": has_w18,
-                        "profile": a.profile,
-                        "skipped_codes": sorted(excluded)},
-        }
+        doc = _reporters.build_json_doc(a.pptx, errors, warns, ghost, summary)
         print(json.dumps(doc, ensure_ascii=False, indent=2))
         sys.exit(1 if (errors or (a.strict and warns)) else 0)
 
-    print("=== ARCHFORGE LINT: %s ===" % a.pptx)
-    if ghost:
-        print(M("ghost_header"))
-        for si, txt in ghost:
-            print("  p%02d  %s" % (si, txt[:60]))
-    if not errors and not warns:
-        print("clean: ERROR 0, WARN 0")
-    for si, code, msg, detail in errors:
-        print("  ERROR p%02d [%s] %s | %s" % (si, code, msg, detail))
-    for si, code, msg, detail in warns:
-        print("  WARN  p%02d [%s] %s | %s" % (si, code, msg, detail))
-    if a.profile != "full":
-        print(M("profile_applied") % (a.profile, ",".join(sorted(profile_excl))))
-    if skip:
-        print(M("skip_applied") % ",".join(sorted(skip)))
-    print("--- ERROR %d, WARN %d ---" % (len(errors), len(warns)))
+    for line in _reporters.render_text(a.pptx, errors, warns, ghost, profile, profile_excl, skip):
+        print(line)
 
     if errors or (a.strict and warns):
         sys.exit(1)

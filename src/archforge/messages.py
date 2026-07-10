@@ -224,6 +224,30 @@ MESSAGES = {
         "en": "install the skill to DIR/archforge-pptx-lint/SKILL.md (default DIR=./.claude/skills)",
     },
     "help_skill_path": {"ko": "동봉 SKILL.md 의 패키지 내 경로만 출력", "en": "print only the in-package path of the bundled SKILL.md"},
+    "help_config": {
+        "ko": "설정 파일 경로(기본: 덱 폴더/현재 폴더의 .archforge.json|.yml). CLI 플래그가 설정을 이김",
+        "en": "config file path (default: .archforge.json|.yml in the deck dir or cwd). CLI flags override config",
+    },
+    "help_sarif": {
+        "ko": "SARIF 2.1.0 결과를 이 경로에 기록(GitHub code scanning 연동)",
+        "en": "write SARIF 2.1.0 results to this path (GitHub code scanning)",
+    },
+    "help_baseline": {
+        "ko": "baseline 파일의 기존 위반을 억제하고 신규만 보고(W18 제외, 억제 수는 summary에 기록)",
+        "en": "suppress findings recorded in this baseline file and report only new ones (W18 exempt; count recorded in summary)",
+    },
+    "help_write_baseline": {
+        "ko": "현재 위반을 baseline 파일로 기록하고 종료(기존 덱을 있는 그대로 수용하는 도입 경로)",
+        "en": "record current findings to a baseline file and exit (adoption path for existing decks)",
+    },
+    "err_config": {
+        "ko": "archforge: 설정을 읽을 수 없습니다: %s",
+        "en": "archforge: cannot read config: %s",
+    },
+    "baseline_written": {
+        "ko": "archforge: baseline 기록 완료(%d건) -> %s",
+        "en": "archforge: baseline written (%d finding(s)) -> %s",
+    },
 }
 
 

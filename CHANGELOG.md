@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.4.0 (2026-07-10)
+
+3차 외부 리뷰의 구조 개편 로드맵과 기본 프로파일 결정(사용자 확정: 스타 극대화 우선)을
+반영한 릴리스입니다.
+
+### 파괴적 변경
+
+- 기본 프로파일이 full에서 core로 바뀌었습니다. 무옵션 실행은 객관 결함만
+  (E1/E3/E4, W1/W5/W7/W8, W15~W18) 검사하고, AI 티·하우스 스타일 규칙(E2 대시,
+  W6 반복, W9~W14)은 `--profile full` 옵트인입니다. 첫 사용자가 정상 문장부호로
+  exit 1을 받던 첫인상 문제의 교정. 기계 생성 덱을 검사하는 에이전트 루프는 full을
+  명시하세요(SKILL.md의 기본 명령이 그렇게 바뀌었습니다).
+
+### 구조 개편
+
+- Finding 모델(findings.py): 검사 엔진은 로케일 중립 finding(코드+메시지 id+인자)만
+  만들고 언어는 리포터 단계에서 결정. 기존 4튜플 언패킹·인덱싱 하위호환 유지.
+  finding에 구조화 위치(location: shape_id·shape_name·bbox·part·paragraph·run)가
+  실려 에이전트가 detail 문자열 재파싱 없이 수정 대상을 특정할 수 있습니다.
+- 규칙 레지스트리(rules.py)와 리포터(reporters.py: text/json/sarif) 분리.
+- 설정 파일: 덱 폴더/작업 폴더의 .archforge.json(PyYAML 설치 시 .yml). CLI가 설정을
+  이기고, 알 수 없는 키는 경고 후 무시.
+- baseline: `--write-baseline`으로 기존 덱의 위반을 수용하고 이후 신규 위반만 보고
+  (W18은 대상 외, 억제 수는 summary.baseline_suppressed에 기록).
+- SARIF 2.1.0 출력(`--sarif PATH`): GitHub code scanning 연동.
+- 성능 예산: 25MP 초과 이미지는 알파 트림 생략(공개), W6/W10 쌍 비교 200장 상한(공개).
+- python-pptx 상한(<2): 내부 API 의존을 검증 안 된 메이저 업그레이드로부터 보호.
+- benchmarks/: 결함 매트릭스에서 픽스처를 생성해 규칙별 precision/recall을 재현
+  가능하게 채점하는 공개 하네스(CI 게이트 겸용). 생성기 커버리지는 python-pptx부터.
+
+테스트 76개에서 82개로.
+
 ## 0.3.1 (2026-07-10)
 
 0.3.0에 대한 3차 외부 심층 리뷰의 P0 5건과 P1 7건을 전량 반영한 정합성 릴리스입니다.

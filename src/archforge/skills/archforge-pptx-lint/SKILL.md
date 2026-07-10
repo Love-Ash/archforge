@@ -24,14 +24,16 @@ Run it EVERY time, not just when something looks wrong:
 ```
 pip install archforge            # from PyPI
 pip install -e <repo-path>       # or from the repo, for development
-archforge deck.pptx              # human-readable report, exit 1 if any ERROR
-archforge deck.pptx --json       # machine-readable (recommended for agents)
+archforge deck.pptx --profile full --json   # THE agent command: machine-made decks
+                                            # need the AI-tell rules (default is core)
+archforge deck.pptx              # objective defects only (core, the 0.4.0 default)
 archforge deck.pptx --strict     # WARNs also fail + numeric-dash exemptions off
 archforge deck.pptx --ghost      # per-page title list (horizontal-logic review)
 archforge deck.pptx --render pages/   # + on-image contrast check (W7); needs p01.png/p02.png-named PNGs
 archforge deck.pptx --skip W14,W6     # suppress specific WARNs (WARN-only; recorded in JSON)
-archforge deck.pptx --profile core    # objective defects only / editorial: W6+W14 off
 archforge deck.pptx --lang en         # report language (codes are language-independent)
+archforge deck.pptx --sarif out.sarif # SARIF 2.1.0 for GitHub code scanning
+archforge deck.pptx --write-baseline bl.json / --baseline bl.json   # adopt existing decks
 archforge deck.pptx --w6-sim 0.95 --w6-cluster 5   # loosen W6 for template-driven houses
 archforge deck.pptx --hard-min 5 --body-min 9 --small-min 7.5   # size gate thresholds (pt)
 archforge skill --install        # install this skill pack into ./.claude/skills
@@ -101,7 +103,7 @@ says so. Most are approximation-based, calibrated against rendered output
 ```
 build deck.pptx
 loop:
-    result = archforge deck.pptx --json
+    result = archforge deck.pptx --profile full --json   # full: machine-made decks
     if result.summary.error_count == 0 and not result.summary.incomplete: break
     fix the listed defects (smallest page number first);
     if incomplete, fix the malformed spans W18 points at
