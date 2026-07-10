@@ -36,10 +36,10 @@ ALL_CODES = frozenset(RULES)
 # Finding messages are parameterized templates; a rule TITLE must not carry format
 # placeholders like %.1fpt (0.6.0, external review). English by SARIF convention.
 TITLES = {
-    "E1": "Hangul rendered by a Latin-only font (silent fallback)",
+    "E1": "Text set in a font lacking its script's glyphs (silent fallback)",
     "E2": "Dash-family character used as punctuation",
     "E3": "Unreadable effective font size",
-    "E4": "Positive tracking on Hangul/Hanja",
+    "E4": "Positive tracking on Hangul text",
     "W1": "Body-class text below the recommended floor",
     "W5": "No font size anywhere in the inheritance chain",
     "W6": "Layout skeleton repeated across pages",

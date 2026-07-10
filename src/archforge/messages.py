@@ -303,6 +303,54 @@ MESSAGES = {
         "ko": "E2 숫자 맥락 예외(범위·음수) 해제. E2가 실행되는 프로파일(full)에서만 의미",
         "en": "lift E2's numeric-context exemptions (ranges, minus). Only meaningful in profiles that run E2 (full)",
     },
+    "help_allow_empty_pattern": {
+        "ko": "매치 0건인 입력 패턴을 허용(기본은 exit 2: 오타·빌드 실패가 다른 패턴 뒤에 숨는 것 방지)",
+        "en": "allow an input pattern that matched nothing (default exits 2 so a typo cannot hide behind another pattern)",
+    },
+    "err_scan_pattern_empty": {
+        "ko": "archforge: 다음 입력이 아무 .pptx도 매치하지 못했습니다(--allow-empty-pattern으로 허용 가능): %s",
+        "en": "archforge: these inputs matched no .pptx (use --allow-empty-pattern to permit): %s",
+    },
+    "rules_desc": {
+        "ko": "규칙 한 줄 요약 목록(코드·심각도·카테고리·프로파일)",
+        "en": "one-line summary of every rule (code, severity, category, profiles)",
+    },
+    "explain_desc": {
+        "ko": "규칙 하나의 의미·발화 조건·수정법 설명",
+        "en": "what one rule means, when it fires, and how to fix it",
+    },
+    # ---- per-code fix guidance (explain subcommand + docs/rules generation)
+    "fix_e1": {
+        "ko": "한글 run의 a:ea에 한글 폰트를 명시하세요. font.name(a:latin)만으로는 테마 ea가 비어있을 때만 통합니다",
+        "en": "Set a CJK-capable font on the run's a:ea slot. font.name (a:latin) alone only works when the theme ea slot is empty",
+    },
+    "fix_e2": {
+        "ko": "산문 대시는 콜론·쉼표·괄호·줄바꿈으로 바꾸세요. 숫자 범위와 음수는 기본 통과합니다",
+        "en": "Replace prose dashes with a colon, comma, parentheses, or a line break. Numeric ranges and minus signs pass by default",
+    },
+    "fix_e3": {
+        "ko": "숫자만 키우지 말고 재설계하세요: 항목을 줄이고 대표 요소 하나를 키우는 쪽이 맞습니다",
+        "en": "Redesign instead of bumping the number: fewer items, one representative element bigger",
+    },
+    "fix_e4": {
+        "ko": "한글 run의 자간(spc)을 0으로. 트래킹은 ASCII 전용 라벨에만 쓰세요",
+        "en": "Set tracking (spc) to 0 on Hangul runs; track ASCII-only labels only",
+    },
+    "fix_w1": {"ko": "출처·캡션이면 무시, 본문이면 9pt 이상으로", "en": "Ignore for sources/captions; raise to 9pt+ for body text"},
+    "fix_w5": {"ko": "게이트가 측정할 수 있게 크기를 명시하세요", "en": "Set sizes explicitly so the gates can measure"},
+    "fix_w6": {"ko": "페이지마다 그리드를 다르게. 의도된 템플릿 시스템이면 --w6-sim/--w6-cluster 조정 또는 --skip W6", "en": "Vary the grid per page; for an intentional template system tune --w6-sim/--w6-cluster or --skip W6"},
+    "fix_w7": {"ko": "스크림을 깔거나 이미지 쪽 밝기를 조정하세요", "en": "Add a scrim or darken/lighten the image side"},
+    "fix_w8": {"ko": "목업 안 라벨은 밖의 콜아웃으로 빼세요", "en": "Move labels out of the mockup into callouts"},
+    "fix_w9": {"ko": "구조는 괘선·여백·활자로, 색 세로바 대신 점 하나로", "en": "Structure with rules/whitespace/type; use a dot instead of colored bars"},
+    "fix_w10": {"ko": "재탕인지 의도된 반복인지 눈으로 확정 후 재설계", "en": "Confirm by eye whether it is reuse or intent, then redesign"},
+    "fix_w11": {"ko": "덱의 자기 목소리로 카피를 다시 쓰세요", "en": "Rewrite the copy in the deck's own voice"},
+    "fix_w12": {"ko": "푸터를 한 baseline에 정렬하세요", "en": "Align footers to one baseline"},
+    "fix_w13": {"ko": "네이티브 그림자·글로·3D를 제거하세요(올드 티)", "en": "Remove native shadow/glow/3D effects; they read dated"},
+    "fix_w14": {"ko": "액션 타이틀로 다시 쓰세요(--ghost 목록이 이야기로 읽혀야). 에디토리얼 덱은 --skip W14", "en": "Rewrite as action titles (the --ghost list should read as a story). Editorial decks: --skip W14"},
+    "fix_w15": {"ko": "렌더에서 확인 후 한쪽을 이동·축소하세요", "en": "Check the render, then move or shrink one frame"},
+    "fix_w16": {"ko": "내용을 캔버스 안으로. 장식 도형 블리드는 자동 제외됩니다", "en": "Pull content inside the canvas; decorative shape bleed is auto-excluded"},
+    "fix_w17": {"ko": "캡션을 이미지 위나 밖으로 완전히 옮기세요", "en": "Move the caption fully on or off the image"},
+    "fix_w18": {"ko": "검사 못 한 구간이 있습니다. stderr에서 원인을 보고 원본을 고친 뒤 재린트하세요. CI는 --fail-incomplete 권장", "en": "Part of the deck went unchecked; see stderr for why, fix the malformed source, re-lint. Use --fail-incomplete in CI"},
     "subcmd_conflict": {
         "ko": "archforge: 참고: 현재 폴더에 %r 파일이 있지만 서브커맨드를 실행합니다. 그 파일을 린트하려면 `archforge ./%s`",
         "en": "archforge: note: a file named %r exists here, but the subcommand runs. To lint that file use `archforge ./%s`",

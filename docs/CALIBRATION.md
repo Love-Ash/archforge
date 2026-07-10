@@ -65,9 +65,9 @@ template's defaultTextStyle carries +mn-lt/+mn-ea tokens, which is consistent ev
 fact that the effective latin of a fontless textbox resolves to Calibri, matching probe s3's
 COM font properties.
 
-Derived priority: run `a:ea` > lstStyle inheritance chain > non-empty theme `a:ea` (major/minor
-by family) > run `a:latin` (only when theme ea is an empty slot) > OS fallback (Malgun). Two
-implications:
+Derived priority: run `a:ea` > paragraph `pPr/defRPr` > lstStyle inheritance chain >
+non-empty theme `a:ea` (major/minor by family) > run `a:latin` (only when theme ea is an
+empty slot) > OS fallback (Malgun). Two implications:
 
 1. A deck that assigns a Hangul font via python-pptx's `run.font.name` (which records only
    a:latin) actually renders in that font under the default template (empty theme ea). This is
@@ -253,6 +253,36 @@ Resolved in 0.6.0 (external review of 0.5.0, locked in as regression fixtures):
 - A zip preflight bounds entry count, total uncompressed size, and per-entry
   compression ratio before python-pptx parses the package, and non-budget image decode
   failures now surface through W18 (`image_decode`) instead of being swallowed.
+
+Resolved in 0.6.1 (external review of 0.6.0):
+
+- E4 requires actual Hangul in the run: tracking on Hanja-only runs is legitimate
+  Chinese typography, and flagging it as a universal ERROR contradicted the "other
+  scripts are never falsely flagged" promise. Hanja still counts toward the
+  consecutive requirement when mixed with Hangul.
+- The complex-script screen for geometry now reads all a:t descendants (field text
+  included), closing a bypass where field-only RTL text was measured with the
+  Latin/CJK width model without any W18.
+- An explicit run color the decoder cannot resolve (hslClr, scrgbClr, sysClr, prstClr,
+  transforms) stops color resolution and abstains into W18 instead of falling through
+  to an inherited color (a white-hslClr-over-dark false positive was reproduced).
+- Per-input zero-match detection in scan, strict boolean/enum validation in the
+  GitHub Action, the active failure policy recorded in `summary.policy`, geometry
+  locations carrying paragraph/field, config rejecting bool thresholds and fractional
+  w6_cluster, and W6/W10-style per-rule doc pages generated from the registry.
+
+## Renderer coverage matrix
+
+Honest state of what has actually been measured, per renderer:
+
+| Capability | PowerPoint Windows | PowerPoint Mac | PowerPoint Web | LibreOffice |
+|---|---|---|---|---|
+| E1 font resolution | measured (COM probes 1-7) | unknown | unknown | known to differ |
+| E3 autofit effective size | measured | unknown | unknown | known to differ |
+| W15-W17 geometry | approximate, render-calibrated | approximate | approximate | approximate |
+| W7 contrast | render-dependent (user-supplied renders) | same | same | same |
+
+Extending a column means running the probe decks there, not guessing (ADR 003).
 
 Remaining limitations:
 

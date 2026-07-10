@@ -1,6 +1,6 @@
 ---
 name: archforge-pptx-lint
-description: Use when building, editing, or reviewing .pptx files - run the archforge linter on the built file before delivery, read its gate codes, fix defects, and re-lint until clean. Catches silent font fallback (deep CJK coverage), tracking damage, unreadable sizes, text collisions, off-canvas bleed, and AI-generated deck tells that are invisible in code review.
+description: Use when building, editing, or reviewing .pptx files - run the archforge linter on the built file before delivery, read its gate codes, fix defects, and re-lint until clean. Catches silent font fallback (Hangul-deep, CJK-aware), tracking damage, unreadable sizes, text collisions, off-canvas bleed, and AI-generated deck tells that are invisible in code review.
 ---
 
 # Archforge: PPTX quality gate for agents
@@ -25,7 +25,7 @@ Run it EVERY time, not just when something looks wrong:
 ```
 pip install archforge            # from PyPI
 pip install -e <repo-path>       # or from the repo, for development
-archforge deck.pptx --profile full --json   # THE agent command: machine-made decks
+archforge deck.pptx --profile full --fail-incomplete --json   # THE agent command
                                             # need the AI-tell rules (default is core)
 archforge deck.pptx              # objective defects only (core, the 0.4.0 default)
 archforge deck.pptx --fail-incomplete   # incomplete checks (W18) fail: use this in CI
@@ -90,10 +90,10 @@ ERROR = ship-blockers. Fix, rebuild, re-lint. Never deliver with ERROR > 0.
 
 | Code | Meaning | Fix |
 |------|---------|-----|
-| E1 | The font that will actually render Hangul text is Latin-only (no Hangul glyphs), so Hangul silently falls back to Malgun. Effective font follows the measured PowerPoint model: run `a:ea` > lstStyle inheritance chain (shape > layout ph > master ph > master txStyles > defaultTextStyle) > theme ea (majorFont for title placeholders, minorFont otherwise; non-empty theme ea beats run `a:latin`) > run `a:latin` only when the theme ea slot is empty > OS fallback. Hangul-scoped: kana/hanzi-only runs are never judged with Hangul coverage knowledge | Give Korean runs a CJK-capable font. Setting only `font.name` (= `a:latin`) with a Korean font works when the theme ea slot is empty, but setting `a:ea` explicitly is the robust fix. Keep mono/Latin display fonts for ASCII-only labels |
+| E1 | The font that will actually render Hangul text is Latin-only (no Hangul glyphs), so Hangul silently falls back to Malgun. Effective font follows the measured PowerPoint model: run `a:ea` > paragraph `pPr/defRPr` > lstStyle inheritance chain (shape > layout ph > master ph > master txStyles > defaultTextStyle) > theme ea (majorFont for title placeholders, minorFont otherwise; non-empty theme ea beats run `a:latin`) > run `a:latin` only when the theme ea slot is empty > OS fallback. Hangul-scoped: kana/hanzi-only runs are never judged with Hangul coverage knowledge | Give Korean runs a CJK-capable font. Setting only `font.name` (= `a:latin`) with a Korean font works when the theme ea slot is empty, but setting `a:ea` explicitly is the robust fix. Keep mono/Latin display fonts for ASCII-only labels |
 | E2 | A dash-family character used as sentence punctuation: em dash U+2014, en dash U+2013, figure dash U+2012, horizontal bar U+2015, 2/3-em dashes U+2E3A/U+2E3B, math minus U+2212, fullwidth hyphen U+FF0D, box-drawing line U+2500. Range-function en dashes pass by default: both neighbor tokens numeric-ish (2020, Q1, 5%, FY24; spaces allowed), or one numeric-ish neighbor with the dash attached. Spaced one-sided dashes (the AI parenthetical pattern) and word-to-word joins are blocked. Minus before a digit passes. Context is the full paragraph, so ranges split across runs don't false-positive | For prose dashes, use a colon, comma, parentheses, or line break. Ranges and negative numbers are fine by default; under `--strict`, use `~` for ranges and ASCII hyphen for minus |
 | E3 | Effective font size below 5pt (autofit scale, paragraph AND placeholder/layout/master/defaultTextStyle inheritance included): unreadable | Redesign, don't just bump the number: fewer items, one representative element bigger |
-| E4 | Positive letter-spacing (tracking) on consecutive Hangul/Hanja: letter-spacing damage. Kana-containing runs are exempt (tracked kana is normal Japanese practice) | Set tracking to 0 on Hangul/Hanja runs. Track ASCII-only labels only |
+| E4 | Positive letter-spacing (tracking) on a run containing Hangul (Hanja counts when mixed with Hangul): letter-spacing damage. Kana-containing runs and Hanja-only runs are exempt (tracked kana and tracked hanzi are normal JP/CN practice) | Set tracking to 0 on Hangul/Hanja runs. Track ASCII-only labels only |
 
 WARN = advisory. Read each one; confirm on a rendered page image when the message
 says so. Most are approximation-based, calibrated against rendered output
@@ -122,8 +122,8 @@ says so. Most are approximation-based, calibrated against rendered output
 ```
 build deck.pptx
 loop:
-    result = archforge deck.pptx --profile full --json   # full: machine-made decks
-    if result.summary.error_count == 0 and not result.summary.incomplete: break
+    result = archforge deck.pptx --profile full --fail-incomplete --json
+    if result.summary.pass: break   # pass reflects the active policy (summary.policy)
     fix the listed defects (smallest page number first);
     if incomplete, fix the malformed spans W18 points at
     rebuild
@@ -132,8 +132,10 @@ render all pages once and eyeball them   # gates catch the mechanical class;
                                           # composition quality is still on you
 ```
 
-Ship condition is `error_count == 0 AND incomplete == false` - a pass with
-incomplete=true means part of the deck was never actually checked.
+Run with `--fail-incomplete` and gate on `summary.pass == true`. The active failure
+policy travels in `summary.policy`, so pass always means "passed under the policy you
+asked for"; a result with incomplete=true means part of the deck was never actually
+checked, which `--fail-incomplete` turns into a failure for you.
 
 Two rules of thumb learned the hard way:
 
@@ -172,7 +174,8 @@ Two rules of thumb learned the hard way:
   corrupt run cannot swallow a sibling run's real violation) and per-slide, and
   anything a guard skips is surfaced as a W18 warning plus a machine-readable
   `summary.incomplete` flag. Gate on `pass` AND `incomplete` together (or run
-  `--strict`, which turns W18 into a failure); `pass` alone reflects ERRORs only.
+  `--fail-incomplete`, which turns W18 into a failure); `summary.pass` reflects the
+  active failure policy recorded in `summary.policy`.
 - E2's numeric-context exemptions are evaluated against the full paragraph text,
   so ranges split across run boundaries (PowerPoint does this via spellcheck and
   formatting seams) don't false-positive. Theme font tokens ("+mn-lt" etc.) in

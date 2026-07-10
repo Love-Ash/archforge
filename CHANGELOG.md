@@ -1,5 +1,86 @@
 # Changelog
 
+## 0.6.1 (2026-07-11)
+
+A contract-consistency release driven by an external review of 0.6.0 (overall verdict:
+the integration layer is now sound; the remaining risks are policy/messaging mismatches
+and the monolith). Every reproducible finding was verified against the code before
+fixing.
+
+### Policy and contract fixes
+
+- E4 now requires actual Hangul in the run. Tracking on a Hanja-only run is legitimate
+  Chinese typography; flagging it as a universal ERROR contradicted the "other scripts
+  are never falsely flagged" scope promise. Hanja still counts toward the consecutive
+  requirement when mixed with Hangul (Korean names, legal terms), which keeps the
+  Korean-deck coverage the rule was built for.
+- `summary.policy` records the active failure policy (fail_on_warning /
+  fail_incomplete / e2_no_exemptions): identical counts can pass or fail depending on
+  flags, and JSON consumers could not tell why. All integration docs (README, skill
+  pack, agent loop) now gate on `summary.pass` with `--fail-incomplete`.
+- scan validates global CLI values once up front (exit 2) instead of degrading a bad
+  flag into N identical per-file error entries; per-file problems (corrupt deck, that
+  deck's config/baseline) still isolate per file.
+- scan tracks match counts per input pattern: one input matching nothing exits 2 even
+  when another matched (a typo'd glob could hide behind a populated directory).
+  `--allow-empty-pattern` opts out; the aggregate JSON records
+  `scan.inputs[].{pattern,matches}`.
+- The GitHub Action validates boolean inputs exactly (a typo like `ture` fails the job
+  instead of silently disabling a safety default) and rejects unknown `source` values.
+  The runner also emits step outputs (passed, error-count, warning-count, incomplete,
+  checked-files, failed-files), writes a GITHUB_STEP_SUMMARY table, and gains
+  `changed-only`/`base-ref` mode for large repositories.
+- Config numeric strictness: booleans are rejected as thresholds (float(True) == 1.0
+  used to pass) and `w6_cluster` must be integral (1.9 silently truncated to 1).
+
+### Correctness
+
+- The geometry complex-script screen now reads all `a:t` descendants, closing a bypass
+  where field-only RTL text entered width math with the Latin/CJK model and no W18.
+- An explicit run color the decoder cannot resolve (hslClr, scrgbClr, sysClr, prstClr,
+  transforms) stops color resolution and abstains into W18 instead of falling through
+  to an inherited color (reproduced false positive: explicit white hslClr judged with
+  inherited black).
+- Geometry locations carry `paragraph` indexes and `field: true` for field-only
+  paragraphs, matching the run-level location contract.
+- SARIF E1's static title no longer claims Hangul-only scope (E1 also covers
+  kana/hanzi on fonts with no CJK glyphs), and every rule's `helpUri` points to its
+  own page under docs/rules/.
+
+### New
+
+- `archforge rules` (one-line rule list) and `archforge explain CODE` (meaning,
+  profiles, fix, doc link) for rule discovery without the README; `archforge lint`
+  as an explicit alias for single-file mode; `python -m archforge` entry point
+  (removes the runpy RuntimeWarning the Action used to print).
+- Per-rule documentation pages generated from the rule registry
+  (`docs/rules/E1.md` ... `W18.md`, `scripts/make_rule_docs.py`).
+- Project governance docs: GOVERNANCE.md and four ADRs (profiles, incompleteness
+  contract, target renderer, baseline identity).
+- A PyPI trusted-publishing workflow (`publish.yml`, OIDC; activates once the PyPI
+  publisher is registered).
+- CALIBRATION gains an honest renderer-coverage matrix (measured vs unknown vs
+  known-different per renderer).
+
+### Docs
+
+- The E1 resolution priority now includes the paragraph `pPr/defRPr` step everywhere
+  it is described (README en/ko, skill pack, CALIBRATION's derived summary); it was
+  measured in probe 7 but had drifted out of two of the four descriptions.
+- The bundled skill pack drops the "deep CJK coverage" phrasing for the accurate
+  "Hangul-deep, CJK-aware", and its agent loop keys on `summary.pass`.
+
+### Deferred with reasons (unchanged from the review's own sequencing)
+
+- JUnit reporter: assigned to an external contributor (#2); shipping it ourselves
+  would take their first contribution.
+- Canonical document model, detector decomposition, structured `Finding.data`,
+  baseline v3 identity: the 0.7 architecture pass, done as its own release with its
+  own verification cycle rather than appended to a contract-fix release.
+- Public multi-generator corpus, property/fuzz testing, versioned docs site, worker
+  timeouts: 0.8 material; each needs assets or infrastructure that cannot be conjured
+  credibly in a hardening release.
+
 ## 0.6.0 (2026-07-11)
 
 A hardening release for the integration layer. An external structural review of 0.5.0

@@ -110,13 +110,13 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 try:
     from .messages import M, set_lang, get_lang
     from .findings import Finding, shape_loc
-    from .rules import RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE
+    from .rules import RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE, severity
     from . import config as _config
     from . import reporters as _reporters
 except ImportError:   # fallback for standalone file execution (python lint.py)
     from messages import M, set_lang, get_lang
     from findings import Finding, shape_loc
-    from rules import RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE
+    from rules import RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE, severity
     import config as _config
     import reporters as _reporters
 
@@ -1278,8 +1278,8 @@ _W_CJK, _W_LAT, _W_SP = 0.96, 0.52, 0.28   # character-width/font-size ratio app
 # (external review, 2026-07-10).
 # sp (owning shape) is for the loc payload of W15-W17 findings (0.5.0); the coordinates are
 # already the group's absolute coordinates.
-GlyphBox = namedtuple("GlyphBox", "x0 y0 x1 y1 rep max_pt frame_id sp cell")
-GlyphBox.__new__.__defaults__ = (None, None)
+GlyphBox = namedtuple("GlyphBox", "x0 y0 x1 y1 rep max_pt frame_id sp cell para field")
+GlyphBox.__new__.__defaults__ = (None, None, None, False)
 
 
 def _glyph_w(s, size_pt):
@@ -1368,7 +1368,11 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
         fw = max(fw - sx * (li + ri_) / EMU_PER_IN, 0.0)
         fh = max(fh - sy * (ti + bi) / EMU_PER_IN, 0.0)
         try:
-            frame_text = "".join(r.text for para in tframe.paragraphs for r in para.runs)
+            # All a:t descendants, not para.runs: field text (a:fld) participates in
+            # geometry, so it must participate in the complex-script screen too. A
+            # field-only Arabic frame used to bypass this check and get measured with
+            # the Latin/CJK width model without any W18 (0.6.1, external review).
+            frame_text = "".join(t.text or "" for t in tframe._txBody.iter(NS + "t"))
             if _geometry_unsupported(frame_text):
                 if skipped is not None:
                     skipped["complex_script"] += 1
@@ -1384,9 +1388,10 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
             if para.alignment is not None:
                 frame_align = para.alignment
                 break
-        paras = []   # (line_w, pmx, ptxt, factor, n, align)
-        for para in tframe.paragraphs:
+        paras = []   # (line_w, pmx, ptxt, factor, n, align, p_idx, field_only)
+        for p_idx, para in enumerate(tframe.paragraphs):
             pmx, ptxt = 0.0, ""
+            saw_field, saw_run_text = False, False
             segs = [0.0]   # widths of a:br-separated visual lines
             # Document-order walk over a:r / a:fld / a:br (0.6.0, external review): fld
             # text occupies real width and an explicit line break starts a new visual
@@ -1419,6 +1424,10 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
                 t = r.text
                 if not t:
                     continue
+                if isinstance(r, _FldRun):
+                    saw_field = True
+                else:
+                    saw_run_text = True
                 if r.font.size is not None:
                     sz = r.font.size.pt
                 elif para.font.size is not None:
@@ -1438,7 +1447,8 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
                 if sz > pmx:
                     pmx = sz
             if not ptxt.strip():
-                paras.append((0.0, _empty_para_pt(para, default_pt) * scale, "", 1.2, 1, None))
+                paras.append((0.0, _empty_para_pt(para, default_pt) * scale, "", 1.2, 1,
+                              None, p_idx, False))
                 continue
             ls = para.line_spacing
             if ls is None:
@@ -1456,9 +1466,10 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
                 n = len(segs)
             line_w = max(segs)
             al = para.alignment if para.alignment is not None else frame_align
-            paras.append((line_w, pmx, ptxt, factor, n, al))
+            paras.append((line_w, pmx, ptxt, factor, n, al, p_idx,
+                          saw_field and not saw_run_text))
         gh_total = sum(n * pmx * max(f, 0.95) * (1.0 - lnred) / 72.0
-                       for (pw, pmx, ptxt, f, n, al) in paras)
+                       for (pw, pmx, ptxt, f, n, al, _pi, _fo) in paras)
         if gh_total <= 0:
             return
         va = str(tframe.vertical_anchor) if tframe.vertical_anchor is not None else ""
@@ -1468,7 +1479,7 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
             cy = fy + max(0.0, fh - gh_total)
         else:
             cy = fy
-        for (pw, pmx, ptxt, factor, n, al) in paras:
+        for (pw, pmx, ptxt, factor, n, al, p_idx, field_only) in paras:
             ph = n * pmx * max(factor, 0.95) * (1.0 - lnred) / 72.0
             if ptxt.strip():
                 gw = pw if not wrap else min(pw, fw2)
@@ -1480,7 +1491,7 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
                 else:
                     x0 = fx
                 out.append(GlyphBox(x0, cy, x0 + gw, cy + ph, ptxt[:24], pmx, fid,
-                                    owner_sp, cell))
+                                    owner_sp, cell, p_idx, field_only))
             cy += ph
 
     for sp, _z, xf in iter_shapes_geo(slide.shapes):
@@ -1584,8 +1595,10 @@ def text_overlap_check(slide, si, warns, boxes: Optional[List[GlyphBox]] = None)
         # used to judge the overlap, as-is.
         # related carries the counterpart frame so an agent can pinpoint which pair to move
         # (0.5.0).
-        loc = shape_loc(a.sp, bbox=[a.x0, a.y0, a.x1 - a.x0, a.y1 - a.y0], cell=a.cell) or {}
-        rel = shape_loc(b.sp, bbox=[b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0], cell=b.cell)
+        loc = shape_loc(a.sp, bbox=[a.x0, a.y0, a.x1 - a.x0, a.y1 - a.y0], cell=a.cell,
+                        paragraph=a.para, field=a.field) or {}
+        rel = shape_loc(b.sp, bbox=[b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0], cell=b.cell,
+                        paragraph=b.para, field=b.field)
         if rel:
             loc["related"] = rel
         warns.append(Finding(si, "W15", "w15", (frac * 100,), "%r ~ %r" % (a.rep, b.rep),
@@ -1683,7 +1696,7 @@ def overflow_check(slide, si, sw_in, sh_in, warns,
         if over > TOL_T:
             hits.append((over, M("w16_text") % gb.rep, "t|%r" % gb.rep,
                          shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0],
-                                   cell=gb.cell)))
+                                   cell=gb.cell, paragraph=gb.para, field=gb.field)))
     for (px0, py0, px1, py1, _z, psp) in pics:
         over = max(-px0, -py0, px1 - sw_in, py1 - sh_in)
         if over > TOL_S:
@@ -1771,7 +1784,7 @@ def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
     # Sort key is frac only (sp field isn't comparable, 0.5.0)
     for frac, gb, pic in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
         loc = shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0],
-                        cell=gb.cell) or {}
+                        cell=gb.cell, paragraph=gb.para, field=gb.field) or {}
         rel = shape_loc(pic[4], bbox=[pic[0], pic[1], pic[2] - pic[0], pic[3] - pic[1]])
         if rel:
             loc["related"] = rel
@@ -1880,10 +1893,19 @@ def _run_rgb(run):
     return None
 
 
+# Sentinel: an explicit color exists but the decoder cannot resolve it (hslClr, scrgbClr,
+# sysClr, prstClr, tint/shade transforms...). Falling through to inherited colors produced
+# W7 false positives, e.g. an explicit white hslClr run judged with an inherited black
+# (0.6.1, external review): an unknown explicit color must stop resolution, not be skipped.
+_COLOR_UNKNOWN = object()
+
+
 def _resolve_run_rgb(run, para, tframe, sp, slide, styler=None, thm_colors=None):
     """Resolves text color: run rPr direct RGB -> paragraph defRPr -> lstStyle inheritance
     chain -> resolving schemeClr against the theme clrScheme (third review P1: fixes theme
-    colored text being missing from W7 when only direct RGB was read)."""
+    colored text being missing from W7 when only direct RGB was read). Returns an RGB
+    tuple, None (no explicit color anywhere), or _COLOR_UNKNOWN (explicit but
+    undecodable; the caller must not guess)."""
     def from_el(el):
         if el is None:
             return None
@@ -1899,21 +1921,22 @@ def _resolve_run_rgb(run, para, tframe, sp, slide, styler=None, thm_colors=None)
             v = (thm_colors or {}).get(sch.get("val") or "")
             if v:
                 return (int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16))
-        return None
+        # solidFill present but not a decodable srgb/scheme color: explicit-but-unknown
+        return _COLOR_UNKNOWN
 
     direct = _run_rgb(run)
     if direct:
         return direct
     try:
         c = from_el(run._r.find(NS + "rPr"))
-        if c:
+        if c is not None:
             return c
     except Exception:
         pass
     try:
         pPr = para._p.find(NS + "pPr")
         c = from_el(pPr.find(NS + "defRPr") if pPr is not None else None)
-        if c:
+        if c is not None:
             return c
     except Exception:
         pass
@@ -1921,14 +1944,15 @@ def _resolve_run_rgb(run, para, tframe, sp, slide, styler=None, thm_colors=None)
         try:
             for el, _src in styler._chain(tframe, sp, slide, getattr(para, "level", 0)):
                 c = from_el(el)
-                if c:
+                if c is not None:
                     return c
         except Exception:
             pass
     return None
 
 
-def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors=None):
+def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors=None,
+                   skipped=None):
     """Detects low-contrast text over an image (approximated from the rendered PNG). Only
     text frames overlapping a picture, once per slide.
     Returns: "no_pics" (nothing to check) / "no_png" (there is a picture but no conventional
@@ -1966,6 +1990,12 @@ def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors
             continue
         rgbs = [_resolve_run_rgb(r, para, sp.text_frame, sp, slide, styler, thm_colors)
                 for para in sp.text_frame.paragraphs for r in para.runs if r.text.strip()]
+        if any(c is _COLOR_UNKNOWN for c in rgbs):
+            # An explicit color we cannot decode: judging with an inherited color instead
+            # produced false positives (0.6.1). Abstain on this frame and surface it.
+            if skipped is not None:
+                skipped["w7_color_unknown"] += 1
+            continue
         rgbs = [c for c in rgbs if c]
         if not rgbs:
             continue
@@ -2110,7 +2140,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
         if render_dir:
             try:
                 r7 = contrast_check(slide, si, sw, sh, render_dir, warns,
-                                    styler=styler, thm_colors=thm_colors)
+                                    styler=styler, thm_colors=thm_colors, skipped=skipped)
                 if r7 == "ok":
                     render_png_hits += 1
                 elif r7 == "no_png":
@@ -2353,11 +2383,15 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
 
                         # E4: 2+ consecutive Hangul/Hanja characters + meaningfully positive
                         # tracking. A run mixed with kana is excluded as Japanese (spreading
-                        # kana tracking is normal design practice). A Hanja-only run stays in
-                        # scope since it is common in Korean decks for names and legal terms
-                        # (third panel: Hanja regression fix)
-                        if not any(is_kana(c) for c in t) and \
-                                sum(1 for c in t if is_hangul(c) or is_hanja(c)) >= 2:
+                        # kana tracking is normal design practice). 0.6.1 (external review):
+                        # the run must actually contain Hangul. Tracking on a Hanja-only run
+                        # is legitimate convention in Chinese typography, and flagging it as
+                        # a universal ERROR contradicted the "other scripts are never falsely
+                        # flagged" scope promise. Hanja still counts toward the consecutive
+                        # requirement when mixed with Hangul (Korean names, legal terms).
+                        if not any(is_kana(c) for c in t) \
+                                and any(is_hangul(c) for c in t) \
+                                and sum(1 for c in t if is_hangul(c) or is_hanja(c)) >= 2:
                             tr = run_track(run)
                             if tr is not None and tr > 50:
                                 errors.append(Finding(si, "E4", "e4", (tr,), "text=%r" % t[:24],
@@ -2566,10 +2600,19 @@ def main():
         if os.path.exists("skill"):
             print(M("skill_conflict"), file=sys.stderr)
         sys.exit(skill_main(rest[1:]))
-    if rest and rest[0] in ("scan", "demo"):
+    if rest and rest[0] in ("scan", "demo", "rules", "explain"):
         if os.path.exists(rest[0]) and os.path.isfile(rest[0]):
             print(M("subcmd_conflict") % (rest[0], rest[0]), file=sys.stderr)
-        sys.exit(scan_main(rest[1:]) if rest[0] == "scan" else demo_main(rest[1:]))
+        dispatch = {"scan": scan_main, "demo": demo_main,
+                    "rules": rules_main, "explain": explain_main}
+        sys.exit(dispatch[rest[0]](rest[1:]))
+    if rest and rest[0] == "lint":
+        # Explicit alias for single-file mode (`archforge lint deck.pptx`), so scripts
+        # can be unambiguous about the subcommand (0.6.1). Drops just the token; the
+        # leading --lang prefix (already prescanned) is preserved for parsing.
+        if os.path.exists("lint") and os.path.isfile("lint"):
+            print(M("subcmd_conflict") % ("lint", "lint"), file=sys.stderr)
+        argv = argv[:len(argv) - len(rest)] + rest[1:]
     ap = argparse.ArgumentParser(prog="archforge", description=M("prog_desc"))
     ap.add_argument("pptx")
     ap.add_argument("--render", default=None, help=M("help_render"))
@@ -2606,6 +2649,35 @@ def main():
         print(line)
 
     sys.exit(1 if res["fail"] else 0)
+
+
+def _validate_cli_globals(a):
+    """Validation of CLI-supplied values that are identical for every file in a scan.
+    Returns an error string (caller exits 2) or None. Deck-config-supplied values stay
+    per-file (a bad config next to one deck is that file's problem, not the batch's)."""
+    if a.config and a.no_config:
+        return M("err_config") % "--config conflicts with --no-config"
+    if a.config and not os.path.exists(a.config):
+        return M("err_config") % a.config
+    for v, name in ((a.hard_min, "hard_min"), (a.body_min, "body_min"),
+                    (a.small_min, "small_min")):
+        if v is not None and (not math.isfinite(v) or v <= 0):
+            return M("err_config") % ("threshold out of range: %s=%r" % (name, v))
+    if a.w6_sim is not None and (not math.isfinite(a.w6_sim) or not (0 < a.w6_sim <= 1)):
+        return M("err_config") % ("threshold out of range: w6_sim=%r" % a.w6_sim)
+    if a.w6_cluster is not None and a.w6_cluster < 1:
+        return M("err_config") % ("threshold out of range: w6_cluster=%r" % a.w6_cluster)
+    if a.skip:
+        codes_ = {c.strip().upper() for c in a.skip.split(",") if c.strip()}
+        bad = sorted(c for c in codes_ if not c.startswith("W"))
+        if bad:
+            return M("err_skip_e") % ",".join(bad)
+        unknown = sorted(c for c in codes_ if c not in ALL_CODES)
+        if unknown:
+            return M("err_skip_unknown") % ",".join(unknown)
+        if "W18" in codes_:
+            return M("err_skip_w18")
+    return None
 
 
 class UsageError(Exception):
@@ -2795,6 +2867,12 @@ def _lint_one(path, a):
     fail = bool(errors or (fail_on_warning and warns) or (fail_incomplete and has_w18))
     summary = {"error_count": len(errors), "warn_count": len(warns),
                "pass": not fail,
+               # The active failure policy travels with the verdict (0.6.1, external
+               # review): identical counts can pass or fail depending on flags, and a
+               # JSON consumer could not tell why. Gate on summary.pass.
+               "policy": {"fail_on_warning": bool(fail_on_warning),
+                          "fail_incomplete": bool(fail_incomplete),
+                          "e2_no_exemptions": bool(e2_no_exemptions)},
                "incomplete": has_w18,
                "profile": profile,
                "skipped_codes": sorted(excluded),
@@ -2813,9 +2891,13 @@ def _expand_scan_paths(patterns):
     """Expands scan arguments: a directory recurses for .pptx files, a glob pattern is
     globbed, and anything else is taken as a literal file path.
     PowerPoint lock files (~$*.pptx) are excluded, and duplicates are removed while
-    preserving order."""
+    preserving order. Returns (files, per_pattern_counts): match counts are tracked per
+    input so a typo'd second pattern cannot hide behind a first pattern that matched
+    (0.6.1, external review P0: zero-match was only detected for the whole set)."""
     out = []
+    counts = []
     for pat in patterns:
+        n0 = len(out)
         if os.path.isdir(pat):
             for root, dirs, files in os.walk(pat):
                 # os.walk's directory order is filesystem-dependent; sorting both lists
@@ -2830,14 +2912,17 @@ def _expand_scan_paths(patterns):
                 if p.lower().endswith(".pptx") and not os.path.basename(p).startswith("~$"):
                     out.append(p)
         else:
+            # A literal path counts as matched here; a missing file becomes a per-file
+            # error entry downstream (visible, not silent)
             out.append(pat)
+        counts.append((pat, len(out) - n0))
     seen, uniq = set(), []
     for p in out:
         k = os.path.normcase(os.path.abspath(p))
         if k not in seen:
             seen.add(k)
             uniq.append(p)
-    return uniq
+    return uniq, counts
 
 
 def scan_main(argv=None):
@@ -2849,6 +2934,8 @@ def scan_main(argv=None):
     errors. Zero matches is not a silent pass; it exits 2 (prevents a CI footgun)."""
     ap = argparse.ArgumentParser(prog="archforge scan", description=M("scan_desc"))
     ap.add_argument("paths", nargs="+", help=M("help_scan_paths"))
+    ap.add_argument("--allow-empty-pattern", action="store_true",
+                    help=M("help_allow_empty_pattern"))
     _add_common_flags(ap)
     # Flags exclusive to single-file mode are not supported: only defaults for _lint_one
     # compatibility are seeded here
@@ -2856,7 +2943,21 @@ def scan_main(argv=None):
     ap.set_defaults(render=None, write_baseline=None)
     a = ap.parse_args(argv)
 
-    files = _expand_scan_paths(a.paths)
+    # Global usage errors are not per-file errors (0.6.1, external review): a bad CLI
+    # flag must exit 2 up front, not degrade into N identical per-file entries.
+    err = _validate_cli_globals(a)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
+
+    files, pattern_counts = _expand_scan_paths(a.paths)
+    empty = [pat for pat, n in pattern_counts if n == 0]
+    if empty and not a.allow_empty_pattern:
+        # One input matching nothing must not hide behind another that matched: a typo'd
+        # glob or a broken build directory silently passing is the exact CI footgun the
+        # whole-set zero check missed (0.6.1, external review P0)
+        print(M("err_scan_pattern_empty") % "; ".join(empty), file=sys.stderr)
+        return 2
     if not files:
         print(M("err_scan_none") % " ".join(a.paths), file=sys.stderr)
         return 2
@@ -2910,7 +3011,8 @@ def scan_main(argv=None):
         agg = {"schema_version": "1.0",
                "tool": {"name": "archforge", "version": _reporters._tool_version()},
                "lang": get_lang(),
-               "scan": {"inputs": list(a.paths)},
+               "scan": {"inputs": [{"pattern": pat, "matches": n}
+                                   for pat, n in pattern_counts]},
                "files": docs,
                "summary": {"file_count": len(results), "failed_files": failed,
                            "error_files": len(errored),
@@ -2935,6 +3037,58 @@ def scan_main(argv=None):
         print()
     print(M("scan_summary") % (len(results), failed))
     return 1 if failed else 0
+
+
+def rules_main(argv=None):
+    """`archforge rules`: one line per rule so users can discover the gate set without
+    opening the README (0.6.1, external review)."""
+    ap = argparse.ArgumentParser(prog="archforge rules", description=M("rules_desc"))
+    ap.add_argument("--json", action="store_true", help=M("help_json"))
+    ap.add_argument("--lang", default=None, choices=("ko", "en"), help=M("help_lang"))
+    a = ap.parse_args(argv)
+    from .rules import TITLES, category
+    rows = []
+    for code in sorted(ALL_CODES, key=lambda c: (c[0] != "E", int(c[1:]))):
+        profiles = sorted(p for p, excl in PROFILES.items() if code not in excl)
+        rows.append({"code": code, "severity": severity(code), "category": category(code),
+                     "title": TITLES.get(code, code), "profiles": profiles})
+    if a.json:
+        import json
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return 0
+    for r in rows:
+        print("%-4s %-8s %-11s %s" % (r["code"], r["severity"], r["category"], r["title"]))
+    return 0
+
+
+def explain_main(argv=None):
+    """`archforge explain CODE`: what a rule means, when it fires, and how to fix it,
+    from the same fix guidance the agent skill pack teaches (0.6.1)."""
+    ap = argparse.ArgumentParser(prog="archforge explain", description=M("explain_desc"))
+    ap.add_argument("code")
+    ap.add_argument("--json", action="store_true", help=M("help_json"))
+    ap.add_argument("--lang", default=None, choices=("ko", "en"), help=M("help_lang"))
+    a = ap.parse_args(argv)
+    from .rules import TITLES, category
+    code = a.code.strip().upper()
+    if code not in ALL_CODES:
+        print(M("err_skip_unknown") % code, file=sys.stderr)
+        return 2
+    profiles = sorted(p for p, excl in PROFILES.items() if code not in excl)
+    doc = {"code": code, "severity": severity(code), "category": category(code),
+           "title": TITLES.get(code, code), "profiles": profiles,
+           "fix": M("fix_" + code.lower()),
+           "help_uri": "https://github.com/Love-Ash/archforge/blob/main/docs/rules/%s.md" % code}
+    if a.json:
+        import json
+        print(json.dumps(doc, ensure_ascii=False, indent=2))
+        return 0
+    print("%s  %s" % (code, doc["title"]))
+    print("  severity: %s | category: %s | profiles: %s"
+          % (doc["severity"], doc["category"], ",".join(profiles)))
+    print("  fix: %s" % doc["fix"])
+    print("  docs: %s" % doc["help_uri"])
+    return 0
 
 
 def demo_main(argv=None):

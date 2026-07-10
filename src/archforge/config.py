@@ -76,6 +76,10 @@ def load_config(path: str) -> Tuple[Dict, List[str]]:
     def _num(key, lo=None, lo_incl=False, hi=None):
         if key not in out:
             return
+        # bool is an int subclass in Python, so float(True) == 1.0 silently passed as a
+        # threshold (0.6.1, external review): reject it as a type error
+        if isinstance(out[key], bool):
+            raise RuntimeError("config %r must be a number, got %r" % (key, out[key]))
         try:
             v = float(out[key])
         except (TypeError, ValueError):
@@ -96,6 +100,11 @@ def load_config(path: str) -> Tuple[Dict, List[str]]:
     _num("w6_sim", lo=0, hi=1)
     _num("w6_cluster", lo=1, lo_incl=True)
     if "w6_cluster" in out:
+        # 1.9 silently truncating to 1 changed the gate without a trace (0.6.1):
+        # only integral values are accepted
+        if float(out["w6_cluster"]) != int(out["w6_cluster"]):
+            raise RuntimeError("config 'w6_cluster' must be an integer, got %r"
+                               % out["w6_cluster"])
         out["w6_cluster"] = int(out["w6_cluster"])
     if "profile" in out and out["profile"] not in ("full", "core", "editorial"):
         raise RuntimeError("config 'profile' must be full|core|editorial, got %r" % out["profile"])

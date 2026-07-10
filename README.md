@@ -81,6 +81,9 @@ archforge deck.pptx --baseline bl.json       # report only new findings after th
 archforge deck.pptx --hard-min 5 --body-min 9 --small-min 7.5   # size gate thresholds
 archforge deck.pptx --w6-sim 0.95 --w6-cluster 5                # W6 repetition thresholds
 archforge scan out/**/*.pptx --json          # aggregated JSON; exit 1 if any file fails
+                                             # (an input matching nothing exits 2)
+archforge rules                              # one-line summary of every rule
+archforge explain W15                        # what a rule means and how to fix it
 archforge demo --dir tour                    # regenerate the demo pair anywhere
 ```
 
@@ -205,10 +208,10 @@ bypassed.
 
 The E1 font-resolution model is measured, not guessed from the OOXML spec. Probe decks
 rendered through PowerPoint COM (pixel-compared, serif vs sans) established the actual
-priority: run `a:ea` > lstStyle inheritance chain (shape > layout placeholder > master
-placeholder > master txStyles > defaultTextStyle) > theme ea (majorFont for title
-placeholders, minorFont otherwise; a non-empty theme ea beats run `a:latin`) > run
-`a:latin` only when the theme ea slot is empty > OS fallback. The record lives in
+priority: run `a:ea` > paragraph `pPr/defRPr` > lstStyle inheritance chain (shape >
+layout placeholder > master placeholder > master txStyles > defaultTextStyle) > theme
+ea (majorFont for title placeholders, minorFont otherwise; a non-empty theme ea beats
+run `a:latin`) > run `a:latin` only when the theme ea slot is empty > OS fallback. The record lives in
 [docs/CALIBRATION.md](docs/CALIBRATION.md). Themes resolve per slide master, so
 multi-master decks are judged against the theme they actually use.
 
@@ -228,8 +231,9 @@ with adversarial reproduction fixtures. Methods and per-gate rationale:
 
 Malformed input never dies silently: guards are per-run and per-slide, and anything a
 guard skips surfaces as `W18` in the JSON output plus a machine-readable
-`summary.incomplete` flag. Gate CI on `pass` and `incomplete` together (or run
-`--strict`, which turns W18 into a failure); `pass` alone reflects ERRORs only.
+`summary.incomplete` flag. `summary.pass` reflects the active failure policy (recorded
+in `summary.policy`): with the defaults it covers ERRORs only, so gate CI with
+`--fail-incomplete` (the GitHub Action does this for you) and key on `summary.pass`.
 
 > Scope notes. Font-coverage knowledge (E1/E4) is currently Hangul-deep: runs written in
 > other scripts are never falsely flagged (script detection is per text run, via Unicode

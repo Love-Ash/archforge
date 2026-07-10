@@ -84,7 +84,7 @@ def build_sarif_multi(items: List) -> Dict:
         rules_meta.append({
             "id": code,
             "shortDescription": {"text": TITLES.get(code, code)},
-            "helpUri": "https://github.com/Love-Ash/archforge#what-it-catches",
+            "helpUri": "https://github.com/Love-Ash/archforge/blob/main/docs/rules/%s.md" % code,
             "defaultConfiguration": {"level": "error" if sev == "error" else "warning"},
             "properties": {"category": cat},
         })

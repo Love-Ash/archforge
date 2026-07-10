@@ -65,6 +65,20 @@ inputs:
     description: 'Extra CLI arguments, one per line (passed as argv entries, never shell-parsed).'
     required: false
     default: ''
+  allow-empty-pattern:
+    description: 'Allow a files entry that matches nothing (default fails, so typos cannot hide).'
+    required: false
+    default: 'false'
+  changed-only:
+    description: >-
+      Lint only .pptx files changed against base-ref instead of the files input.
+      Requires a checkout deep enough to contain the base ref (fetch-depth: 0 is safest).
+    required: false
+    default: 'false'
+  base-ref:
+    description: 'Base ref for changed-only mode.'
+    required: false
+    default: 'origin/main'
   python-version:
     description: 'Python version to set up (empty = use the runner default python3).'
     required: false
@@ -74,6 +88,24 @@ outputs:
   sarif:
     description: 'Path of the SARIF report if one was requested.'
     value: ${{ inputs.sarif }}
+  passed:
+    description: 'true when every checked file passed the active policy.'
+    value: ${{ steps.lint.outputs.passed }}
+  error-count:
+    description: 'Total ERROR findings across checked files.'
+    value: ${{ steps.lint.outputs.error-count }}
+  warning-count:
+    description: 'Total WARN findings across checked files.'
+    value: ${{ steps.lint.outputs.warning-count }}
+  incomplete:
+    description: 'true when any checked file had unchecked spans (W18).'
+    value: ${{ steps.lint.outputs.incomplete }}
+  checked-files:
+    description: 'Number of files checked.'
+    value: ${{ steps.lint.outputs.checked-files }}
+  failed-files:
+    description: 'Number of files that failed or errored.'
+    value: ${{ steps.lint.outputs.failed-files }}
 
 runs:
   using: 'composite'
@@ -91,17 +123,23 @@ runs:
         AF_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
-        if [ "$AF_SOURCE" = "pypi" ]; then
-          if [ -n "$AF_VERSION" ]; then
-            python3 -m pip install --disable-pip-version-check "archforge==$AF_VERSION"
-          else
-            python3 -m pip install --disable-pip-version-check archforge
-          fi
-        else
-          python3 -m pip install --disable-pip-version-check "$GITHUB_ACTION_PATH"
-        fi
+        case "$AF_SOURCE" in
+          action)
+            python3 -m pip install --disable-pip-version-check "$GITHUB_ACTION_PATH" ;;
+          pypi)
+            if [ -n "$AF_VERSION" ]; then
+              python3 -m pip install --disable-pip-version-check "archforge==$AF_VERSION"
+            else
+              python3 -m pip install --disable-pip-version-check archforge
+            fi ;;
+          *)
+            # A typo'd source must fail, not silently pick a default (fail-safe)
+            echo "archforge action: input 'source' must be 'action' or 'pypi', got '$AF_SOURCE'" >&2
+            exit 2 ;;
+        esac
 
     - name: Lint decks
+      id: lint
       shell: bash
       env:
         AF_FILES: ${{ inputs.files }}
@@ -112,4 +150,7 @@ runs:
         AF_STRICT: ${{ inputs.strict }}
         AF_SARIF: ${{ inputs.sarif }}
         AF_EXTRA_ARGS: ${{ inputs.extra-args }}
+        AF_ALLOW_EMPTY_PATTERN: ${{ inputs.allow-empty-pattern }}
+        AF_CHANGED_ONLY: ${{ inputs.changed-only }}
+        AF_BASE_REF: ${{ inputs.base-ref }}
       run: python3 "$GITHUB_ACTION_PATH/action_runner.py"

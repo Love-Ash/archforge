@@ -978,7 +978,9 @@ def test_script_layer_two_tier(tmp_path):
     p1 kana+Noto Sans JP -> silent (font has kana). p2 Hangul+Noto Sans JP ->
     E1 (no Hangul). p3 kana+positive tracking -> no E4 (Japanese convention).
     p4 Hanja-only+Georgia -> E1 (font has no CJK at all). p5 Hanja-only+positive
-    tracking -> E4 (Korean-deck names/legal terms). p6 kana+IBM Plex Mono -> E1."""
+    tracking -> no E4 since 0.6.1 (tracked hanzi is legitimate Chinese typography;
+    the run must contain Hangul). p6 kana+IBM Plex Mono -> E1. p7 mixed
+    Hangul+Hanja+tracking -> E4 (Korean names/legal terms keep coverage)."""
     p = new_prs()
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "こんにちは", font="Noto Sans JP", size=12)
@@ -992,11 +994,13 @@ def test_script_layer_two_tier(tmp_path):
     tb(s, 1, 1, 5, 0.5, "大韓民國", font="맑은 고딕", size=12, spc=100)
     s = add_slide(p)
     tb(s, 1, 1, 5, 0.5, "フリーレン", font="IBM Plex Mono", size=12)
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "金九 선생", font="맑은 고딕", size=12, spc=100)
     errors, _w = lint_full(save(p, tmp_path, "fx.pptx"))
     e1_pages = sorted(si for (si, m, d) in by_code(errors, "E1"))
     assert e1_pages == [2, 4, 6], errors
     e4_pages = sorted(si for (si, m, d) in by_code(errors, "E4"))
-    assert e4_pages == [5], errors
+    assert e4_pages == [7], errors
 
 
 def test_hangul_range_extensions():
@@ -1395,13 +1399,20 @@ def test_skip_validation_strengthened(tmp_path):
 
 
 def test_e4_hanja_message(tmp_path):
-    """P1: the E4 message matches the actual judged scope (Hangul and Hanja)."""
+    """E4 fires on mixed Hangul+Hanja runs (Korean names/legal terms) and the message
+    names the judged scope; a Hanja-only run is exempt since 0.6.1 (tracked hanzi is
+    legitimate Chinese typography, external review)."""
     p = new_prs()
     s = add_slide(p)
-    tb(s, 1, 1, 5, 0.5, "大韓民國", font="맑은 고딕", size=12, spc=100)
+    tb(s, 1, 1, 5, 0.5, "大韓民國 헌법", font="맑은 고딕", size=12, spc=100)
     errors, _w = lint_full(save(p, tmp_path, "fx.pptx"))
     e4 = by_code(errors, "E4")
     assert e4 and "한자" in e4[0][1], e4
+    p2 = new_prs()
+    s2 = add_slide(p2)
+    tb(s2, 1, 1, 5, 0.5, "中华人民共和国", font="맑은 고딕", size=12, spc=200)
+    errors2, _w2 = lint_full(save(p2, tmp_path, "fx2.pptx"))
+    assert not by_code(errors2, "E4"), errors2
 
 
 def test_w8_extended_hangul(tmp_path):
@@ -2099,6 +2110,164 @@ def test_sarif_rule_metadata_static(tmp_path):
         assert "%" not in rule["shortDescription"]["text"], rule
         assert rule["helpUri"].startswith("https://")
     assert all("partialFingerprints" in res for res in run0["results"])
+
+
+# ---------------------------------------------------------------- 0.6.1: contract batch
+def test_scan_empty_pattern_fails(tmp_path):
+    """One input matching nothing must not hide behind another that matched: exit 2
+    unless --allow-empty-pattern (external review P0)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    deck = save(p, tmp_path, "ok.pptx")
+    ghost_glob = os.path.join(str(tmp_path), "nope", "**", "*.pptx")
+    r = run_cli(["scan", deck, ghost_glob])
+    assert r.returncode == 2, (r.returncode, r.stderr)
+    r = run_cli(["scan", deck, ghost_glob, "--allow-empty-pattern"])
+    assert r.returncode == 0, (r.returncode, r.stderr)
+    r = run_cli(["scan", deck, "--json"])
+    doc = json.loads(r.stdout)
+    assert doc["scan"]["inputs"][0]["matches"] == 1
+
+
+def test_scan_global_usage_error_exits_2(tmp_path):
+    """A bad CLI flag is a global usage error (exit 2), not N per-file error entries
+    (external review P1)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    deck = save(p, tmp_path, "g.pptx")
+    for extra in (["--skip", "W999"], ["--skip", "E1"],
+                  ["--config", os.path.join(str(tmp_path), "missing.json")],
+                  ["--hard-min", "nan"]):
+        r = run_cli(["scan", deck] + extra)
+        assert r.returncode == 2, (extra, r.returncode, r.stdout, r.stderr)
+
+
+def test_summary_policy_recorded(tmp_path):
+    """The active failure policy travels with the verdict so JSON consumers can tell
+    why identical counts pass or fail (external review P0)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    deck = save(p, tmp_path, "pol.pptx")
+    doc = json.loads(run_cli([deck, "--json", "--fail-on-warning"]).stdout)
+    assert doc["summary"]["policy"] == {"fail_on_warning": True,
+                                        "fail_incomplete": False,
+                                        "e2_no_exemptions": False}
+    doc = json.loads(run_cli([deck, "--json", "--strict"]).stdout)
+    assert all(doc["summary"]["policy"].values())
+
+
+def test_field_only_complex_script_marks_incomplete(tmp_path):
+    """Arabic living entirely inside an a:fld used to bypass the complex-script screen
+    (built from para.runs) while still entering width math: now the screen sees field
+    text and the frame is skipped into W18 (external review P0)."""
+    p = new_prs()
+    s = add_slide(p)
+    box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(0.6))
+    _add_fld(box.text_frame.paragraphs[0], "مرحبا بك",
+             sz=1800)
+    _e, warns = lint_full(save(p, tmp_path, "rtl_fld.pptx"))
+    assert "W18" in codes(warns), codes(warns)
+
+
+def test_w7_unknown_explicit_color_abstains(tmp_path):
+    """An explicit color the decoder cannot resolve (hslClr) must stop resolution and
+    abstain, not fall through to an inherited color (external review P1: a white hslClr
+    run was judged with inherited black = false positive)."""
+    from PIL import Image
+    p = new_prs()
+    s = add_slide(p)
+    d = os.path.join(str(tmp_path), "pages")
+    os.makedirs(d)
+    Image.new("RGB", (1333, 750), (10, 10, 10)).save(os.path.join(d, "p01.png"))
+    s.shapes.add_picture(png(tmp_path, "bg.png", size=(800, 500)),
+                         Inches(1), Inches(1), Inches(8), Inches(4))
+    box = tb(s, 2, 2, 5, 1, "white text via hslClr", size=20)
+    r = box.text_frame.paragraphs[0].runs[0]
+    rPr = r._r.get_or_add_rPr()
+    fill = rPr.makeelement(qn("a:solidFill"), {})
+    hsl = rPr.makeelement(qn("a:hslClr"), {"hue": "0", "sat": "0%", "lum": "100%"})
+    fill.append(hsl)
+    rPr.insert(0, fill)
+    _e, warns = lint_full(save(p, tmp_path, "hsl.pptx"), render_dir=d)
+    assert "W7" not in codes(warns), codes(warns)
+    assert "W18" in codes(warns), codes(warns)
+
+
+def test_config_rejects_bool_and_fractional_cluster(tmp_path):
+    """float(True) == 1.0 slipped through as a threshold, and w6_cluster 1.9 silently
+    truncated to 1 (external review P1)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    for body in ('{"hard_min": true}', '{"w6_cluster": 1.9}'):
+        d = os.path.join(str(tmp_path), "c%d" % (abs(hash(body)) % 97))
+        os.makedirs(d, exist_ok=True)
+        deck = save(p, d, "deck.pptx")
+        with open(os.path.join(d, ".archforge.json"), "w") as f:
+            f.write(body)
+        r = run_cli([deck])
+        assert r.returncode == 2, (body, r.returncode, r.stderr)
+
+
+def test_rules_and_explain_subcommands():
+    r = run_cli(["rules"])
+    assert r.returncode == 0 and "E1" in r.stdout and "W18" in r.stdout
+    r = run_cli(["explain", "w15", "--lang", "en"])
+    assert r.returncode == 0 and "overlap" in r.stdout.lower()
+    r = run_cli(["explain", "W99"])
+    assert r.returncode == 2
+
+
+def test_module_entry_no_runpy_warning(tmp_path):
+    """`python -m archforge` must not emit the runpy RuntimeWarning that
+    `python -m archforge.lint` triggers (external review P1)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    deck = save(p, tmp_path, "m.pptx")
+    env = dict(os.environ)
+    env["ARCHFORGE_LANG"] = "en"
+    r = subprocess.run([sys.executable, "-m", "archforge", deck], capture_output=True,
+                       text=True, encoding="utf-8", stdin=subprocess.DEVNULL, env=env)
+    assert r.returncode == 0, r.stderr
+    assert "RuntimeWarning" not in (r.stderr or "")
+
+
+def test_lint_subcommand_alias(tmp_path):
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    deck = save(p, tmp_path, "alias.pptx")
+    r = run_cli(["lint", deck, "--json"])
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["summary"]["pass"] is True
+
+
+def test_action_runner_rejects_bool_typo(tmp_path):
+    """A typo'd boolean input must fail the job, not silently disable a safety default
+    (external review P0)."""
+    runner = os.path.join(_repo_root(), "action_runner.py")
+    env = dict(os.environ)
+    env.update({"AF_FILES": "whatever.pptx", "AF_FAIL_INCOMPLETE": "ture"})
+    r = subprocess.run([sys.executable, runner], capture_output=True, text=True,
+                       encoding="utf-8", env=env, stdin=subprocess.DEVNULL)
+    assert r.returncode == 2
+    assert "fail-incomplete" in (r.stderr or "")
+
+
+def test_w15_loc_carries_paragraph_and_cell_fields(tmp_path):
+    """Geometry locations gained paragraph indexes and (for fld-only paragraphs) the
+    field marker (external review P1)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1.0, 1.0, 5.0, 1.0, "overlap sentence one here", size=24)
+    tb(s, 1.1, 1.05, 5.0, 1.0, "overlap sentence two here", size=24)
+    _e, warns = lint_full(save(p, tmp_path, "w15p.pptx"))
+    w15 = [f for f in warns if f.code == "W15"]
+    assert w15 and "paragraph" in w15[0].loc, w15[0].loc if w15 else warns
 
 
 if __name__ == "__main__":
