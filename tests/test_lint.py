@@ -1186,6 +1186,208 @@ def test_profile_editorial_drops_w14(tmp_path):
     assert doc["summary"]["profile"] == "editorial"
 
 
+# ---------------------------------------------------------------- 0.3.1 (3차 외부 리뷰 P0/P1)
+def test_e1_para_defrpr_inheritance(tmp_path):
+    """P0-1(프로브7 실측): 문단 pPr/defRPr 폰트는 run 다음 순위로 상속되고 lstStyle을 이긴다.
+    케이스A: 문단 ea=한글폰트 -> E1 오탐 없어야. 케이스B: 마스터 lstStyle ea=한글폰트인데
+    문단 ea=Consolas -> 문단이 이기므로 E1 미탐 없어야."""
+    def add_para_ea(para, ea):
+        pPr = para._p.get_or_add_pPr()
+        defR = pPr.makeelement(qn("a:defRPr"), {})
+        defR.append(defR.makeelement(qn("a:ea"), {"typeface": ea}))
+        pPr.append(defR)
+
+    # 케이스A: 오탐 검증
+    p = new_prs()
+    s = add_slide(p)
+    box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(0.6))
+    para = box.text_frame.paragraphs[0]
+    add_para_ea(para, "맑은 고딕")
+    r = para.add_run(); r.text = "문단 상속 한글"; r.font.size = Pt(14)
+    errors, _w = jl.lint(save(p, tmp_path, "a.pptx"))
+    assert not by_code(errors, "E1"), errors
+
+    # 케이스B: 미탐 검증(마스터 lstStyle 한글폰트 + 문단 Consolas)
+    p = Presentation()
+    for ph in p.slide_masters[0].placeholders:
+        if ph.placeholder_format.idx == 1:
+            txBody = ph.text_frame._txBody
+            lst = txBody.find(qn("a:lstStyle"))
+            if lst is None:
+                lst = txBody.makeelement(qn("a:lstStyle"), {})
+                txBody.insert(1, lst)
+            lvl1 = lst.makeelement(qn("a:lvl1pPr"), {})
+            defR = lst.makeelement(qn("a:defRPr"), {})
+            defR.append(defR.makeelement(qn("a:ea"), {"typeface": "맑은 고딕"}))
+            lvl1.append(defR)
+            lst.append(lvl1)
+    s = p.slides.add_slide(p.slide_layouts[1])
+    s.shapes.title.text_frame.text = ""
+    body = s.placeholders[1]
+    para = body.text_frame.paragraphs[0]
+    add_para_ea(para, "Consolas")
+    r = para.add_run(); r.text = "문단이 이기는 한글"; r.font.size = Pt(14)
+    errors, _w = jl.lint(save(p, tmp_path, "b.pptx"))
+    assert any("Consolas" in d for (_si, m, d) in by_code(errors, "E1")), errors
+
+
+def test_geometry_uses_style_resolver(tmp_path):
+    """P0-2: 기하 검사가 E3와 동일한 상속 크기를 쓴다. 레이아웃 lstStyle 40pt 텍스트가
+    우측을 뚫으면 W16(구버전은 기본 12pt로 계산해 미탐)."""
+    p = Presentation()
+    p.slide_width = Inches(13.333)
+    p.slide_height = Inches(7.5)
+    lay = p.slide_layouts[1]
+    for ph in lay.placeholders:
+        if ph.placeholder_format.idx == 1:
+            txBody = ph.text_frame._txBody
+            lst = txBody.find(qn("a:lstStyle"))
+            if lst is None:
+                lst = txBody.makeelement(qn("a:lstStyle"), {})
+                txBody.insert(1, lst)
+            lvl1 = lst.makeelement(qn("a:lvl1pPr"), {})
+            defR = lst.makeelement(qn("a:defRPr"), {"sz": "4000"})
+            lvl1.append(defR)
+            lst.append(lvl1)
+    s = p.slides.add_slide(lay)
+    s.shapes.title.text_frame.text = ""
+    body = s.placeholders[1]
+    body.left, body.top = Inches(12.0), Inches(2.0)
+    body.width, body.height = Inches(1.2), Inches(0.8)
+    body.text_frame.word_wrap = False
+    body.text_frame.text = "Revenue ABC"   # 12pt면 0.95in(통과), 40pt면 3.2in(넘침)
+    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    assert any("텍스트" in d for (_si, m, d) in by_code(warns, "W16")), warns
+
+
+def test_table_cell_geometry(tmp_path):
+    """P0-3: 네이티브 표 셀 텍스트가 기하 검사에 포함된다(우측 이탈 표 -> W16)."""
+    p = new_prs()
+    s = add_slide(p)
+    gf = s.shapes.add_table(1, 2, Inches(11.0), Inches(2.0), Inches(4.0), Inches(1.0))
+    cell = gf.table.cell(0, 1)   # 오른쪽 열은 x=13in 부근에서 시작 -> 캔버스 밖
+    cell.text = "overflowing table cell text"
+    r = cell.text_frame.paragraphs[0].runs[0]
+    r.font.size = Pt(24)
+    cell.text_frame.word_wrap = False
+    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    assert any("텍스트" in d for (_si, m, d) in by_code(warns, "W16")), warns
+
+
+def test_render_dir_contract(tmp_path):
+    """P0-4: --render 폴더 부재·페이지 렌더 누락은 incomplete로 표면화, 그림 없는 덱은 무관."""
+    p = new_prs()
+    s = add_slide(p)
+    s.shapes.add_picture(png(tmp_path, "pic.png"), Inches(2), Inches(2), Inches(3), Inches(2))
+    tb(s, 1, 1, 5, 0.5, "clean text", font="Wanted Sans", size=20)
+    deck = save(p, tmp_path, "fx.pptx")
+    doc = json.loads(run_cli([deck, "--json", "--render",
+                              os.path.join(str(tmp_path), "no_such_dir")]).stdout)
+    assert doc["summary"]["incomplete"] is True, doc["summary"]
+    empty = os.path.join(str(tmp_path), "empty_pages")
+    os.makedirs(empty)
+    doc = json.loads(run_cli([deck, "--json", "--render", empty]).stdout)
+    assert doc["summary"]["incomplete"] is True, doc["summary"]   # 그림 있는 페이지 렌더 누락
+    # 그림 없는 덱은 렌더가 없어도 완전(검사할 W7 대상 자체가 없음)
+    p2 = new_prs()
+    s2 = add_slide(p2)
+    tb(s2, 1, 1, 5, 0.5, "text only", font="Wanted Sans", size=20)
+    doc = json.loads(run_cli([save(p2, tmp_path, "t.pptx"), "--json", "--render", empty]).stdout)
+    assert doc["summary"]["incomplete"] is False, doc["summary"]
+
+
+def test_profile_is_engine_policy(tmp_path, monkeypatch):
+    """P0-5: 프로파일은 실행 정책이다. 라이브러리 lint(profile=)로 쓸 수 있고,
+    제외 규칙은 실행 자체가 안 되므로 그 내부 실패가 W18로 누출되지 않는다."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "이건" + EM_DASH + "차단", font="Wanted Sans", size=12)
+    path = save(p, tmp_path, "fx.pptx")
+    errors, _w = jl.lint(path, profile="core")
+    assert not by_code(errors, "E2"), errors            # 라이브러리 API에서 프로파일 동작
+    errors, _w = jl.lint(path)
+    assert by_code(errors, "E2"), errors                # 기본 full은 차단 유지
+
+    def boom(*a, **kw):
+        raise RuntimeError("w9 fail")
+    monkeypatch.setattr(jl, "accent_vbars_check", boom)
+    _e, warns = jl.lint(path, profile="core")           # W9 제외 -> 실행 안 함 -> W18 누출 없음
+    assert not any("w9" in d for (_si, m, d) in by_code(warns, "W18")), warns
+    _e, warns = jl.lint(path)                           # full -> 실행 -> 가드 -> W18
+    assert any("w9" in d for (_si, m, d) in by_code(warns, "W18")), warns
+
+
+def test_skip_validation_strengthened(tmp_path):
+    """P1: 존재하지 않는 W코드와 W18 억제는 exit 2 거부."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "clean", font="Wanted Sans", size=20)
+    path = save(p, tmp_path, "fx.pptx")
+    assert run_cli([path, "--skip", "W51"]).returncode == 2
+    assert run_cli([path, "--skip", "W18"]).returncode == 2
+    assert run_cli([path, "--skip", "W14"]).returncode == 0
+
+
+def test_e4_hanja_message(tmp_path):
+    """P1: E4 메시지가 실제 판정 범위(한글·한자)와 일치한다."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "大韓民國", font="맑은 고딕", size=12, spc=100)
+    errors, _w = jl.lint(save(p, tmp_path, "fx.pptx"))
+    e4 = by_code(errors, "E4")
+    assert e4 and "한자" in e4[0][1], e4
+
+
+def test_w8_extended_hangul(tmp_path):
+    """P1: is_cjk 통합으로 반각 한글도 W8 소형 CJK 판정에 잡힌다."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 2, 0.4, chr(0xFFA1) * 6, font="Wanted Sans", size=6)   # 반각 ㄱ x6
+    _e, warns = jl.lint(save(p, tmp_path, "fx.pptx"))
+    assert by_code(warns, "W8"), warns
+
+
+def test_ghost_prefers_title_placeholder(tmp_path):
+    """제목 placeholder가 있으면 더 큰 KPI 빅넘버가 ghost 제목을 밀어내지 않는다(3차 리뷰)."""
+    p = Presentation()
+    s = p.slides.add_slide(p.slide_layouts[1])
+    s.shapes.title.text_frame.text = "시장 규모는 빠르게 확대된다"
+    for r in s.shapes.title.text_frame.paragraphs[0].runs:
+        r.font.size = Pt(26)
+    s.placeholders[1].text_frame.text = ""
+    box = s.shapes.add_textbox(Inches(4), Inches(3), Inches(5), Inches(1.5))
+    r = box.text_frame.paragraphs[0].add_run()
+    r.text = "300억"
+    r.font.size = Pt(60)
+    ghost = []
+    jl.lint(save(p, tmp_path, "fx.pptx"), ghost=ghost)
+    assert ghost and "시장 규모" in ghost[0][1], ghost
+
+
+def test_json_schema_contract(tmp_path):
+    """JSON 버전 계약 시작(3차 리뷰): schema_version·tool·target_renderer."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "clean", font="Wanted Sans", size=20)
+    doc = json.loads(run_cli([save(p, tmp_path, "fx.pptx"), "--json"]).stdout)
+    assert doc["schema_version"] == "1.0"
+    assert doc["tool"]["name"] == "archforge" and doc["tool"]["version"]
+    assert doc["target_renderer"] == "powerpoint-windows"
+
+
+def test_w6_detail_english(tmp_path):
+    """P1: detail까지 i18n(영어 모드에서 W6 detail이 e.g.로 시작)."""
+    p = new_prs()
+    for i in range(6):
+        s = add_slide(p)
+        tb(s, 1, 0.8, 8, 0.6, "Title block %d" % i, font="Wanted Sans", size=24)
+        tb(s, 1, 2.0, 6, 2.5, "Body block", font="Wanted Sans", size=12)
+        tb(s, 8, 2.0, 4, 2.5, "Side block", font="Wanted Sans", size=12)
+    doc = json.loads(run_cli([save(p, tmp_path, "fx.pptx"), "--json"], lang="en").stdout)
+    w6 = [w for w in doc["warnings"] if w["code"] == "W6"]
+    assert w6 and w6[0]["detail"].startswith("e.g."), w6
+
+
 # ---------------------------------------------------------------- skill packaging
 def _repo_root():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

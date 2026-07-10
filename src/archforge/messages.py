@@ -49,8 +49,8 @@ MESSAGES = {
         "en": " (nominal %.1f * autofit %.2f)",
     },
     "e4": {
-        "ko": "한글 run 에 양수 트래킹 %d(0.5pt 초과, 자간 벌어짐)",
-        "en": "Positive tracking %d on a Hangul run (over 0.5pt; Hangul spacing damage)",
+        "ko": "한글·한자 run 에 양수 트래킹 %d(0.5pt 초과, 자간 벌어짐)",
+        "en": "Positive tracking %d on a Hangul/Hanja run (over 0.5pt; letter-spacing damage)",
     },
     # ---- W gates
     "w1": {
@@ -123,6 +123,21 @@ MESSAGES = {
         "ko": "덱 단위 일부 검사를 수행하지 못함(손상·비정형 구조): 결과가 불완전할 수 있음",
         "en": "Some deck-level checks could not run (malformed/atypical structure); results may be incomplete",
     },
+    "w6_detail": {"ko": "예 %s", "en": "e.g. %s"},
+    "w10_detail": {"ko": "페이지 %s", "en": "pages %s"},
+    # ---- 진단(stderr)
+    "note_theme_parse": {
+        "ko": "theme parse 실패 마스터 있음: E1 테마 판정이 빈 슬롯 가정으로 후퇴",
+        "en": "a master's theme failed to parse: E1 theme judgment falls back to the empty-slot assumption",
+    },
+    "note_render_dir_missing": {
+        "ko": "--render 폴더가 없음: W7 이미지 대비 검사를 수행하지 못함(%s)",
+        "en": "--render folder not found: the W7 on-image contrast check could not run (%s)",
+    },
+    "note_render_naming": {
+        "ko": "W7 참고: %s 에 p01.png·p02.png 형식 렌더가 없어 이미지 대비 검사를 건너뜀(현재 파일: %s ...)",
+        "en": "W7 note: no p01.png/p02.png-named renders in %s; on-image contrast check skipped (found: %s ...)",
+    },
     # ---- 리포트 스캐폴딩
     "ghost_header": {
         "ko": "--- ghost deck (제목만 읽기: 주장이 이야기로 흐르는가) ---",
@@ -148,6 +163,14 @@ MESSAGES = {
     "err_skip_e": {
         "ko": "archforge: --skip 은 WARN 코드 전용입니다(배포 차단 ERROR는 억제 불가): %s",
         "en": "archforge: --skip accepts WARN codes only (deploy-blocking ERRORs cannot be suppressed): %s",
+    },
+    "err_skip_unknown": {
+        "ko": "archforge: --skip 에 존재하지 않는 코드가 있습니다(오타 확인): %s",
+        "en": "archforge: --skip contains unknown rule codes (check for typos): %s",
+    },
+    "err_skip_w18": {
+        "ko": "archforge: W18은 검사 불완전성 신호라 --skip 으로 억제할 수 없습니다",
+        "en": "archforge: W18 signals incomplete checking and cannot be suppressed with --skip",
     },
     "skill_installed": {
         "ko": "archforge: 스킬 설치 완료 -> %s",

@@ -44,7 +44,10 @@ No repo clone needed.
 `--json` output shape:
 
 ```json
-{"file": "...",
+{"schema_version": "1.0",
+ "tool": {"name": "archforge", "version": "0.3.1"},
+ "target_renderer": "powerpoint-windows",
+ "file": "...",
  "lang": "en",
  "errors":   [{"page": 3, "code": "E1", "message": "...", "detail": "..."}],
  "warnings": [{"page": 5, "code": "W15", "message": "...", "detail": "..."}],
@@ -99,13 +102,17 @@ says so. Most are approximation-based, calibrated against rendered output
 build deck.pptx
 loop:
     result = archforge deck.pptx --json
-    if result.summary.error_count == 0: break
-    fix the listed defects (smallest page number first)
+    if result.summary.error_count == 0 and not result.summary.incomplete: break
+    fix the listed defects (smallest page number first);
+    if incomplete, fix the malformed spans W18 points at
     rebuild
 for each WARN: decide fix vs. accept, based on the rendered page
 render all pages once and eyeball them   # gates catch the mechanical class;
                                           # composition quality is still on you
 ```
+
+Ship condition is `error_count == 0 AND incomplete == false` - a pass with
+incomplete=true means part of the deck was never actually checked.
 
 Two rules of thumb learned the hard way:
 

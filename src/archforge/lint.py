@@ -120,7 +120,8 @@ _MINUS = chr(0x2212)
 
 # 규칙 프리셋(0.3.0): 객관 결함과 스타일·관행 정책의 분리(외부 전략 리뷰 반영).
 # --skip과 달리 이름 붙은 공개 정책이라 E2 같은 스타일성 ERROR 제외를 허용하되,
-# 선택이 JSON summary(profile, skipped_codes)에 남는다.
+# 선택이 JSON summary(profile, skipped_codes)에 남는다. 0.3.1부터 엔진 실행 정책이다
+# (제외 규칙은 아예 실행하지 않음: 3차 리뷰 P0).
 PROFILES = {
     "full": frozenset(),                                    # 기본: 전부(현행 동작)
     "core": frozenset({"E2", "W6", "W9", "W10", "W11",      # 객관 결함만: 스타일·관행 규칙 제외
@@ -128,16 +129,17 @@ PROFILES = {
     "editorial": frozenset({"W6", "W14"}),                   # 에디토리얼·포트폴리오 덱
 }
 
+# 등록된 전체 코드(--skip 오타 검증용: 존재하지 않는 W코드가 조용히 통과하면
+# CI에서 W15를 끄려다 W51로 오타 내도 정상처럼 보인다: 3차 리뷰 P1)
+ALL_CODES = frozenset(
+    {"E1", "E2", "E3", "E4"} |
+    {"W%d" % i for i in (1, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18)})
+
 
 def is_cjk(ch):
-    o = ord(ch)
-    return (
-        0xAC00 <= o <= 0xD7A3        # 한글 음절
-        or 0x1100 <= o <= 0x11FF     # 한글 자모
-        or 0x3130 <= o <= 0x318F     # 호환 자모
-        or 0x3040 <= o <= 0x30FF     # 가나
-        or 0x4E00 <= o <= 0x9FFF     # 한자
-    )
+    """한글(확장 포함)·가나·한자. 스크립트 판정 단일화(3차 리뷰 P1: is_hangul만 확장해
+    W8 등 has_cjk 소비자가 확장 한글을 놓치던 불일치의 교정)."""
+    return is_hangul(ch) or is_kana(ch) or is_hanja(ch)
 
 
 def has_cjk(text):
@@ -212,6 +214,27 @@ def _text_point_attr(v: Optional[str]) -> Optional[int]:
     if not m:
         return None
     return int(round(float(m.group(1)) * _UNIVERSAL_PER_PT[m.group(2)] * 100))
+
+
+def para_fonts(para) -> Dict[str, str]:
+    """문단 pPr/defRPr의 latin/ea typeface. OOXML에서 문단 기본 런 속성으로, run rPr
+    바로 다음 순위다(COM 프로브7 실측 2026-07-10: 문단 defRPr ea가 실제로 렌더되고
+    lstStyle 체인을 이긴다. 3차 외부 리뷰 P0-1: 이 단계 누락이 E1 오탐·미탐 동시 유발)."""
+    out = {}
+    try:
+        pPr = para._p.find(NS + "pPr")
+        if pPr is not None:
+            d = pPr.find(NS + "defRPr")
+            if d is not None:
+                for slot in ("latin", "ea"):
+                    el = d.find(NS + slot)
+                    if el is not None:
+                        tf = el.get("typeface")
+                        if tf:
+                            out[slot] = tf
+    except Exception:
+        pass
+    return out
 
 
 def run_track(run) -> Optional[int]:
@@ -642,6 +665,50 @@ def theme_ea_by_master(prs) -> Dict[str, Optional[str]]:
             for k, v in theme_fonts_by_master(prs).items()}
 
 
+def _theme_colors_from_blob(blob: bytes) -> Optional[Dict[str, str]]:
+    """테마 clrScheme의 색 이름 -> RRGGBB(sysClr는 lastClr). W7의 schemeClr 해석용
+    (3차 외부 리뷰 P1: 직접 RGB만 읽어 테마색 텍스트가 검사에서 빠지던 것 보강)."""
+    try:
+        from lxml import etree
+        root = etree.fromstring(blob)
+        scheme = root.find(".//" + NS + "clrScheme")
+        if scheme is None:
+            return None
+        out = {}
+        for el in scheme:
+            name = el.tag.split("}")[1]
+            srgb = el.find(NS + "srgbClr")
+            if srgb is not None and srgb.get("val"):
+                out[name] = srgb.get("val").upper()
+                continue
+            sysc = el.find(NS + "sysClr")
+            if sysc is not None and sysc.get("lastClr"):
+                out[name] = sysc.get("lastClr").upper()
+        # schemeClr 참조명 매핑(표준 clrMap 기본): tx1->dk1, tx2->dk2, bg1->lt1, bg2->lt2
+        for ref, base in (("tx1", "dk1"), ("tx2", "dk2"), ("bg1", "lt1"), ("bg2", "lt2")):
+            if base in out:
+                out.setdefault(ref, out[base])
+        return out
+    except Exception:
+        return None
+
+
+def theme_colors_by_master(prs) -> Dict[str, Optional[Dict[str, str]]]:
+    """슬라이드마스터별 테마 색 맵. 키=마스터 partname 문자열."""
+    out = {}
+    try:
+        from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+        for master in prs.slide_masters:
+            try:
+                theme_part = master.part.part_related_by(RT.THEME)
+                out[str(master.part.partname)] = _theme_colors_from_blob(theme_part.blob)
+            except Exception:
+                out[str(master.part.partname)] = None
+    except Exception:
+        pass
+    return out
+
+
 def resolve_font_tokens(fonts: Dict[str, str], thm_fonts: Optional[Dict[str, str]]) -> Dict[str, str]:
     """run 슬롯 값의 OOXML 테마 토큰("+mn-lt"/"+mj-ea" 류)을 실폰트명으로 치환.
     토큰이 해석 불가(테마 파싱 실패·빈 값)면 그 슬롯을 비운다(= 상속 체인에 맡김).
@@ -1043,7 +1110,7 @@ def _empty_para_pt(para, default_pt):
     return default_pt
 
 
-def _text_glyph_boxes(slide, default_pt=12.0, skipped=None):
+def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
     """문단 단위 실효 글리프 bbox(in) 근사. 반환 [(x0,y0,x1,y1,대표텍스트,max_pt,frame_id)].
     폭은 run별 실제 크기로 합산, 행간은 line_spacing 실값(없으면 1.2)에 autofit
     lnSpcReduction 반영. 문단별 정렬(명시 없으면 프레임 첫 명시값, 그것도 없으면 좌)로
@@ -1053,54 +1120,60 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None):
     실덱 렌더 대조 + 적대 검증 실측 재현으로 캘리브레이션.
     스크립트 레이어(0.2.1): 세로쓰기(bodyPr@vert)와 RTL·복잡 조판 스크립트가 든 프레임은
     글자폭 근사가 무의미해 스킵하고, skipped Counter가 오면 집계해 W18로 표면화한다.
+    0.3.1(3차 외부 리뷰 P0): styler(StyleResolver)를 받으면 크기 없는 run을 E3와 동일한
+    상속 체인으로 해석한다(한 문서에 두 실효 스타일 모델이 존재하던 불일치의 교정).
+    네이티브 표는 열 폭·행 높이 누적으로 셀 사각형을 계산해 셀 텍스트도 포함한다.
     알려진 한계: 플레이스홀더가 레이아웃 lstStyle로 정렬을 상속하는 경우는 좌정렬로 후퇴,
     회전 프레임 스킵은 장식 관행이라 W18 집계에서 제외."""
     import math
     out = []
-    for sp, _z, xf in iter_shapes_geo(slide.shapes):
-        if not getattr(sp, "has_text_frame", False):
-            continue
-        geo = _geo_rect(sp, xf)
-        if geo is None:
-            continue
-        fx, fy, fw, fh, rotated = geo
-        if rotated:
-            continue
-        fw = max(fw, 0.05)
-        tf = sp.text_frame
+
+    def emit_frame(tframe, fx, fy, fw, fh, fid, owner_sp):
         try:
-            bodyPr = tf._txBody.find(NS + "bodyPr")
+            bodyPr = tframe._txBody.find(NS + "bodyPr")
             vert = bodyPr.get("vert") if bodyPr is not None else None
             if vert not in (None, "horz"):
                 if skipped is not None:
                     skipped["vertical_text"] += 1
-                continue
+                return
         except Exception:
             pass
         try:
-            frame_text = "".join(r.text for para in tf.paragraphs for r in para.runs)
+            frame_text = "".join(r.text for para in tframe.paragraphs for r in para.runs)
             if _geometry_unsupported(frame_text):
                 if skipped is not None:
                     skipped["complex_script"] += 1
-                continue
+                return
         except Exception:
             pass
-        scale, lnred = frame_autofit(tf)
-        wrap = tf.word_wrap is not False   # None(속성 없음)=OOXML 기본 square=랩
+        fw2 = max(fw, 0.05)
+        scale, lnred = frame_autofit(tframe)
+        wrap = tframe.word_wrap is not False   # None(속성 없음)=OOXML 기본 square=랩
         frame_align = None
-        for para in tf.paragraphs:
+        for para in tframe.paragraphs:
             if para.alignment is not None:
                 frame_align = para.alignment
                 break
         paras = []   # (pw, pmx, ptxt, factor, n, align)
-        for para in tf.paragraphs:
+        for para in tframe.paragraphs:
             pw, pmx, ptxt = 0.0, 0.0, ""
             for r in para.runs:
                 t = r.text
                 if not t:
                     continue
-                sz = r.font.size.pt if r.font.size is not None else \
-                    (para.font.size.pt if para.font.size is not None else default_pt)
+                if r.font.size is not None:
+                    sz = r.font.size.pt
+                elif para.font.size is not None:
+                    sz = para.font.size.pt
+                else:
+                    sz = None
+                    if styler is not None:
+                        try:
+                            sz = styler.resolve(tframe, owner_sp, slide, getattr(para, "level", 0))
+                        except Exception:
+                            sz = None
+                    if sz is None:
+                        sz = default_pt
                 sz *= scale
                 pw += _glyph_w(t, sz)
                 ptxt += t
@@ -1119,34 +1192,79 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None):
                     factor = ls.pt / pmx if pmx else 1.2
                 except Exception:
                     factor = 1.2
-            n = max(1, math.ceil(pw / (fw * 1.04))) if wrap else 1
+            n = max(1, math.ceil(pw / (fw2 * 1.04))) if wrap else 1
             al = para.alignment if para.alignment is not None else frame_align
             paras.append((pw, pmx, ptxt, factor, n, al))
         gh_total = sum(n * pmx * max(f, 0.95) * (1.0 - lnred) / 72.0
                        for (pw, pmx, ptxt, f, n, al) in paras)
         if gh_total <= 0:
-            continue
-        va = str(tf.vertical_anchor) if tf.vertical_anchor is not None else ""
+            return
+        va = str(tframe.vertical_anchor) if tframe.vertical_anchor is not None else ""
         if "MIDDLE" in va:
             cy = fy + max(0.0, (fh - gh_total) / 2)
         elif "BOTTOM" in va:
             cy = fy + max(0.0, fh - gh_total)
         else:
             cy = fy
-        fid = id(sp)
         for (pw, pmx, ptxt, factor, n, al) in paras:
             ph = n * pmx * max(factor, 0.95) * (1.0 - lnred) / 72.0
             if ptxt.strip():
-                gw = pw if not wrap else min(pw, fw)
+                gw = pw if not wrap else min(pw, fw2)
                 a = str(al) if al is not None else ""
                 if "CENTER" in a:
-                    x0 = fx + (fw - gw) / 2
+                    x0 = fx + (fw2 - gw) / 2
                 elif "RIGHT" in a:
-                    x0 = fx + fw - gw
+                    x0 = fx + fw2 - gw
                 else:
                     x0 = fx
                 out.append(GlyphBox(x0, cy, x0 + gw, cy + ph, ptxt[:24], pmx, fid))
             cy += ph
+
+    for sp, _z, xf in iter_shapes_geo(slide.shapes):
+        if getattr(sp, "has_table", False):
+            # 네이티브 표 셀(3차 외부 리뷰 P0: 자동 생성 덱의 표가 기하 사각지대였다).
+            # 셀 사각형 = 표 원점 + 열 폭·행 높이 누적(EMU에 xf 스케일 적용).
+            geo = _geo_rect(sp, xf)
+            if geo is None or geo[4]:
+                continue
+            tx, ty = geo[0], geo[1]
+            ax = xf[0]
+            ay = xf[2]
+            try:
+                tbl = sp.table
+                col_w = [(c.width or 0) for c in tbl.columns]
+                row_h = [(r.height or 0) for r in tbl.rows]
+            except Exception:
+                continue
+            cy_off = 0
+            for ri, row in enumerate(tbl.rows):
+                cx_off = 0
+                for ci, cell in enumerate(row.cells):
+                    cw = col_w[ci] if ci < len(col_w) else 0
+                    rh = row_h[ri] if ri < len(row_h) else 0
+                    try:
+                        ctf = cell.text_frame
+                    except Exception:
+                        cx_off += cw
+                        continue
+                    emit_frame(ctf,
+                               tx + ax * cx_off / EMU_PER_IN,
+                               ty + ay * cy_off / EMU_PER_IN,
+                               ax * cw / EMU_PER_IN,
+                               ay * rh / EMU_PER_IN,
+                               id(cell._tc), sp)
+                    cx_off += cw
+                cy_off += row_h[ri] if ri < len(row_h) else 0
+            continue
+        if not getattr(sp, "has_text_frame", False):
+            continue
+        geo = _geo_rect(sp, xf)
+        if geo is None:
+            continue
+        fx, fy, fw, fh, rotated = geo
+        if rotated:
+            continue
+        emit_frame(sp.text_frame, fx, fy, fw, fh, id(sp), sp)
     return out
 
 
@@ -1424,40 +1542,88 @@ def _run_rgb(run):
     return None
 
 
-def contrast_check(slide, si, sw, sh, render_dir, warns):
-    """이미지 위 텍스트 저대비 감지(렌더 PNG 근사). picture와 겹치는 텍스트 프레임만, 슬라이드당 1회."""
+def _resolve_run_rgb(run, para, tframe, sp, slide, styler=None, thm_colors=None):
+    """텍스트색 해석: run rPr 직접 RGB → 문단 defRPr → lstStyle 상속 체인 → schemeClr를
+    테마 clrScheme으로 해석(3차 리뷰 P1: 직접 RGB만 읽어 테마색 텍스트가 W7에서 빠지던 것)."""
+    def from_el(el):
+        if el is None:
+            return None
+        fill = el.find(NS + "solidFill")
+        if fill is None:
+            return None
+        srgb = fill.find(NS + "srgbClr")
+        if srgb is not None and srgb.get("val"):
+            v = srgb.get("val")
+            return (int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16))
+        sch = fill.find(NS + "schemeClr")
+        if sch is not None and thm_colors:
+            v = (thm_colors or {}).get(sch.get("val") or "")
+            if v:
+                return (int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16))
+        return None
+
+    direct = _run_rgb(run)
+    if direct:
+        return direct
+    try:
+        c = from_el(run._r.find(NS + "rPr"))
+        if c:
+            return c
+    except Exception:
+        pass
+    try:
+        pPr = para._p.find(NS + "pPr")
+        c = from_el(pPr.find(NS + "defRPr") if pPr is not None else None)
+        if c:
+            return c
+    except Exception:
+        pass
+    if styler is not None:
+        try:
+            for el, _src in styler._chain(tframe, sp, slide, getattr(para, "level", 0)):
+                c = from_el(el)
+                if c:
+                    return c
+        except Exception:
+            pass
+    return None
+
+
+def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors=None):
+    """이미지 위 텍스트 저대비 감지(렌더 PNG 근사). picture와 겹치는 텍스트 프레임만, 슬라이드당 1회.
+    반환: "no_pics"(검사 대상 없음) / "no_png"(그림은 있는데 규약 렌더 없음=불완전) / "ok"(검사함).
+    좌표는 그룹 변환 포함 절대좌표(3차 리뷰 P1: raw 좌표라 그룹 내부 그림·텍스트가 어긋나던 것)."""
     from PIL import Image
     pics = []
-    for sp in iter_shapes(slide.shapes):
+    for sp, _z, xf in iter_shapes_geo(slide.shapes):
         if _is_pic(sp):
-            try:
-                if None not in (sp.left, sp.top, sp.width, sp.height):
-                    pics.append((sp.left, sp.top, sp.width, sp.height))
-            except Exception:
-                pass
+            geo = _geo_rect(sp, xf)
+            if geo is not None:
+                x, y, w, h, _rot = geo
+                pics.append((x * EMU_PER_IN, y * EMU_PER_IN, w * EMU_PER_IN, h * EMU_PER_IN))
     if not pics:
-        return 0
+        return "no_pics"
     cand = glob.glob(os.path.join(render_dir, "p%02d.png" % si))
     if not cand:
-        return 0
+        return "no_png"
     try:
         im = Image.open(cand[0]).convert("RGB"); px = im.load(); PW, PH = im.size
     except Exception:
-        return 0
-    for sp in iter_shapes(slide.shapes):
+        return "no_png"
+    for sp, _z, xf in iter_shapes_geo(slide.shapes):
         if not getattr(sp, "has_text_frame", False):
             continue
-        try:
-            L, T, Wd, Ht = sp.left, sp.top, sp.width, sp.height
-        except Exception:
+        geo = _geo_rect(sp, xf)
+        if geo is None:
             continue
-        if None in (L, T, Wd, Ht):
-            continue
+        gx, gy, gw_, gh_, _rot = geo
+        L, T, Wd, Ht = gx * EMU_PER_IN, gy * EMU_PER_IN, gw_ * EMU_PER_IN, gh_ * EMU_PER_IN
         over = any(not (L + Wd <= p0 or L >= p0 + pw or T + Ht <= q0 or T >= q0 + ph)
                    for p0, q0, pw, ph in pics)
         if not over:
             continue
-        rgbs = [_run_rgb(r) for para in sp.text_frame.paragraphs for r in para.runs if r.text.strip()]
+        rgbs = [_resolve_run_rgb(r, para, sp.text_frame, sp, slide, styler, thm_colors)
+                for para in sp.text_frame.paragraphs for r in para.runs if r.text.strip()]
         rgbs = [c for c in rgbs if c]
         if not rgbs:
             continue
@@ -1482,12 +1648,15 @@ def contrast_check(slide, si, sw, sh, render_dir, warns):
         if ratio < 2.5:
             warns.append((si, "W7", M("w7") % ratio,
                           "text=%r" % sp.text_frame.text[:20]))
-            return 1
-    return 1   # 이 페이지의 렌더 PNG를 찾아 검사했음(W7 발화 여부와 무관, 파일명 규약 매치 확인용)
+            return "ok"
+    return "ok"   # 이 페이지의 렌더 PNG를 찾아 검사했음(W7 발화 여부와 무관)
 
 
 def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost=None,
-         strict=False, w6_sim=0.90, w6_min_cluster=3):
+         strict=False, w6_sim=0.90, w6_min_cluster=3, profile="full"):
+    """profile은 실행 정책이다(3차 외부 리뷰 P0: CLI 사후 필터가 아니라 엔진 단계 적용).
+    제외된 규칙은 아예 실행하지 않으므로 O(S^2) 비교 비용도 안 들고, 제외 규칙의 내부
+    실패가 W18로 누출되지도 않으며, 라이브러리 호출에서도 프로파일을 쓸 수 있다."""
     prs = Presentation(path)
     sw, sh = prs.slide_width, prs.slide_height
     errors, warns = [], []
@@ -1497,63 +1666,84 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
     foot_tops = {}
     fx_pp = {}
     titles = {}
+    excl = PROFILES.get(profile, frozenset())
     fonts_map = theme_fonts_by_master(prs)
+    colors_map = theme_colors_by_master(prs) if render_dir else {}
+    colors_default = next((v for v in colors_map.values() if v is not None), None)
     thm_default = next((v for v in fonts_map.values() if v is not None), None)
     deck_skipped = Counter()   # 덱 레벨 검사 불능(W18 p00 발화용)
+    if render_dir and not os.path.isdir(render_dir):
+        # --render 폴더가 없으면 W7이 조용히 0건 수행되던 경로(3차 리뷰 P0): 불완전으로 표면화
+        deck_skipped["render_dir_missing"] += 1
+        print(M("note_render_dir_missing") % render_dir, file=sys.stderr)
     theme_fails = sum(1 for v in fonts_map.values() if v is None)
     if theme_fails:
         # 파싱 실패(None)와 확인된 빈 슬롯("")은 E1 분기에선 같은 폴백 가정으로 후퇴한다.
         # 구분이 사라지는 지점이라 W18로 표면화(적대 패널·2차 재점검: 침묵 붕괴 방지).
         deck_skipped["theme_parse"] = theme_fails
-        print("theme parse 실패 마스터 있음: E1 테마 판정이 빈 슬롯 가정으로 후퇴", file=sys.stderr)
+        print(M("note_theme_parse"), file=sys.stderr)
     styler = StyleResolver(prs)
 
     render_png_hits = 0
     for si, slide in enumerate(prs.slides, 1):
         # 슬라이드가 쓰는 마스터의 테마 폰트 슬롯(멀티마스터 덱에서 E1 오발화 방지)
         thm_fonts = thm_default
+        thm_colors = colors_default
         try:
-            thm_fonts = fonts_map.get(str(slide.slide_layout.slide_master.part.partname), thm_default)
+            pn = str(slide.slide_layout.slide_master.part.partname)
+            thm_fonts = fonts_map.get(pn, thm_default)
+            thm_colors = colors_map.get(pn, colors_default)
         except Exception:
             pass
         skipped = Counter()   # W18: 검사 불능 구간 집계(조용한 저하를 JSON에 표면화)
         # sig와 toks는 각자 가드: 한 try에 묶으면 sig 성공 후 toks 실패 시 except의
         # 재append로 sigs가 밀려 W6 페이지 번호가 어긋난다(적대 패널 실측 재현).
-        try:
-            sig = slide_layout_sig(slide, sw, sh)
-        except Exception as e:
-            sig = ([0.0] * 24, 0)   # 위치 보존(sigs는 페이지 순서 인덱스)
-            skipped["w6_sig"] += 1
-            print("W6 sig skipped p%02d: %s" % (si, e), file=sys.stderr)
-        sigs.append(sig)
-        try:
-            toks[si] = _fill_tokens(slide, sw, sh)
-        except Exception as e:
-            toks[si] = Counter()
-            skipped["w10_tokens"] += 1
-            print("W10 tokens skipped p%02d: %s" % (si, e), file=sys.stderr)
+        # 프로파일에서 제외된 규칙의 수집·검사는 아예 실행하지 않는다(3차 리뷰 P0).
+        if "W6" not in excl:
+            try:
+                sig = slide_layout_sig(slide, sw, sh)
+            except Exception as e:
+                sig = ([0.0] * 24, 0)   # 위치 보존(sigs는 페이지 순서 인덱스)
+                skipped["w6_sig"] += 1
+                print("W6 sig skipped p%02d: %s" % (si, e), file=sys.stderr)
+            sigs.append(sig)
+        if "W10" not in excl:
+            try:
+                toks[si] = _fill_tokens(slide, sw, sh)
+            except Exception as e:
+                toks[si] = Counter()
+                skipped["w10_tokens"] += 1
+                print("W10 tokens skipped p%02d: %s" % (si, e), file=sys.stderr)
         if render_dir:
             try:
-                render_png_hits += contrast_check(slide, si, sw, sh, render_dir, warns)
+                r7 = contrast_check(slide, si, sw, sh, render_dir, warns,
+                                    styler=styler, thm_colors=thm_colors)
+                if r7 == "ok":
+                    render_png_hits += 1
+                elif r7 == "no_png":
+                    # 그림이 있는 페이지인데 규약 렌더가 없음 = 이 페이지 W7 미수행(불완전)
+                    skipped["w7_no_render"] += 1
             except Exception as e:
                 skipped["w7"] += 1
                 print("W7 skipped p%02d: %s" % (si, e), file=sys.stderr)
-        try:
-            accent_vbars_check(slide, si, sw, sh, warns)
-        except Exception as e:
-            skipped["w9"] += 1
-            print("W9 skipped p%02d: %s" % (si, e), file=sys.stderr)
-        try:
-            foot_tops[si] = footer_top(slide, sw, sh)
-            fx_pp[si] = effects_count(slide)
-        except Exception as e:
-            skipped["w12_w13"] += 1
-            print("W12/W13 skipped p%02d: %s" % (si, e), file=sys.stderr)
+        if "W9" not in excl:
+            try:
+                accent_vbars_check(slide, si, sw, sh, warns)
+            except Exception as e:
+                skipped["w9"] += 1
+                print("W9 skipped p%02d: %s" % (si, e), file=sys.stderr)
+        if "W12" not in excl or "W13" not in excl:
+            try:
+                foot_tops[si] = footer_top(slide, sw, sh)
+                fx_pp[si] = effects_count(slide)
+            except Exception as e:
+                skipped["w12_w13"] += 1
+                print("W12/W13 skipped p%02d: %s" % (si, e), file=sys.stderr)
         # 기하 기초자료는 슬라이드당 1회만 계산(이전엔 W15~W17이 각자 재계산: 텍스트박스 3회,
         # 그림 PIL 디코드 2회. 대형 덱 성능 지적의 교정, 외부 리뷰 2026-07-10)
         sw_in, sh_in = sw / EMU_PER_IN, sh / EMU_PER_IN
         try:
-            tboxes = _text_glyph_boxes(slide, skipped=skipped)
+            tboxes = _text_glyph_boxes(slide, skipped=skipped, styler=styler)
         except Exception as e:
             tboxes = None
             skipped["glyph_boxes"] += 1
@@ -1609,6 +1799,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                         run_offs.append(pos)
                         pos += len(r.text)
                     ptext = "".join(r.text for r in runs)
+                    p_fonts = para_fonts(para)   # 문단 defRPr: run rPr 다음 순위(프로브7)
                     try:
                         para_size = para.font.size
                     except Exception:
@@ -1639,6 +1830,9 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                         if script:
                             fonts = run_fonts(run)
                             for slot in ("ea", "latin"):
+                                if slot not in fonts and slot in p_fonts:
+                                    fonts[slot] = p_fonts[slot]   # 문단 defRPr(프로브7: lstStyle을 이김)
+                            for slot in ("ea", "latin"):
                                 if slot not in fonts:
                                     try:
                                         inh = styler.resolve_font(tf, owner_sp, slide, lvl, slot)
@@ -1654,8 +1848,9 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
 
                         # E2: 긴 대시류. 문맥은 문단 전체(ptext)에서 보고 보고는 이 run 구간만:
                         # run 경계로 쪼개진 '2020'/'-2021' 범위 오탐 방지(적대 패널 확정)
-                        bad = dash_violations(ptext, strict=strict,
-                                              span=(run_offs[ri], run_offs[ri] + len(t)))
+                        bad = [] if "E2" in excl else \
+                            dash_violations(ptext, strict=strict,
+                                            span=(run_offs[ri], run_offs[ri] + len(t)))
                         if bad:
                             errors.append((si, "E2", M("e2"),
                                            "cp=%s text=%r" % (",".join("U+%04X" % ord(c) for c in sorted(set(bad))), t[:24])))
@@ -1679,10 +1874,14 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                             # 마스터 bodyStyle 상속 크기가 18pt를 넘으면 본문 산문이 ghost/W14에
                             # 쓸려 들어간다(3차 적대 패널: own lstStyle 20pt 본문 실측 재현)
                             if eff >= 18 and t.strip() and (size_src == "explicit" or frame_fam == "title"):
+                                # 제목 placeholder가 있으면 크기 무관 그것이 제목이다: 60pt
+                                # KPI 빅넘버가 26pt 실제 제목을 밀어내던 것 교정(3차 리뷰)
+                                is_title_ph = frame_fam == "title"
                                 cur = titles.get(si)
-                                if cur is None or eff > cur[0] + 0.1:
-                                    titles[si] = (eff, [t])
-                                elif abs(eff - cur[0]) <= 0.1:
+                                if cur is None or (is_title_ph and not cur[2]) \
+                                        or (is_title_ph == cur[2] and eff > cur[0] + 0.1):
+                                    titles[si] = (eff, [t], is_title_ph)
+                                elif is_title_ph == cur[2] and abs(eff - cur[0]) <= 0.1:
                                     cur[1].append(t)
                             if eff < hard_min:
                                 note = "" if scale == 1.0 else M("e3_note") % (base_pt, scale)
@@ -1723,13 +1922,12 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             warns.append((si, "W18", M("w18_page"),
                           det))
 
-    # --render 를 켰는데 p##.png 규약에 맞는 렌더를 한 장도 못 찾으면 W7 이 조용히 0건 수행된다.
-    # 폴더에 png 는 있는데(다른 이름) 매치가 0이면 파일명 규약을 stderr 로 안내(silent no-op 방지).
-    if render_dir and render_png_hits == 0:
+    # 규약(p01.png) 매치가 0인데 다른 이름의 png가 있으면 파일명 규약을 안내.
+    # 불완전성 자체는 페이지 단위 w7_no_render 카운터가 W18/incomplete로 표면화한다(0.3.1).
+    if render_dir and os.path.isdir(render_dir) and render_png_hits == 0:
         anypng = glob.glob(os.path.join(render_dir, "*.png"))
         if anypng:
-            print("W7 note: %s 에 p01.png·p02.png 형식 렌더가 없어 이미지 대비 검사를 건너뜀 "
-                  "(현재 파일: %s ...)" % (render_dir, os.path.basename(anypng[0])), file=sys.stderr)
+            print(M("note_render_naming") % (render_dir, os.path.basename(anypng[0])), file=sys.stderr)
 
     # W6: 레이아웃 골격 재탕. 성긴 슬라이드(디바이더·커버 등 비영 셀<4)는 제외하고, 콘텐츠
     # 슬라이드 중 한 장이 유사(>w6_sim)한 다른 슬라이드가 w6_min_cluster장 이상이면 경고.
@@ -1737,7 +1935,8 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
     # 임계는 CLI 튜너블(--w6-sim/--w6-cluster): 의도적 템플릿 일관성이 강한 하우스는 조여서
     # 억제 가능(장르 무지 지적의 교정, 외부 리뷰 2026-07-10. 통째 억제는 --skip W6).
     try:
-        content = [(i + 1, sig) for i, (sig, n) in enumerate(sigs) if n >= 3]
+        content = [] if "W6" in excl else \
+            [(i + 1, sig) for i, (sig, n) in enumerate(sigs) if n >= 3]
         if len(content) >= w6_min_cluster + 1:
             adj = {p: [] for p, _ in content}
             for a in range(len(content)):
@@ -1750,17 +1949,21 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             if len(worst) >= w6_min_cluster:
                 ex = " ".join("p%d~p%d(%.2f)" % (worst_p, b, s) for b, s in sorted(worst, key=lambda x: -x[1])[:4])
                 warns.append((0, "W6", M("w6") % (len(worst) + 1),
-                              "예 " + ex))
+                              M("w6_detail") % ex))
     except Exception as e:
         deck_skipped["w6"] += 1
         print("W6 skipped: %s" % e, file=sys.stderr)
 
-    # W11 카피 클리셰 · W12 푸터 정렬 · W13 효과 · W14 액션타이틀 (전부 덱 단위)
+    # W11 카피 클리셰 · W12 푸터 정렬 · W13 효과 · W14 액션타이틀 (전부 덱 단위, 프로파일 게이트)
     try:
-        copy_cliche_check(page_texts, warns)
-        footer_check(foot_tops, warns)
-        effects_check_deck(fx_pp, warns)
-        action_title_check(titles, warns)
+        if "W11" not in excl:
+            copy_cliche_check(page_texts, warns)
+        if "W12" not in excl:
+            footer_check(foot_tops, warns)
+        if "W13" not in excl:
+            effects_check_deck(fx_pp, warns)
+        if "W14" not in excl:
+            action_title_check(titles, warns)
         if ghost is not None:
             # ghost 는 W14 한글 필터와 무관하게 수집한 전 타이틀(18pt+): 영문·숫자 덱에서도
             # 제목만 읽어 수평 논리를 검토하는 용도라, 필터 후 entries 가 아니라 raw titles 에서 뽑는다.
@@ -1773,8 +1976,8 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
     # W6에 맡기고 여기선 세지 않는다(적대 감사 2026-07-02: 카드형 subblk 오탐 회피). W6가 놓친
     # 0.90 미달·단일 쌍(단면 도식 반복 실측)을 pptx 도형만으로 메운다.
     try:
-        cadj = {p: [] for p in toks}
-        nums_t = sorted(toks)
+        cadj = {} if "W10" in excl else {p: [] for p in toks}
+        nums_t = sorted(cadj)
         for ia in range(len(nums_t)):
             for ib in range(ia + 1, len(nums_t)):
                 pa, pb = nums_t[ia], nums_t[ib]
@@ -1785,7 +1988,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             if len(cwl) >= 1:
                 grp = sorted({cw, *cwl})
                 warns.append((0, "W10", M("w10") % len(grp),
-                              "페이지 " + ",".join("p%d" % p for p in grp)))
+                              M("w10_detail") % ",".join("p%d" % p for p in grp)))
     except Exception as e:
         deck_skipped["w10"] += 1
         print("W10 skipped: %s" % e, file=sys.stderr)
@@ -1890,7 +2093,8 @@ def main():
     ghost = [] if (a.ghost or a.json) else None
     try:
         errors, warns = lint(a.pptx, a.hard_min, a.body_min, a.small_min, render_dir=a.render,
-                             ghost=ghost, strict=a.strict, w6_sim=a.w6_sim, w6_min_cluster=a.w6_cluster)
+                             ghost=ghost, strict=a.strict, w6_sim=a.w6_sim,
+                             w6_min_cluster=a.w6_cluster, profile=a.profile)
     except Exception as e:
         print(M("err_open") % (a.pptx, type(e).__name__), file=sys.stderr)
         sys.exit(2)
@@ -1906,17 +2110,32 @@ def main():
     if bad_skip:
         print(M("err_skip_e") % ",".join(bad_skip), file=sys.stderr)
         sys.exit(2)
-    # --profile은 이름 붙은 공개 정책이라 E2 같은 스타일성 ERROR도 제외할 수 있다
-    # (--skip과 달리 선택이 JSON에 프로파일명으로 남는다: 조용한 우회가 아님)
+    # 존재하지 않는 코드 거부(오타가 조용히 통과하면 CI가 정상처럼 보임: 3차 리뷰 P1)
+    unknown_skip = sorted(c for c in skip if c not in ALL_CODES)
+    if unknown_skip:
+        print(M("err_skip_unknown") % ",".join(unknown_skip), file=sys.stderr)
+        sys.exit(2)
+    # W18은 검사 불완전성 신호라 억제 대상이 아니다(3차 리뷰 P1)
+    if "W18" in skip:
+        print(M("err_skip_w18"), file=sys.stderr)
+        sys.exit(2)
+    # 프로파일 제외는 엔진 단계에서 이미 실행되지 않았다(0.3.1). 여기선 --skip만 필터.
     profile_excl = PROFILES[a.profile]
     excluded = skip | profile_excl
-    if excluded:
-        errors = [e for e in errors if e[1] not in profile_excl]
-        warns = [w for w in warns if w[1] not in excluded]
+    if skip:
+        warns = [w for w in warns if w[1] not in skip]
 
     if a.json:
         import json
+        try:
+            from importlib.metadata import version as _pkg_version
+            tool_ver = _pkg_version("archforge")
+        except Exception:
+            tool_ver = "unknown"
         doc = {
+            "schema_version": "1.0",
+            "tool": {"name": "archforge", "version": tool_ver},
+            "target_renderer": "powerpoint-windows",
             "file": a.pptx,
             "lang": get_lang(),
             "errors": [{"page": si, "code": c, "message": m, "detail": d} for si, c, m, d in errors],

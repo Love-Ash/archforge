@@ -69,6 +69,9 @@ JSON output:
 
 ```json
 {
+  "schema_version": "1.0",
+  "tool": { "name": "archforge", "version": "0.3.1" },
+  "target_renderer": "powerpoint-windows",
   "file": "deck.pptx",
   "lang": "en",
   "errors":   [{ "page": 3, "code": "E1", "message": "...", "detail": "..." }],
@@ -161,7 +164,7 @@ Designed for LLM-agent build-lint-fix loops:
 build deck.pptx
 loop:
     result = archforge deck.pptx --json
-    if result.summary.error_count == 0: break
+    if result.summary.error_count == 0 and not result.summary.incomplete: break
     fix listed defects, rebuild
 review WARNs against renders
 ```
