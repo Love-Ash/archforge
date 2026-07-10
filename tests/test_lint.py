@@ -1616,5 +1616,175 @@ def test_cli_skill_subcommand(tmp_path):
     assert "name: archforge-pptx-lint" in installed
 
 
+# ---------------------------------------------------------------- 0.5.0: loc 보강 + a:fld/a:br
+def _by(items, code):
+    return [f for f in items if f.code == code]
+
+
+def _add_fld(para, text, sz=None, latin=None, spc=None):
+    """문단에 a:fld(자동 필드)를 직접 심는다. python-pptx runs가 건너뛰는 요소라 XML로."""
+    fld = para._p.makeelement(qn("a:fld"), {
+        "id": "{93C0AD05-B0B5-4E56-9A2A-9F2113D1B94A}", "type": "slidenum"})
+    attrs = {}
+    if sz is not None:
+        attrs["sz"] = str(sz)
+    if spc is not None:
+        attrs["spc"] = str(spc)
+    rPr = fld.makeelement(qn("a:rPr"), attrs)
+    if latin:
+        rPr.append(rPr.makeelement(qn("a:latin"), {"typeface": latin}))
+    fld.append(rPr)
+    t = fld.makeelement(qn("a:t"), {})
+    t.text = text
+    fld.append(t)
+    para._p.append(fld)
+    return fld
+
+
+def test_fld_field_runs_gated(tmp_path):
+    """a:fld도 일반 run과 같은 rPr로 렌더되므로 같은 게이트 대상(4차 리뷰 이월분):
+    Arial 한글 필드가 E1, 양수 자간 필드가 E4. loc엔 field 표식, run 인덱스는 없다."""
+    p = new_prs()
+    s = add_slide(p)
+    box = s.shapes.add_textbox(Inches(1), Inches(6.8), Inches(3), Inches(0.4))
+    _add_fld(box.text_frame.paragraphs[0], "3 페이지", sz=1200, latin="Arial", spc=200)
+    errors, _w = lint_full(save(p, tmp_path, "fld.pptx"))
+    e1 = _by(errors, "E1")
+    assert e1, codes(errors)
+    assert e1[0].loc.get("field") is True and "run" not in e1[0].loc
+    assert _by(errors, "E4"), codes(errors)
+
+
+def test_br_offsets_and_fld_not_title(tmp_path):
+    """a:br은 E2 문맥에서 줄바꿈 한 글자로만 기여(오프셋 유지: br 뒤 run의 em dash가
+    잡힌다). 큰 자동 필드(40pt 페이지 번호)는 ghost 제목으로 수집되지 않는다."""
+    p = new_prs()
+    s = add_slide(p)
+    box = tb(s, 1, 1, 8, 1, "첫 줄", size=14)
+    para = box.text_frame.paragraphs[0]
+    para._p.append(para._p.makeelement(qn("a:br"), {}))
+    r2 = para.add_run()
+    r2.text = "결론" + EM_DASH + "정리"
+    r2.font.size = Pt(14)
+    box2 = s.shapes.add_textbox(Inches(11), Inches(6.5), Inches(2), Inches(0.8))
+    _add_fld(box2.text_frame.paragraphs[0], "01", sz=4000)
+    ghost = []
+    errors, _w = lint_full(save(p, tmp_path, "br.pptx"), ghost=ghost)
+    assert "E2" in codes(errors), codes(errors)
+    assert not any("01" in str(g) for g in ghost), ghost
+
+
+def test_table_cell_loc(tmp_path):
+    """표 셀 finding의 loc.cell == [행, 열] 0기반(4차 리뷰 이월분)."""
+    p = new_prs()
+    s = add_slide(p)
+    gfx = s.shapes.add_table(2, 2, Inches(1), Inches(1), Inches(6), Inches(2))
+    cell = gfx.table.cell(1, 0)
+    cell.text = "한글"
+    r = cell.text_frame.paragraphs[0].runs[0]
+    r.font.name = "Arial"
+    r.font.size = Pt(12)
+    errors, _w = lint_full(save(p, tmp_path, "tbl_loc.pptx"))
+    e1 = _by(errors, "E1")
+    assert e1, codes(errors)
+    assert e1[0].loc.get("cell") == [1, 0], e1[0].loc
+
+
+def test_group_child_loc_bbox_absolute(tmp_path):
+    """그룹 이동 desync(off!=chOff)에서 run 단위 finding의 loc bbox가 그룹 chOff
+    좌표계가 아니라 슬라이드 절대좌표(4차 리뷰 이월분). 자식 raw x=12.5in, 그룹을
+    7.5in로 이동 → 절대 x는 7.5in."""
+    p = new_prs()
+    s = add_slide(p)
+    grp = s.shapes.add_group_shape()
+    box = grp.shapes.add_textbox(Inches(12.5), Inches(3.0), Inches(1.5), Inches(0.4))
+    r = box.text_frame.paragraphs[0].add_run()
+    r.text = "깨알 주석"
+    r.font.size = Pt(3)   # E3
+    grp.left, grp.top = Inches(7.5), Inches(3.0)
+    errors, _w = lint_full(save(p, tmp_path, "grp_loc.pptx"))
+    e3 = _by(errors, "E3")
+    assert e3, codes(errors)
+    bbox = e3[0].loc.get("bbox")
+    assert bbox and abs(bbox[0] - 7.5) < 0.05, e3[0].loc
+
+
+def test_w15_w16_locations(tmp_path):
+    """W15/W16에 loc이 실리고(실효 글리프 절대 bbox), W15는 related로 상대 프레임을
+    특정한다(4차 리뷰 이월분: W15~17 location 부재)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1.0, 1.0, 5.0, 1.0, "겹침 판정 대상 문장 하나", size=24)
+    tb(s, 1.1, 1.05, 5.0, 1.0, "겹침 판정 대상 문장 둘", size=24)
+    tb(s, 12.8, 3.0, 3.0, 0.5, "화면 밖으로 넘어가는 문장", size=18)
+    _e, warns = lint_full(save(p, tmp_path, "w15loc.pptx"))
+    w15 = _by(warns, "W15")
+    assert w15, codes(warns)
+    assert w15[0].loc and "bbox" in w15[0].loc and "related" in w15[0].loc, w15[0].loc
+    assert "bbox" in w15[0].loc["related"]
+    w16 = _by(warns, "W16")
+    assert w16, codes(warns)
+    assert w16[0].loc and "bbox" in w16[0].loc, w16[0].loc
+
+
+# ---------------------------------------------------------------- 0.5.0: scan/demo 서브커맨드
+def test_cli_demo_and_scan(tmp_path):
+    """demo: broken(결함 6종 발화)+fixed(클린) 생성·즉석 린트, exit 0.
+    scan: 디렉터리 재귀 집계 JSON, 하나라도 실패면 exit 1, 매치 0건은 exit 2."""
+    d = os.path.join(str(tmp_path), "demo")
+    r = run_cli(["demo", "--dir", d])
+    assert r.returncode == 0, r.stderr
+    assert os.path.exists(os.path.join(d, "broken.pptx"))
+    assert os.path.exists(os.path.join(d, "fixed.pptx"))
+    assert "ERROR 0, WARN 0" in r.stdout   # fixed는 클린이어야 한다(데모 계약)
+
+    r = run_cli(["scan", d, "--profile", "full", "--json"])
+    assert r.returncode == 1, r.stderr
+    doc = json.loads(r.stdout)
+    assert doc["summary"]["file_count"] == 2
+    assert doc["summary"]["failed_files"] == 1
+    assert doc["summary"]["pass"] is False
+    names = {os.path.basename(f["file"]) for f in doc["files"]}
+    assert names == {"broken.pptx", "fixed.pptx"}
+    for fdoc in doc["files"]:
+        assert fdoc["summary"]["profile"] == "full"
+
+    # fixed만: exit 0 + 텍스트 요약 라인
+    r = run_cli(["scan", os.path.join(d, "fixed.pptx"), "--profile", "full"])
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "1" in r.stdout and "0" in r.stdout   # 스캔 요약(파일 1, 실패 0)
+
+    # 글롭 매치 0건 = 조용한 통과가 아니라 exit 2(CI 풋건 방지)
+    r = run_cli(["scan", os.path.join(str(tmp_path), "none_*.pptx")])
+    assert r.returncode == 2
+
+
+def test_examples_contract(tmp_path):
+    """examples/의 문서화된 계약 고정: style_warnings는 core 클린 + full에서 W13·W14."""
+    from archforge import demo as jdemo
+    p = os.path.join(str(tmp_path), "warn.pptx")
+    jdemo.build_warnings(p)
+    e, w = jl.lint(p, profile="core")
+    assert not e and not w, (codes(e), codes(w))
+    e, w = lint_full(p)
+    assert not e, codes(e)
+    assert {"W13", "W14"} <= set(codes(w)), codes(w)
+
+
+def test_cli_scan_sarif_multi(tmp_path):
+    """scan --sarif: 여러 파일이 한 SARIF run에 파일별 artifactLocation으로 합쳐진다."""
+    d = os.path.join(str(tmp_path), "demo")
+    r = run_cli(["demo", "--dir", d])
+    assert r.returncode == 0, r.stderr
+    sarif_path = os.path.join(str(tmp_path), "out.sarif")
+    r = run_cli(["scan", d, "--profile", "full", "--sarif", sarif_path])
+    assert r.returncode == 1
+    with open(sarif_path, encoding="utf-8") as f:
+        doc = json.load(f)
+    uris = {res["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+            for res in doc["runs"][0]["results"]}
+    assert any(u.endswith("broken.pptx") for u in uris), uris
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))

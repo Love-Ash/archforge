@@ -182,8 +182,8 @@ MESSAGES = {
     },
     # ---- CLI 도움말
     "prog_desc": {
-        "ko": "빌드된 .pptx를 배포 전에 기계로 검사하는 한글 특화 품질 린터 (서브커맨드: archforge skill = 에이전트 스킬팩 출력/설치)",
-        "en": "Korean-typography-aware quality linter for built .pptx files (subcommand: archforge skill = print/install the agent skill pack)",
+        "ko": "빌드된 .pptx를 배포 전에 기계로 검사하는 한글 특화 품질 린터 (서브커맨드: scan = 다중 파일/디렉터리, demo = 첫 실행 투어, skill = 에이전트 스킬팩)",
+        "en": "Korean-typography-aware quality linter for built .pptx files (subcommands: scan = many files/dirs, demo = first-run tour, skill = agent skill pack)",
     },
     "help_hard_min": {"ko": "E3 판독 불가 하한(pt, 기본 5.0)", "en": "E3 unreadable hard floor in pt (default 5.0)"},
     "help_body_min": {"ko": "W1 본문급 권장 하한(pt, 기본 9.0)", "en": "W1 body-class recommended floor in pt (default 9.0)"},
@@ -259,6 +259,43 @@ MESSAGES = {
     "baseline_applied": {
         "ko": "  (baseline 억제: %d건, %s)",
         "en": "  (baseline suppressed: %d finding(s), %s)",
+    },
+    # ---- scan/demo 서브커맨드(0.5.0)
+    "scan_desc": {
+        "ko": "여러 파일·디렉터리·글롭을 한 번에 린트(CI·pre-commit용). 하나라도 실패면 exit 1",
+        "en": "lint multiple files, directories, or globs in one run (CI/pre-commit). Exits 1 if any file fails",
+    },
+    "help_scan_paths": {
+        "ko": "pptx 파일, 디렉터리(재귀), 글롭 패턴(예: decks/**/*.pptx)의 나열",
+        "en": "any mix of .pptx files, directories (recursive), and glob patterns (e.g. decks/**/*.pptx)",
+    },
+    "err_scan_none": {
+        "ko": "archforge: 매치되는 .pptx 가 없습니다(조용한 통과 방지, exit 2): %s",
+        "en": "archforge: no .pptx files matched (refusing to silently pass, exit 2): %s",
+    },
+    "scan_summary": {
+        "ko": "=== 스캔 요약: 파일 %d개, 실패 %d개 ===",
+        "en": "=== scan summary: %d file(s), %d failed ===",
+    },
+    "subcmd_conflict": {
+        "ko": "archforge: 참고: 현재 폴더에 %r 파일이 있지만 서브커맨드를 실행합니다. 그 파일을 린트하려면 `archforge ./%s`",
+        "en": "archforge: note: a file named %r exists here, but the subcommand runs. To lint that file use `archforge ./%s`",
+    },
+    "demo_desc": {
+        "ko": "결함을 심은 데모 덱(broken.pptx)과 교정본(fixed.pptx)을 생성해 즉석에서 린트(첫 실행 경험)",
+        "en": "generate a defect-seeded demo deck (broken.pptx) and its fix (fixed.pptx), then lint both (first-run tour)",
+    },
+    "help_demo_dir": {
+        "ko": "데모 덱을 생성할 폴더(기본 ./archforge-demo)",
+        "en": "directory to write the demo decks to (default ./archforge-demo)",
+    },
+    "demo_built": {
+        "ko": "archforge: 데모 덱 생성 완료 -> %s (broken.pptx = 결함 6종, fixed.pptx = 교정본)",
+        "en": "archforge: demo decks written -> %s (broken.pptx = 6 seeded defects, fixed.pptx = the corrected version)",
+    },
+    "demo_next": {
+        "ko": "다음: 직접 돌려보세요. archforge %s --profile full --json (기계 생성 덱 검사는 full 프로파일)",
+        "en": "next: run it yourself. archforge %s --profile full --json (machine-made decks want the full profile)",
     },
 }
 

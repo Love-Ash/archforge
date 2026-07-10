@@ -37,6 +37,8 @@ archforge deck.pptx --write-baseline bl.json / --baseline bl.json   # adopt exis
 archforge deck.pptx --no-config       # ignore config files (untrusted decks)
 archforge deck.pptx --w6-sim 0.95 --w6-cluster 5   # loosen W6 for template-driven houses
 archforge deck.pptx --hard-min 5 --body-min 9 --small-min 7.5   # size gate thresholds (pt)
+archforge scan decks/ --profile full --json   # many files/dirs/globs at once; exit 1 if any fails
+archforge demo                   # build broken.pptx + fixed.pptx and lint both (sanity tour)
 archforge skill --install        # install this skill pack into ./.claude/skills
 ```
 
@@ -61,6 +63,15 @@ No repo clone needed.
 
 Messages follow the report language (`--lang` > `ARCHFORGE_LANG` > OS locale); codes are
 stable language-independent identifiers. Key on codes, not message text.
+
+Findings carry a `location` payload when resolvable - use it as the auto-fix target
+instead of searching by text: `shape_id`/`shape_name`, `bbox` `[x,y,w,h]` in inches
+(absolute; group transforms applied), `paragraph`/`run` indexes into the shape's text
+frame, table `cell` as `[row, col]`, `field: true` when the text lives in an `a:fld`
+auto field (slide number/date; no `run` index there), `part` (the slide XML part), and
+for pair findings (W15 overlap, W17 straddle) a `related` counterpart with the same keys.
+`archforge scan --json` wraps one per-file document per deck plus an aggregate summary
+(`summary.file_count`, `failed_files`, `pass`, `incomplete`).
 
 `ghost` lists the largest (>=18pt) title on each page that has one, in any language, so
 you can read the titles top-to-bottom and check the horizontal logic. Pages with no
@@ -159,6 +170,9 @@ Two rules of thumb learned the hard way:
   so ranges split across run boundaries (PowerPoint does this via spellcheck and
   formatting seams) don't false-positive. Theme font tokens ("+mn-lt" etc.) in
   run properties are resolved to the actual theme fonts before E1 judgment.
+- Auto fields (`a:fld`: slide numbers, dates) are gated like regular runs (E1/E3/E4);
+  they are excluded from ghost/W14 title collection. Line breaks (`a:br`) count as
+  line breaks in E2's paragraph context.
 - Known limit: placeholders inheriting alignment from a layout's list style are
   measured as left-aligned. If W15/W16 flags look wrong on template placeholders,
   verify on the render before acting.

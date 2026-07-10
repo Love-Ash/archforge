@@ -1,0 +1,82 @@
+name: 'archforge pptx lint'
+description: >-
+  Lint built .pptx files for silent Korean font fallback, unreadable sizes,
+  text collisions, off-canvas bleed, and AI-generated deck tells.
+author: 'Minjae Kwon (Ash)'
+branding:
+  icon: 'check-square'
+  color: 'orange'
+
+inputs:
+  files:
+    description: >-
+      Files, directories, or glob patterns to lint (passed to `archforge scan`).
+      Example: "decks/" or "out/**/*.pptx".
+    required: true
+  profile:
+    description: 'Rule profile: core (objective defects), full (plus AI-tell/style rules), editorial.'
+    required: false
+    default: 'core'
+  strict:
+    description: 'Set "true" to fail on WARNs and on incomplete checks (W18) too.'
+    required: false
+    default: 'false'
+  args:
+    description: 'Extra CLI arguments appended verbatim (e.g. "--skip W14 --lang en").'
+    required: false
+    default: ''
+  version:
+    description: 'archforge version to install (empty = latest release on PyPI).'
+    required: false
+    default: ''
+  sarif:
+    description: >-
+      Path to write a SARIF 2.1.0 report. Upload it with
+      github/codeql-action/upload-sarif to surface findings in code scanning.
+    required: false
+    default: ''
+  python-version:
+    description: 'Python version to set up (empty = use the runner default python3).'
+    required: false
+    default: ''
+
+outputs:
+  sarif:
+    description: 'Path of the SARIF report if one was requested.'
+    value: ${{ inputs.sarif }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      if: ${{ inputs.python-version != '' }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install archforge
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.version }}" ]; then
+          python3 -m pip install --disable-pip-version-check "archforge==${{ inputs.version }}"
+        else
+          python3 -m pip install --disable-pip-version-check archforge
+        fi
+
+    - name: Lint decks
+      shell: bash
+      run: |
+        set -o pipefail
+        CMD=(python3 -m archforge.lint scan ${{ inputs.files }} --profile "${{ inputs.profile }}")
+        if [ "${{ inputs.strict }}" = "true" ]; then
+          CMD+=(--strict)
+        fi
+        if [ -n "${{ inputs.sarif }}" ]; then
+          CMD+=(--sarif "${{ inputs.sarif }}")
+        fi
+        if [ -n "${{ inputs.args }}" ]; then
+          # shellcheck disable=SC2206
+          CMD+=(${{ inputs.args }})
+        fi
+        echo "+ ${CMD[*]}"
+        "${CMD[@]}"

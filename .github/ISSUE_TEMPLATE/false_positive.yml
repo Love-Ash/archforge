@@ -1,0 +1,49 @@
+name: False positive
+description: Archforge flagged something that renders fine. This is the most valuable report we get.
+title: "[FP] <code>: <one line>"
+labels: ["false-positive"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Confirmed false positives become permanent regression fixtures, so they can never come back.
+        A minimal repro deck makes that possible; without one we can only guess.
+  - type: input
+    id: code
+    attributes:
+      label: Rule code
+      description: The code from the report (E1, W15, ...)
+      placeholder: W15
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Linter output
+      description: The exact ERROR/WARN line(s), plus the command you ran (profile and flags matter).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it is a false positive
+      description: What does the rendered page actually look like? A screenshot of the rendered slide is ideal.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal repro deck
+      description: |
+        Attach a stripped .pptx (zip it if GitHub refuses the extension), or paste python-pptx code that builds one.
+        Strip anything confidential; the defect pattern is what matters, not the content.
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: archforge version / renderer
+      placeholder: "0.5.0 / PowerPoint for Windows 2408"
+    validations:
+      required: true

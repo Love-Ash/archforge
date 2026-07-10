@@ -65,8 +65,14 @@ def render_text(path: str, errors: List, warns: List, ghost,
 
 def build_sarif(path: str, errors: List, warns: List) -> Dict:
     """SARIF 2.1.0 최소 유효 문서(GitHub code scanning 수용 형태)."""
+    return build_sarif_multi([(path, errors, warns)])
+
+
+def build_sarif_multi(items: List) -> Dict:
+    """items = [(path, errors, warns), ...]. 여러 파일이면 한 run에 파일별
+    artifactLocation으로 합친다(scan 모드, 0.5.0)."""
     rules_meta = []
-    used = sorted({f.code for f in list(errors) + list(warns)})
+    used = sorted({f.code for (_p, errs, ws) in items for f in list(errs) + list(ws)})
     for code in used:
         sev, cat, msg_id = RULES.get(code, ("warning", "unknown", None))
         rules_meta.append({
@@ -75,21 +81,22 @@ def build_sarif(path: str, errors: List, warns: List) -> Dict:
             "properties": {"category": cat},
         })
     results = []
-    for f in list(errors) + list(warns):
-        res = {
-            "ruleId": f.code,
-            "level": "error" if severity(f.code) == "error" else "warning",
-            "message": {"text": "%s | %s" % (f.message, f.detail) if f.detail else f.message},
-            "locations": [{
-                "physicalLocation": {
-                    "artifactLocation": {"uri": path.replace("\\", "/")},
-                },
-                "logicalLocations": [{"name": "slide %d" % f.page, "kind": "module"}],
-            }],
-        }
-        if f.loc:
-            res["properties"] = {"target": f.loc}
-        results.append(res)
+    for path, errors, warns in items:
+        for f in list(errors) + list(warns):
+            res = {
+                "ruleId": f.code,
+                "level": "error" if severity(f.code) == "error" else "warning",
+                "message": {"text": "%s | %s" % (f.message, f.detail) if f.detail else f.message},
+                "locations": [{
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": path.replace("\\", "/")},
+                    },
+                    "logicalLocations": [{"name": "slide %d" % f.page, "kind": "module"}],
+                }],
+            }
+            if f.loc:
+                res["properties"] = {"target": f.loc}
+            results.append(res)
     return {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
         "version": "2.1.0",

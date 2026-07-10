@@ -87,29 +87,51 @@ class Finding:
 
 
 def shape_loc(sp, paragraph: Optional[int] = None, run: Optional[int] = None,
-              part: Optional[str] = None) -> Optional[Dict]:
-    """도형에서 구조화 위치 추출(실패 항목은 생략, 전부 실패면 None)."""
+              part: Optional[str] = None, cell: Optional[Tuple[int, int]] = None,
+              xf: Optional[Tuple[float, float, float, float]] = None,
+              bbox: Optional[list] = None, field: bool = False) -> Optional[Dict]:
+    """도형에서 구조화 위치 추출(실패 항목은 생략, 전부 실패면 None).
+
+    0.5.0(4차 리뷰 이월분): 그룹 자식의 raw left/top은 그룹 chOff 좌표계라 슬라이드
+    좌표와 어긋났다. xf=(ax,bx,ay,by) 아핀을 받으면 abs = a*raw + b 로 절대좌표화하고,
+    bbox 인자를 받으면 이미 계산된 절대 bbox(in, [x,y,w,h])를 그대로 쓴다(W15~W17의
+    실효 글리프 기하). cell은 표 셀 (행,열) 0기반, field=True는 a:fld(자동 필드) 출처
+    표시(run 인덱스는 para.runs 기준이라 필드엔 없다)."""
     loc: Dict = {}
-    try:
-        loc["shape_id"] = sp.shape_id
-    except Exception:
-        pass
-    try:
-        if sp.name:
-            loc["shape_name"] = sp.name
-    except Exception:
-        pass
-    try:
-        if None not in (sp.left, sp.top, sp.width, sp.height):
-            emu = 914400.0
-            loc["bbox"] = [round(sp.left / emu, 3), round(sp.top / emu, 3),
-                           round(sp.width / emu, 3), round(sp.height / emu, 3)]
-    except Exception:
-        pass
+    if sp is not None:
+        try:
+            loc["shape_id"] = sp.shape_id
+        except Exception:
+            pass
+        try:
+            if sp.name:
+                loc["shape_name"] = sp.name
+        except Exception:
+            pass
+    if bbox is not None:
+        try:
+            loc["bbox"] = [round(float(v), 3) for v in bbox]
+        except Exception:
+            pass
+    elif sp is not None:
+        try:
+            if None not in (sp.left, sp.top, sp.width, sp.height):
+                emu = 914400.0
+                ax, bx, ay, by = xf if xf is not None else (1.0, 0.0, 1.0, 0.0)
+                loc["bbox"] = [round((ax * sp.left + bx) / emu, 3),
+                               round((ay * sp.top + by) / emu, 3),
+                               round(ax * sp.width / emu, 3),
+                               round(ay * sp.height / emu, 3)]
+        except Exception:
+            pass
     if paragraph is not None:
         loc["paragraph"] = paragraph
     if run is not None:
         loc["run"] = run
+    if cell is not None:
+        loc["cell"] = [int(cell[0]), int(cell[1])]
+    if field:
+        loc["field"] = True
     if part:
         loc["part"] = part
     return loc or None

@@ -1,0 +1,28 @@
+name: Feature request
+description: A new gate, a new script's coverage table, or tooling around the linter.
+title: "[Feat] <one line>"
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The defect or workflow gap
+      description: What silently breaks or is tedious today? Real examples beat abstractions.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: |
+        For a new gate: what should it flag, what must it NOT flag (the closest legitimate pattern),
+        and is it an objective render defect (core) or a style/AI-tell rule (full)?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Render evidence
+      description: Gates are calibrated against rendered output (see docs/CALIBRATION.md). Screenshots or repro decks welcome.
+    validations:
+      required: false

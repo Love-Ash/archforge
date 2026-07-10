@@ -12,4 +12,4 @@ from .lint import lint as lint_pptx  # noqa: F401
 from .lint import frame_autofit, frame_font_scale, main  # noqa: F401
 from .findings import Finding  # noqa: F401  (0.4.0 공개 모델)
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"

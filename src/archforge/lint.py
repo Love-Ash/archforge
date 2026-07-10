@@ -239,6 +239,42 @@ def run_track(run) -> Optional[int]:
     return _text_point_attr(rPr.get("spc"))
 
 
+class _FldRun:
+    """a:fld(슬라이드 번호·날짜 자동 필드) 어댑터. 스키마상 CT_TextField도 rPr+t 구조라
+    PowerPoint는 일반 run과 같은 규칙으로 렌더하는데, python-pptx para.runs가 a:r만
+    돌려줘 필드 텍스트가 E1/E3/E4의 사각지대였다(4차 리뷰 이월분, 0.5.0). 검사 코드가
+    쓰는 최소 인터페이스만 노출한다: run_fonts/run_track용 ._r, 크기용 .font.size."""
+    __slots__ = ("_r", "text")
+
+    class _Pt:
+        __slots__ = ("pt",)
+
+        def __init__(self, pt):
+            self.pt = pt
+
+    def __init__(self, fld):
+        self._r = fld
+        t = fld.find(NS + "t")
+        self.text = (t.text or "") if t is not None else ""
+
+    @property
+    def font(self):
+        return self   # .size 접근만 쓰인다
+
+    @property
+    def size(self):
+        try:
+            v = self._r.find(NS + "rPr").get("sz")
+        except Exception:
+            return None
+        if not v:
+            return None
+        try:
+            return self._Pt(int(v) / 100.0)
+        except (TypeError, ValueError):
+            return None
+
+
 def is_latin_only_font(name: Optional[str], script: str = "hangul") -> bool:
     """해당 스크립트 글리프가 없는 폰트인가(접두 매칭, 완비 예외 우선).
     script="hangul": 한글 글리프 기준(기본). script="cjk_other": 가나·한자 기준으로,
@@ -408,8 +444,39 @@ def frame_font_scale(tf):
     return frame_autofit(tf)[0]
 
 
-def collect_frames(shapes):
-    """(text_frame, width_emu, owner_shape) 리스트. 그룹 재귀 + 네이티브 표 셀 포함."""
+def _group_xf(sp, xf):
+    """그룹 도형의 off/ext vs chOff/chExt 아핀을 부모 xf에 합성. 계수 (ax,bx,ay,by):
+    abs = a*raw + b (EMU). 파싱 실패 시 부모 xf 그대로(항등 후퇴).
+
+    grpSpPr는 슬라이드에선 p: 네임스페이스다(내부 xfrm·off류만 a:). 종전 코드가
+    a:grpSpPr로 find해 항상 None → 항등 후퇴였던 잠복 버그의 교정(0.5.0 실측:
+    이동 desync 그룹의 loc bbox가 raw로 나오는 재현으로 발견)."""
+    try:
+        gsp = None
+        for ch in sp._element:
+            if isinstance(ch.tag, str) and ch.tag.endswith("}grpSpPr"):
+                gsp = ch
+                break
+        x = gsp.find(NS + "xfrm")
+        off, ext = x.find(NS + "off"), x.find(NS + "ext")
+        cho, che = x.find(NS + "chOff"), x.find(NS + "chExt")
+        ox, oy = int(off.get("x")), int(off.get("y"))
+        ew, eh = int(ext.get("cx")), int(ext.get("cy"))
+        cx, cy = int(cho.get("x")), int(cho.get("y"))
+        cw_, ch_ = int(che.get("cx")) or ew, int(che.get("cy")) or eh
+        sx, sy = ew / float(cw_), eh / float(ch_)
+        ax, bx, ay, by = xf
+        return (ax * sx, ax * (ox - cx * sx) + bx,
+                ay * sy, ay * (oy - cy * sy) + by)
+    except Exception:
+        return xf
+
+
+def collect_frames(shapes, xf=(1.0, 0.0, 1.0, 0.0)):
+    """(text_frame, width_emu, owner_shape, cell_rc, xf) 리스트. 그룹 재귀 + 네이티브 표
+    셀 포함. cell_rc는 표 셀이면 (행,열) 0기반, 아니면 None. xf는 그룹 절대좌표 아핀
+    (iter_shapes_geo와 동일 계수)로, run 단위 finding의 loc bbox를 그룹 chOff 좌표계가
+    아닌 슬라이드 실좌표로 만드는 데 쓴다(4차 리뷰 이월분, 0.5.0)."""
     out = []
     for sp in shapes:
         try:
@@ -417,17 +484,17 @@ def collect_frames(shapes):
         except Exception:
             st = None
         if st == MSO_SHAPE_TYPE.GROUP:
-            out += collect_frames(sp.shapes)
+            out += collect_frames(sp.shapes, _group_xf(sp, xf))
             continue
         if getattr(sp, "has_table", False):
             tbl = sp.table
             ncol = len(tbl.columns) or 1
-            for row in tbl.rows:
-                for cell in row.cells:
-                    out.append((cell.text_frame, (sp.width or 0) // ncol, sp))
+            for ri, row in enumerate(tbl.rows):
+                for ci, cell in enumerate(row.cells):
+                    out.append((cell.text_frame, (sp.width or 0) // ncol, sp, (ri, ci), xf))
             continue
         if sp.has_text_frame:
-            out.append((sp.text_frame, sp.width or 0, sp))
+            out.append((sp.text_frame, sp.width or 0, sp, None, xf))
     return out
 
 
@@ -464,23 +531,8 @@ def iter_shapes_geo(shapes, xf=(1.0, 0.0, 1.0, 0.0), _z=None):
         except Exception:
             is_grp = False
         if is_grp:
-            sub = xf
-            try:
-                x = sp._element.find(NS + "grpSpPr").find(NS + "xfrm")
-                off, ext = x.find(NS + "off"), x.find(NS + "ext")
-                cho, che = x.find(NS + "chOff"), x.find(NS + "chExt")
-                ox, oy = int(off.get("x")), int(off.get("y"))
-                ew, eh = int(ext.get("cx")), int(ext.get("cy"))
-                cx, cy = int(cho.get("x")), int(cho.get("y"))
-                cw_, ch_ = int(che.get("cx")) or ew, int(che.get("cy")) or eh
-                sx, sy = ew / float(cw_), eh / float(ch_)
-                # 그룹 내부 좌표 g: abs_g = ox + (g - cx)*sx 를 부모 xf에 합성
-                ax, bx, ay, by = xf
-                sub = (ax * sx, ax * (ox - cx * sx) + bx,
-                       ay * sy, ay * (oy - cy * sy) + by)
-            except Exception:
-                pass
-            for inner in iter_shapes_geo(sp.shapes, sub, _z):
+            # 그룹 내부 좌표 g: abs_g = ox + (g - cx)*sx 를 부모 xf에 합성(_group_xf)
+            for inner in iter_shapes_geo(sp.shapes, _group_xf(sp, xf), _z):
                 yield inner
             continue
         z = _z[0]
@@ -1069,7 +1121,9 @@ def effects_check_deck(per_page, warns):
 _W_CJK, _W_LAT, _W_SP = 0.96, 0.52, 0.28   # 글자폭/폰트크기 비 근사(보수적: 오탐 억제)
 
 # 문단 단위 실효 글리프 bbox(in). 매직 인덱스 튜플이던 것을 명명 필드로(외부 리뷰 2026-07-10).
-GlyphBox = namedtuple("GlyphBox", "x0 y0 x1 y1 rep max_pt frame_id")
+# sp(소유 도형)는 W15~W17 finding의 loc 페이로드용(0.5.0); 좌표는 이미 그룹 절대좌표다.
+GlyphBox = namedtuple("GlyphBox", "x0 y0 x1 y1 rep max_pt frame_id sp")
+GlyphBox.__new__.__defaults__ = (None,)
 
 
 def _glyph_w(s, size_pt):
@@ -1208,7 +1262,7 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
                     x0 = fx + fw2 - gw
                 else:
                     x0 = fx
-                out.append(GlyphBox(x0, cy, x0 + gw, cy + ph, ptxt[:24], pmx, fid))
+                out.append(GlyphBox(x0, cy, x0 + gw, cy + ph, ptxt[:24], pmx, fid, owner_sp))
             cy += ph
 
     for sp, _z, xf in iter_shapes_geo(slide.shapes):
@@ -1285,9 +1339,17 @@ def text_overlap_check(slide, si, warns, boxes: Optional[List[GlyphBox]] = None)
             area = ix * iy
             amin = min((a.x1 - a.x0) * (a.y1 - a.y0), (b.x1 - b.x0) * (b.y1 - b.y0))
             if amin > 0 and area > 0.45 * amin:
-                hits.append((area / amin, a.rep, b.rep))
-    for frac, ta, tb in sorted(hits, reverse=True)[:2]:
-        warns.append(Finding(si, "W15", "w15", (frac * 100,), "%r ~ %r" % (ta, tb)))
+                hits.append((area / amin, a, b))
+    # 정렬 키는 frac만: GlyphBox의 sp 필드는 비교 불가라 튜플 통비교가 죽는다(0.5.0)
+    for frac, a, b in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
+        # loc: 프레임 raw bbox가 아니라 겹침을 판정한 실효 글리프 bbox(절대 in) 그대로.
+        # related에 상대 프레임을 실어 에이전트가 어느 쌍을 움직일지 특정하게 한다(0.5.0).
+        loc = shape_loc(a.sp, bbox=[a.x0, a.y0, a.x1 - a.x0, a.y1 - a.y0]) or {}
+        rel = shape_loc(b.sp, bbox=[b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0])
+        if rel:
+            loc["related"] = rel
+        warns.append(Finding(si, "W15", "w15", (frac * 100,), "%r ~ %r" % (a.rep, b.rep),
+                             loc=loc or None))
 
 
 def _pic_boxes(slide, sw_in, sh_in, skipped=None):
@@ -1346,7 +1408,7 @@ def _pic_boxes(slide, sw_in, sh_in, skipped=None):
                                   w * (r - l) / ww, h * (b - t) / wh)
             except Exception:
                 pass
-        out.append((x, y, x + w, y + h, z))
+        out.append((x, y, x + w, y + h, z, sp))
     return out
 
 
@@ -1365,15 +1427,18 @@ def overflow_check(slide, si, sw_in, sh_in, warns,
     for gb in boxes:
         over = max(-gb.x0, -gb.y0, gb.x1 - sw_in, gb.y1 - sh_in)
         if over > TOL_T:
-            hits.append((over, M("w16_text") % gb.rep, "t|%r" % gb.rep))
-    for (px0, py0, px1, py1, _z) in pics:
+            hits.append((over, M("w16_text") % gb.rep, "t|%r" % gb.rep,
+                         shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0])))
+    for (px0, py0, px1, py1, _z, psp) in pics:
         over = max(-px0, -py0, px1 - sw_in, py1 - sh_in)
         if over > TOL_S:
             hits.append((over, M("w16_pic") % (px1 - px0, py1 - py0),
-                         "p|%.1fx%.1f" % (px1 - px0, py1 - py0)))
-    for over, what, fpk in sorted(hits, reverse=True)[:2]:
+                         "p|%.1fx%.1f" % (px1 - px0, py1 - py0),
+                         shape_loc(psp, bbox=[px0, py0, px1 - px0, py1 - py0])))
+    # 정렬 키는 over만: loc dict는 비교 불가라 튜플 통비교가 죽는다(0.5.0)
+    for over, what, fpk, loc in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
         # fp_key: detail(what)은 로케일 문자열이라 baseline 지문에서 제외(4차 리뷰)
-        warns.append(Finding(si, "W16", "w16", (over,), what, fp_key=fpk))
+        warns.append(Finding(si, "W16", "w16", (over,), what, fp_key=fpk, loc=loc))
 
 
 def _occluder_boxes(slide, sw_in, sh_in):
@@ -1422,7 +1487,7 @@ def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
         ta = (gb.x1 - gb.x0) * (gb.y1 - gb.y0)
         if ta <= 0:
             continue
-        for (px0, py0, px1, py1, pz) in pics:
+        for (px0, py0, px1, py1, pz, psp) in pics:
             if (px1 - px0) * (py1 - py0) < 1.0:
                 continue
             ix = min(gb.x1, px1) - max(gb.x0, px0)
@@ -1442,9 +1507,14 @@ def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
                     carded = True
                     break
             if not carded:
-                hits.append((frac, rep))
-    for frac, rep in sorted(hits, reverse=True)[:2]:
-        warns.append(Finding(si, "W17", "w17", (frac * 100,), "%r" % rep))
+                hits.append((frac, gb, (px0, py0, px1, py1, psp)))
+    # 정렬 키는 frac만(sp 필드 비교 불가, 0.5.0)
+    for frac, gb, pic in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
+        loc = shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0]) or {}
+        rel = shape_loc(pic[4], bbox=[pic[0], pic[1], pic[2] - pic[0], pic[3] - pic[1]])
+        if rel:
+            loc["related"] = rel
+        warns.append(Finding(si, "W17", "w17", (frac * 100,), "%r" % gb.rep, loc=loc or None))
 
 
 def action_title_check(titles, warns):
@@ -1643,7 +1713,8 @@ def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors
         ratio = (hi + 0.05) / (lo + 0.05)
         if ratio < 2.5:
             warns.append(Finding(si, "W7", "w7", (ratio,),
-                                 "text=%r" % sp.text_frame.text[:20], loc=shape_loc(sp)))
+                                 "text=%r" % sp.text_frame.text[:20],
+                                 loc=shape_loc(sp, bbox=[gx, gy, gw_, gh_])))
             return "ok"
     return "ok"   # 이 페이지의 렌더 PNG를 찾아 검사했음(W7 발화 여부와 무관)
 
@@ -1787,7 +1858,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             frames = []
             skipped["frames"] += 1
             print("E1-E4 frames skipped p%02d: %s" % (si, e), file=sys.stderr)
-        for tf, w_emu, owner_sp in frames:
+        for tf, w_emu, owner_sp, cell_rc, sp_xf in frames:
             try:
                 fw_in = w_emu / EMU_PER_IN
                 scale = frame_font_scale(tf)
@@ -1800,12 +1871,36 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             for pi, para in enumerate(paragraphs):
                 try:
                     runs = list(para.runs)
+                    # 문서 순서 아이템 (run_like, para.runs 인덱스 or None, is_fld):
+                    # a:fld(자동 필드)는 일반 run과 같은 rPr로 렌더되므로 같은 게이트를
+                    # 통과해야 하고, a:br은 E2 문맥·오프셋에서 줄바꿈 한 글자로 취급한다
+                    # (4차 리뷰 이월분, 0.5.0). a:r 개수가 안 맞으면 종전 runs 경로로 후퇴.
+                    items = []
+                    try:
+                        r_seen = 0
+                        for child in para._p:
+                            tag = child.tag
+                            if tag == NS + "r":
+                                if r_seen < len(runs):
+                                    items.append((runs[r_seen], r_seen, False))
+                                    r_seen += 1
+                            elif tag == NS + "br":
+                                items.append((None, None, False))
+                            elif tag == NS + "fld":
+                                items.append((_FldRun(child), None, True))
+                        if r_seen != len(runs):
+                            items = [(r, i, False) for i, r in enumerate(runs)]
+                    except Exception:
+                        items = [(r, i, False) for i, r in enumerate(runs)]
                     run_offs = []
                     pos = 0
-                    for r in runs:
+                    pieces = []
+                    for run_like, _ri, _isf in items:
+                        piece = "\n" if run_like is None else run_like.text
                         run_offs.append(pos)
-                        pos += len(r.text)
-                    ptext = "".join(r.text for r in runs)
+                        pos += len(piece)
+                        pieces.append(piece)
+                    ptext = "".join(pieces)
                     p_fonts = para_fonts(para)   # 문단 defRPr: run rPr 다음 순위(프로브7)
                     try:
                         para_size = para.font.size
@@ -1816,12 +1911,15 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                     skipped["para"] += 1
                     print("E1-E4 skipped p%02d para: %s" % (si, e), file=sys.stderr)
                     continue
-                for ri, run in enumerate(runs):
+                for ii, (run, ri, is_fld) in enumerate(items):
                     try:
+                        if run is None:   # a:br: 문맥 기여만, 검사 대상 아님
+                            continue
                         t = run.text
                         if not t:
                             continue
-                        page_texts.setdefault(si, []).append(t)
+                        if not is_fld:
+                            page_texts.setdefault(si, []).append(t)
                         lvl = getattr(para, "level", 0)
 
                         # E1: 실효 렌더 폰트 판정(실측 렌더 모델, e1_violation 참조).
@@ -1852,17 +1950,17 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                             v = e1_violation(t, fonts, eff_thm_ea, script)
                             if v is not None:
                                 errors.append(Finding(si, "E1", v[0], (), v[1],
-                                                      loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
+                                                      loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part, cell=cell_rc, xf=sp_xf, field=is_fld)))
 
                         # E2: 긴 대시류. 문맥은 문단 전체(ptext)에서 보고 보고는 이 run 구간만:
                         # run 경계로 쪼개진 '2020'/'-2021' 범위 오탐 방지(적대 패널 확정)
                         bad = [] if "E2" in excl else \
                             dash_violations(ptext, strict=strict,
-                                            span=(run_offs[ri], run_offs[ri] + len(t)))
+                                            span=(run_offs[ii], run_offs[ii] + len(t)))
                         if bad:
                             errors.append(Finding(si, "E2", "e2", (),
                                                   "cp=%s text=%r" % (",".join("U+%04X" % ord(c) for c in sorted(set(bad))), t[:24]),
-                                                  loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
+                                                  loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part, cell=cell_rc, xf=sp_xf, field=is_fld)))
 
                         # E3 / W1 / W5: 실효 폰트 크기(run → 문단 → placeholder 상속 체인, autofit 반영).
                         # size_src는 제목 수집 자격 판정용: defaultTextStyle 폴백(18pt)은 게이트엔
@@ -1882,7 +1980,9 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                             # 제목 자격: 명시 크기 또는 제목 패밀리 placeholder만. lstStyle·
                             # 마스터 bodyStyle 상속 크기가 18pt를 넘으면 본문 산문이 ghost/W14에
                             # 쓸려 들어간다(3차 적대 패널: own lstStyle 20pt 본문 실측 재현)
-                            if eff >= 18 and t.strip() and (size_src == "explicit" or frame_fam == "title"):
+                            # 자동 필드(슬라이드 번호 등)는 크기가 커도 제목이 아니다(0.5.0)
+                            if eff >= 18 and t.strip() and not is_fld \
+                                    and (size_src == "explicit" or frame_fam == "title"):
                                 # 제목 placeholder가 있으면 크기 무관 그것이 제목이다: 60pt
                                 # KPI 빅넘버가 26pt 실제 제목을 밀어내던 것 교정(3차 리뷰)
                                 is_title_ph = frame_fam == "title"
@@ -1895,20 +1995,20 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                             if eff < hard_min:
                                 note = "" if scale == 1.0 else M("e3_note") % (base_pt, scale)
                                 errors.append(Finding(si, "E3", "e3", (eff, hard_min, note), "text=%r" % t[:24],
-                                                      loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
+                                                      loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part, cell=cell_rc, xf=sp_xf, field=is_fld)))
                             elif eff < body_min and fw_in > 4.0 and len(ptext) >= 40:
                                 warns.append(Finding(si, "W1", "w1", (eff, body_min),
                                                      "w=%.1fin len=%d text=%r" % (fw_in, len(ptext), ptext[:24]),
-                                                     loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
+                                                     loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part, cell=cell_rc, xf=sp_xf, field=is_fld)))
                             elif eff < small_min and has_cjk(t) and fw_in <= 4.0:
                                 # 좁은 프레임(<=4in)만: 넓은 프레임의 소형 한글은 목업·카드 내부가 아니라
                                 # 캡션·주석일 여지가 커 메시지(목업 추정)와 어긋난다(공개 위생 감사 반영).
                                 warns.append(Finding(si, "W8", "w8", (eff, small_min),
                                                      "w=%.1fin text=%r" % (fw_in, t[:24]),
-                                                     loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
+                                                     loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part, cell=cell_rc, xf=sp_xf, field=is_fld)))
                         else:
                             warns.append(Finding(si, "W5", "w5", (), "text=%r" % t[:24],
-                                                 loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
+                                                 loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part, cell=cell_rc, xf=sp_xf, field=is_fld)))
 
                         # E4: 연속 한글·한자 2자 이상 + 유의미 양수 트래킹. 가나가 섞인 런은
                         # 일본어라 제외(가나 자간 벌리기는 정상 디자인 관행). 한자 전용 런은
@@ -1918,7 +2018,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                             tr = run_track(run)
                             if tr is not None and tr > 50:
                                 errors.append(Finding(si, "E4", "e4", (tr,), "text=%r" % t[:24],
-                                                      loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part)))
+                                                      loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part, cell=cell_rc, xf=sp_xf, field=is_fld)))
                     except Exception as e:
                         skipped["run"] += 1
                         print("E1-E4 skipped p%02d run: %s" % (si, e), file=sys.stderr)
@@ -2085,13 +2185,50 @@ def main():
         if os.path.exists("skill"):
             print(M("skill_conflict"), file=sys.stderr)
         sys.exit(skill_main(rest[1:]))
+    if rest and rest[0] in ("scan", "demo"):
+        if os.path.exists(rest[0]) and os.path.isfile(rest[0]):
+            print(M("subcmd_conflict") % (rest[0], rest[0]), file=sys.stderr)
+        sys.exit(scan_main(rest[1:]) if rest[0] == "scan" else demo_main(rest[1:]))
     ap = argparse.ArgumentParser(prog="archforge", description=M("prog_desc"))
     ap.add_argument("pptx")
+    ap.add_argument("--render", default=None, help=M("help_render"))
+    ap.add_argument("--write-baseline", default=None, metavar="PATH", help=M("help_write_baseline"))
+    _add_common_flags(ap)
+    a = ap.parse_args(argv)
+
+    res = _lint_one(a.pptx, a)
+    if res is None:   # --write-baseline: 기록 후 종료
+        sys.exit(0)
+
+    if a.sarif:
+        import json
+        sarif_doc = _reporters.build_sarif(a.pptx, res["errors"], res["warns"])
+        with open(a.sarif, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(sarif_doc, f, ensure_ascii=False, indent=2)
+
+    if a.json:
+        import json
+        doc = _reporters.build_json_doc(a.pptx, res["errors"], res["warns"],
+                                        res["ghost"], res["summary"])
+        print(json.dumps(doc, ensure_ascii=False, indent=2))
+        sys.exit(1 if res["fail"] else 0)
+
+    for line in _reporters.render_text(a.pptx, res["errors"], res["warns"], res["ghost"],
+                                       res["profile"], res["profile_excl"], res["skip"],
+                                       config_path=res["cfg_path"],
+                                       baseline_suppressed=res["baseline_suppressed"],
+                                       baseline_path=res["baseline_path"]):
+        print(line)
+
+    sys.exit(1 if res["fail"] else 0)
+
+
+def _add_common_flags(ap):
+    """단일 파일 모드와 scan 모드가 공유하는 플래그(중복 정의 드리프트 방지, 0.5.0)."""
     ap.add_argument("--hard-min", type=float, default=None, help=M("help_hard_min"))
     ap.add_argument("--body-min", type=float, default=None, help=M("help_body_min"))
     ap.add_argument("--strict", action="store_true", help=M("help_strict"))
     ap.add_argument("--small-min", type=float, default=None, help=M("help_small_min"))
-    ap.add_argument("--render", default=None, help=M("help_render"))
     ap.add_argument("--ghost", action="store_true", help=M("help_ghost"))
     ap.add_argument("--json", action="store_true", help=M("help_json"))
     ap.add_argument("--skip", default=None, metavar="CODES", help=M("help_skip"))
@@ -2103,18 +2240,22 @@ def main():
     ap.add_argument("--no-config", action="store_true", help=M("help_no_config"))
     ap.add_argument("--sarif", default=None, metavar="PATH", help=M("help_sarif"))
     ap.add_argument("--baseline", default=None, metavar="PATH", help=M("help_baseline"))
-    ap.add_argument("--write-baseline", default=None, metavar="PATH", help=M("help_write_baseline"))
-    a = ap.parse_args(argv)
 
-    if not os.path.exists(a.pptx):
-        print(M("err_notfound") % a.pptx, file=sys.stderr)
+
+def _lint_one(path, a):
+    """한 파일의 설정 해석→검사→필터→summary. main(단일)과 scan_main이 공유한다(0.5.0).
+    사용 오류(설정·플래그)는 종전 계약대로 즉시 exit 2. --write-baseline이면 기록 후
+    None을 반환한다. 반환 dict: errors/warns/ghost/summary/fail/profile/profile_excl/
+    skip/cfg_path/baseline_suppressed/baseline_path."""
+    if not os.path.exists(path):
+        print(M("err_notfound") % path, file=sys.stderr)
         sys.exit(2)
 
     # 설정 파일(.archforge.json/.yml): CLI 플래그가 항상 이긴다(0.4.0).
     # 신뢰 경계(4차 리뷰): 덱 폴더의 설정이 게이트를 약화시킬 수 있으므로, 적용된 설정
     # 경로를 출력 계약(JSON summary.config, 텍스트 각주)에 남기고 --no-config로 끌 수 있다.
     cfg = {}
-    cfg_path = None if a.no_config else _config.find_config(a.pptx, a.config)
+    cfg_path = None if a.no_config else _config.find_config(path, a.config)
     if a.config and not a.no_config and cfg_path is None:
         print(M("err_config") % a.config, file=sys.stderr)
         sys.exit(2)
@@ -2160,20 +2301,20 @@ def main():
 
     ghost = [] if (a.ghost or a.json) else None
     try:
-        errors, warns = lint(a.pptx, hard_min, body_min, small_min, render_dir=a.render,
+        errors, warns = lint(path, hard_min, body_min, small_min, render_dir=a.render,
                              ghost=ghost, strict=a.strict, w6_sim=w6_sim,
                              w6_min_cluster=w6_cluster, profile=profile)
     except Exception as e:
-        print(M("err_open") % (a.pptx, type(e).__name__), file=sys.stderr)
+        print(M("err_open") % (path, type(e).__name__), file=sys.stderr)
         sys.exit(2)
 
     # baseline 기록 모드: 현재 위반(불완전성 신호 W18 제외)을 지문으로 저장하고 종료
-    if a.write_baseline:
+    if getattr(a, "write_baseline", None):
         n = _config.write_baseline(a.write_baseline,
                                    [f for f in list(errors) + list(warns) if f.code != "W18"],
                                    profile=profile, lang=get_lang())
         print(M("baseline_written") % (n, a.write_baseline))
-        sys.exit(0)
+        return None
 
     # 검사 불완전 여부는 필터 전에 확정: W18을 --skip해도 기계 판독 신호는 남는다
     has_w18 = any(w[1] == "W18" for w in warns)
@@ -2217,27 +2358,126 @@ def main():
                "baseline_suppressed": baseline_suppressed,
                "config": cfg_path}   # 어떤 설정이 게이트를 조정했는지 항상 가시화(신뢰 경계)
 
+    return {"errors": errors, "warns": warns, "ghost": ghost, "summary": summary,
+            "fail": bool(errors or (a.strict and warns)),
+            "profile": profile, "profile_excl": profile_excl, "skip": skip,
+            "cfg_path": cfg_path, "baseline_suppressed": baseline_suppressed,
+            "baseline_path": baseline_path}
+
+
+def _expand_scan_paths(patterns):
+    """scan 인자 확장: 디렉터리는 재귀 .pptx, 글롭 패턴은 glob, 그 외는 파일 경로 그대로.
+    PowerPoint 잠금 파일(~$*.pptx)은 제외, 중복은 순서 유지로 제거."""
+    out = []
+    for pat in patterns:
+        if os.path.isdir(pat):
+            for root, _dirs, files in os.walk(pat):
+                for fn in sorted(files):
+                    if fn.lower().endswith(".pptx") and not fn.startswith("~$"):
+                        out.append(os.path.join(root, fn))
+        elif any(ch in pat for ch in "*?["):
+            for p in sorted(glob.glob(pat, recursive=True)):
+                if p.lower().endswith(".pptx") and not os.path.basename(p).startswith("~$"):
+                    out.append(p)
+        else:
+            out.append(pat)
+    seen, uniq = set(), []
+    for p in out:
+        k = os.path.normcase(os.path.abspath(p))
+        if k not in seen:
+            seen.add(k)
+            uniq.append(p)
+    return uniq
+
+
+def scan_main(argv=None):
+    """`archforge scan PATHS...`: 여러 파일·디렉터리·글롭을 한 번에 린트(0.5.0, CI·
+    pre-commit용). 파일별 판정은 단일 모드와 동일 경로(_lint_one)를 지나며, exit는
+    하나라도 실패면 1. 매치 0건은 조용한 통과가 아니라 exit 2다(CI 풋건 방지)."""
+    ap = argparse.ArgumentParser(prog="archforge scan", description=M("scan_desc"))
+    ap.add_argument("paths", nargs="+", help=M("help_scan_paths"))
+    _add_common_flags(ap)
+    # 단일 모드 전용 플래그는 미지원: _lint_one 호환용 기본값만 심는다
+    # (--render는 페이지 렌더 폴더가 덱마다 달라 scan에선 의미가 없다)
+    ap.set_defaults(render=None, write_baseline=None)
+    a = ap.parse_args(argv)
+
+    files = _expand_scan_paths(a.paths)
+    if not files:
+        print(M("err_scan_none") % " ".join(a.paths), file=sys.stderr)
+        return 2
+
+    results = []   # (path, res)
+    for path in files:
+        results.append((path, _lint_one(path, a)))
+
+    failed = sum(1 for (_p, r) in results if r["fail"])
+
     if a.sarif:
         import json
-        sarif_doc = _reporters.build_sarif(a.pptx, errors, warns)
+        sarif_doc = _reporters.build_sarif_multi(
+            [(p, r["errors"], r["warns"]) for (p, r) in results])
         with open(a.sarif, "w", encoding="utf-8", newline="\n") as f:
             json.dump(sarif_doc, f, ensure_ascii=False, indent=2)
 
     if a.json:
         import json
-        doc = _reporters.build_json_doc(a.pptx, errors, warns, ghost, summary)
-        print(json.dumps(doc, ensure_ascii=False, indent=2))
-        sys.exit(1 if (errors or (a.strict and warns)) else 0)
+        docs = [_reporters.build_json_doc(p, r["errors"], r["warns"], r["ghost"], r["summary"])
+                for (p, r) in results]
+        agg = {"schema_version": "1.0",
+               "tool": {"name": "archforge", "version": _reporters._tool_version()},
+               "lang": get_lang(),
+               "scan": {"inputs": list(a.paths)},
+               "files": docs,
+               "summary": {"file_count": len(results), "failed_files": failed,
+                           "error_count": sum(len(r["errors"]) for (_p, r) in results),
+                           "warn_count": sum(len(r["warns"]) for (_p, r) in results),
+                           "pass": failed == 0,
+                           "incomplete": any(r["summary"]["incomplete"] for (_p, r) in results)}}
+        print(json.dumps(agg, ensure_ascii=False, indent=2))
+        return 1 if failed else 0
 
-    for line in _reporters.render_text(a.pptx, errors, warns, ghost, profile, profile_excl, skip,
-                                       config_path=cfg_path,
-                                       baseline_suppressed=baseline_suppressed,
-                                       baseline_path=baseline_path):
-        print(line)
+    for p, r in results:
+        for line in _reporters.render_text(p, r["errors"], r["warns"], r["ghost"],
+                                           r["profile"], r["profile_excl"], r["skip"],
+                                           config_path=r["cfg_path"],
+                                           baseline_suppressed=r["baseline_suppressed"],
+                                           baseline_path=r["baseline_path"]):
+            print(line)
+        print()
+    print(M("scan_summary") % (len(results), failed))
+    return 1 if failed else 0
 
-    if errors or (a.strict and warns):
-        sys.exit(1)
-    sys.exit(0)
+
+def demo_main(argv=None):
+    """`archforge demo`: 결함 심은 덱과 교정본을 생성해 즉석에서 린트(0.5.0 온보딩).
+    설치 30초 안에 무엇을 잡는지 직접 보여주는 첫 실행 경험용이다."""
+    ap = argparse.ArgumentParser(prog="archforge demo", description=M("demo_desc"))
+    ap.add_argument("--dir", default="archforge-demo", help=M("help_demo_dir"))
+    ap.add_argument("--lang", default=None, choices=("ko", "en"), help=M("help_lang"))
+    a = ap.parse_args(argv)
+    try:
+        from . import demo as _demo
+    except ImportError:
+        import demo as _demo
+    os.makedirs(a.dir, exist_ok=True)
+    broken = os.path.join(a.dir, "broken.pptx")
+    fixed = os.path.join(a.dir, "fixed.pptx")
+    _demo.build_broken(broken)
+    _demo.build_fixed(fixed)
+    print(M("demo_built") % a.dir)
+    print()
+    rc = 0
+    for path in (broken, fixed):
+        errors, warns = lint(path, profile="full")
+        for line in _reporters.render_text(path, errors, warns, None,
+                                           "full", PROFILES["full"], set()):
+            print(line)
+        print()
+        if path == fixed and (errors or warns):
+            rc = 1   # 교정본은 항상 클린이어야 한다(테스트로 고정된 계약)
+    print(M("demo_next") % broken)
+    return rc
 
 
 if __name__ == "__main__":

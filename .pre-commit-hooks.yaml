@@ -1,0 +1,20 @@
+# pre-commit hook definitions (https://pre-commit.com)
+#
+# Usage in a consumer repo's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/Love-Ash/archforge
+#       rev: v0.5.0
+#       hooks:
+#         - id: archforge
+#           # args: [--profile, full]   # machine-made decks want the full profile
+#
+# pre-commit passes the staged .pptx paths as arguments; `archforge scan`
+# accepts any mix of files, directories, and globs.
+- id: archforge
+  name: archforge pptx lint
+  description: Lint built .pptx files for silent Korean font fallback, collisions, and AI-tell defects.
+  entry: archforge scan
+  language: python
+  files: \.pptx$
+  minimum_pre_commit_version: '2.9.2'

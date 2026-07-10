@@ -1,10 +1,47 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-07-10)
 
-4차 외부 리뷰(전략·확산 관점 2건 + 자체 검증 세션 CONFIRMED 9건)의 정확성 결함 반영분.
-릴리스 규율 지적을 수용해 버전은 올리지 않고 main에 누적하며, 배포·확산 작업과 묶어
-0.5.0 한 번으로 낼 예정이다.
+배포·온보딩 릴리스입니다. 4차 리뷰 3건이 공통으로 짚은 병목(엔진이 아니라 전달)을
+다룹니다: 30초 온보딩(demo), CI 통합(scan·GitHub Action·pre-commit), 에이전트 자동
+수정용 location 계약 완성, 그리고 README 전면 개편.
+
+### 신설
+
+- `archforge demo`: 결함 6종을 심은 broken.pptx와 교정본 fixed.pptx를 생성해 즉석
+  린트(첫 실행 경험). 리포 `examples/`에 같은 소스로 만든 커밋본 3종(broken/fixed/
+  style_warnings)과 기대 출력 문서를 추가했습니다.
+- `archforge scan PATHS...`: 파일·디렉터리(재귀)·글롭 혼합 다중 린트. 파일별 판정은
+  단일 모드와 같은 경로를 지나고, 집계 JSON(`files[]` + aggregate summary)과 다중
+  파일 SARIF(한 run, 파일별 artifactLocation)를 냅니다. 하나라도 실패면 exit 1,
+  매치 0건은 조용한 통과가 아니라 exit 2(CI 풋건 방지). PowerPoint 잠금 파일
+  (~$*.pptx)은 제외.
+- GitHub Action(composite `action.yml`): `uses: Love-Ash/archforge@v0.5.0`에
+  files/profile/strict/sarif/version 입력. pre-commit 훅(`.pre-commit-hooks.yaml`)도
+  추가.
+- location 계약 완성(에이전트 자동 수정 타깃): 그룹 변환을 합성한 절대 bbox, 표 셀
+  `cell`=[행,열], 자동 필드 `field: true`, W15~W17의 실효 글리프 bbox + 쌍 판정
+  `related`(상대 도형), W7 절대 bbox.
+- a:fld(슬라이드 번호·날짜 필드)가 일반 run과 같은 게이트(E1/E3/E4)를 지납니다.
+  스키마상 fld도 rPr+t라 같은 규칙으로 렌더되는데 python-pptx run 순회가 건너뛰어
+  사각지대였습니다. 필드는 ghost/W14 제목 수집에서 제외(큰 페이지 번호 오염 방지).
+  a:br은 E2 문맥·오프셋에서 줄바꿈 한 글자로 취급됩니다.
+- 커뮤니티 문서: CONTRIBUTING(증거 기준: 게이트는 렌더 대조로만 조정),
+  SECURITY(위협 모델), 이슈 템플릿 3종(오탐 신고 템플릿 포함), PR 템플릿.
+
+### 수정(정확성)
+
+- 그룹 아핀 잠복 버그: 슬라이드의 grpSpPr는 p: 네임스페이스인데 a:로 find해 그룹
+  변환이 항상 항등으로 후퇴했습니다. 이동 desync 그룹에서 W15~W17 기하와 loc bbox가
+  raw 좌표로 판정되던 것을 로컬네임 매칭으로 교정하고 절대좌표 테스트로 고정했습니다
+  (0.5.0 loc 작업 중 실측으로 발견).
+- W15/W16/W17 상위 2건 선별의 정렬 키를 초과량·비율 단일 키로 명시(동률일 때
+  텍스트 사전순이 개입하던 것 제거).
+
+### 4차 리뷰 정확성 반영분(main에 누적돼 있던 미출시 배치)
+
+4차 외부 리뷰(전략·확산 관점 2건 + 자체 검증 세션 CONFIRMED 9건)의 정확성 결함
+반영분. 릴리스 규율 지적을 수용해 당시 버전을 올리지 않고 이 릴리스에 합류했습니다.
 
 - (HIGH) 설정 파일 신뢰 경계: `--no-config` 신설, 적용된 설정 경로를 JSON
   `summary.config`와 텍스트 각주에 항상 표시. 덱 폴더의 공격자 제어 설정이 게이트를
@@ -23,11 +60,23 @@
 - 문서 드리프트: README·SKILL의 E4 서술을 실제 범위(한글·한자, 가나 제외)로, JSON
   예시의 하드코딩 버전 제거, `--strict`의 E2 해제가 full에서만 의미임을 명시,
   CHANGELOG의 내부 의사결정 표현 제거.
-- 테스트 82개에서 85개로.
 
 수용 보류·기각(판단 기록): core 기본값 자체는 유지(3차에서 사용자 확정, 가시성으로
 보완). a:fld/a:br 텍스트 미검사와 그룹 내 loc bbox의 raw 좌표는 알려진 한계로
-docs/CALIBRATION.md에 공개하고 0.5.0에서 다룬다.
+공개했다가 이 릴리스의 신설·수정 항목에서 해소했습니다.
+
+### 문서
+
+- README(en/ko) 전면 개편: 실렌더 before/after 대조 이미지와 데모 GIF(둘 다
+  examples 덱의 PowerPoint 실렌더로 제작), 30초 온보딩 섹션, CI 섹션, location
+  계약 문서화. SKILL.md에 scan/demo와 location 키 계약 추가.
+- docs/assets/social-preview.jpg(1280x640) 동봉: 리포 Settings의 Social preview에
+  업로드하는 용도.
+
+### 테스트
+
+- 85개에서 93개로: fld 게이트·br 오프셋·표 셀 loc·그룹 절대 bbox·W15/W16 loc·
+  scan/demo CLI·다중 SARIF·examples 계약.
 
 ## 0.4.0 (2026-07-10)
 
