@@ -75,8 +75,12 @@ instead of searching by text: `shape_id`/`shape_name`, `bbox` `[x,y,w,h]` in inc
 frame, table `cell` as `[row, col]`, `field: true` when the text lives in an `a:fld`
 auto field (slide number/date; no `run` index there), `part` (the slide XML part), and
 for pair findings (W15 overlap, W17 straddle) a `related` counterpart with the same keys.
-`archforge scan --json` wraps one per-file document per deck plus an aggregate summary
-(`summary.file_count`, `failed_files`, `error_files`, `pass`, `incomplete`). A broken or
+`--schema 2` switches to schema 2.0: a single `findings[]` array with `severity` and a
+structured `data` object per item (numbers, not a parsed sentence), plus a
+`capabilities` map and a structured `abstentions[]`. Schema 1.0 (the default above) is
+unchanged. `archforge scan --json` wraps one per-file document per deck plus an
+aggregate summary (`summary.file_count`, `failed_files`, `error_files`, `pass`,
+`incomplete`). A broken or
 misconfigured file becomes a per-file `status: "error"` entry and the scan continues;
 `--baseline` under scan requires exactly one matched file (fingerprints carry no file
 identity, so a shared baseline would suppress findings across unrelated decks).

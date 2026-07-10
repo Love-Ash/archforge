@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.7.0 (2026-07-11)
+
+The contract half of the 0.7 architecture work (issue #6), plus the first step of the
+physical decomposition (#5). The refactor is verdict-preserving by construction: the
+16-deck A/B and the public corpus stay byte-identical, and schema 1.0 output is
+unchanged.
+
+### Structured data and JSON schema 2.0
+
+- `Finding.data()` derives a structured numeric payload (effective_pt, overflow_in,
+  contrast_ratio, tracking, ...) from the args the detectors already pass, via a
+  per-message-id field table. No detection site changed; the verdict is untouched.
+- `--schema 2` emits schema 2.0: a single `findings[]` array with `severity` and `data`
+  on each item, a `capabilities` map (typography / geometry / structure /
+  render_contrast: complete | partial | not_requested), and a structured
+  `abstentions[]` (reason, page, count, affected_rules) derived from the W18
+  machine-key reasons. Schema 1.0 stays the default and byte-identical for existing
+  consumers.
+
+### Baseline v3
+
+- Fingerprints gain a page-free structural location bucket (normalized shape name,
+  cell, paragraph, or a coarse bbox grid), so a defect that disappears and reappears in
+  a genuinely different place is treated as new rather than silently re-suppressed
+  (external review). A threshold hash is recorded and checked on load. v1/v2 baselines
+  are rejected with a regenerate message: the single migration ADR 004 committed to.
+
+### Architecture (#5, staged)
+
+- Extracted the per-run Unicode script layer into `scripts.py` (pure, dependency-free),
+  establishing the parsing-layer boundary and re-exported for compatibility. The
+  remaining physical decomposition of the interleaved OOXML / resolution / detector body
+  continues under #5 as its own verified effort rather than a single big-bang, since the
+  verdict-preserving contract is the acceptance test and a move that large cannot be
+  proven safe against the A/B and corpus alone in one pass.
+
 ## 0.6.2 (2026-07-11)
 
 Reporters, reproducibility, and resource bounds. Additive; no contract changes.

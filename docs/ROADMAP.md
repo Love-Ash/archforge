@@ -14,7 +14,7 @@ want to take one, comment first and it will be held for you.
 | Release | Theme | Bar to ship |
 |---|---|---|
 | 0.6.x | Contract hardening (done) | Action/scan/policy/geometry contracts consistent; NaN, trust boundary, incompleteness all closed |
-| 0.7.0 | Architecture (#5, #6) | One document model + one style/geometry/color resolver; detectors return findings only; structured `Finding.data`, JSON schema 2.0 (`findings[]`, `capabilities`, `abstentions`), baseline v3 identity. **Verdict-preserving: the 16-deck A/B and the public corpus stay identical.** |
+| 0.7.0 | Contracts done (#6); architecture started (#5) | Shipped: structured `Finding.data`, JSON schema 2.0 (`findings[]`, `capabilities`, `abstentions`), baseline v3 identity, and the `scripts.py` parsing-layer extraction. Verdict-preserving (16-deck A/B and corpus identical). Continuing under #5: the physical split of the interleaved OOXML/resolution/detector body into one document model + one resolver, done as its own verified effort rather than a big-bang. |
 | 0.8.0 | Verification and ecosystem | Public multi-generator corpus grown (Google Slides / Canva / LibreOffice / multi-master / merged tables / JP-CN reviewed by natives); per-gate precision/recall published; JUnit + HTML reporters; `rules`/`explain`; renderer matrix filled where measured |
 | 0.9.0 | Release candidate | JSON + baseline schemas frozen; deprecation policy; public API surface pinned; 2-4 week RC soak; zero open P0 |
 | 1.0.0 | Stable contracts | 3+ external contributors; outside false-positive fixtures; used in 2+ generators' pipelines; docs/code auto-consistency checks; RC soak clean |
