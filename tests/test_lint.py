@@ -1426,11 +1426,90 @@ def test_config_file(tmp_path):
     assert any(e["code"] == "E2" for e in doc["errors"])    # 설정의 full 적용
     doc = json.loads(run_cli([deck, "--json", "--profile", "core"]).stdout)
     assert not doc["errors"]                                 # CLI가 설정을 이김
-    # 알 수 없는 키는 경고 후 무시(치명 아님)
+    # fail-safe(4차 리뷰): 알 수 없는 키(오타)는 무시가 아니라 exit 2. 'profle: full'이
+    # 조용히 기본 core로 실행되는 사고 방지
     with open(os.path.join(str(tmp_path), ".archforge.json"), "w", encoding="utf-8") as f:
         json.dump({"profile": "full", "no_such_key": 1}, f)
     r = run_cli([deck, "--json"])
-    assert r.returncode == 1 and "no_such_key" in r.stderr
+    assert r.returncode == 2 and "no_such_key" in r.stderr
+    # --no-config: 신뢰 불가 덱 폴더의 설정을 무시(신뢰 경계)
+    with open(os.path.join(str(tmp_path), ".archforge.json"), "w", encoding="utf-8") as f:
+        json.dump({"profile": "full"}, f)
+    doc = json.loads(run_cli([deck, "--json", "--no-config"]).stdout)
+    assert not doc["errors"] and doc["summary"]["config"] is None
+    doc = json.loads(run_cli([deck, "--json"]).stdout)
+    assert doc["summary"]["config"] and doc["summary"]["config"].endswith(".archforge.json")
+
+
+def test_config_value_validation(tmp_path):
+    """설정값 타입·범위는 traceback이 아니라 정돈된 exit 2(4차 리뷰). CLI 범위도 동일
+    (--hard-min 0으로 E3를 조용히 끄던 구 X1 우회 봉합)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "clean", font="Wanted Sans", size=20)
+    deck = save(p, tmp_path, "fx.pptx")
+    with open(os.path.join(str(tmp_path), ".archforge.json"), "w", encoding="utf-8") as f:
+        json.dump({"hard_min": "abc"}, f)
+    r = run_cli([deck, "--json"])
+    assert r.returncode == 2 and "hard_min" in r.stderr and "Traceback" not in r.stderr
+    with open(os.path.join(str(tmp_path), ".archforge.json"), "w", encoding="utf-8") as f:
+        json.dump({"lang": "fr"}, f)
+    assert run_cli([deck, "--json"]).returncode == 2
+    with open(os.path.join(str(tmp_path), ".archforge.json"), "w", encoding="utf-8") as f:
+        json.dump({}, f)
+    assert run_cli([deck, "--hard-min", "0"]).returncode == 2   # CLI 범위 검증
+
+
+def test_baseline_v2_language_and_count(tmp_path):
+    """지문 v2(4차 리뷰 HIGH 교정): ko로 만든 baseline이 en 실행에서도 유효하고,
+    발생 수(count) 의미를 지키며, 페이지 무관이라 슬라이드 삽입에도 생존한다."""
+    p = new_prs()
+    for i in range(6):   # W6 클론 덱(detail이 로케일 문자열이던 대표 규칙)
+        s = add_slide(p)
+        tb(s, 1, 0.8, 8, 0.6, "Title block %d" % i, font="Wanted Sans", size=24)
+        tb(s, 1, 2.0, 6, 2.5, "Body block", font="Wanted Sans", size=12)
+        tb(s, 8, 2.0, 4, 2.5, "Side block", font="Wanted Sans", size=12)
+    deck = save(p, tmp_path, "w6.pptx")
+    bl = os.path.join(str(tmp_path), "bl.json")
+    run_cli([deck, "--profile", "full", "--write-baseline", bl], lang="ko")
+    doc = json.loads(run_cli([deck, "--profile", "full", "--json", "--baseline", bl],
+                             lang="en").stdout)
+    assert not any(w["code"] == "W6" for w in doc["warnings"]), doc["warnings"]
+
+    # count 의미: 같은 지문 2건 발생, baseline엔 1건 -> 1건만 억제
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    one = save(p, tmp_path, "one.pptx")
+    run_cli([one, "--write-baseline", bl])
+    s = add_slide(p)   # 같은 텍스트·같은 폰트 = 같은 지문이 두 페이지에
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    two = save(p, tmp_path, "two.pptx")
+    doc = json.loads(run_cli([two, "--json", "--baseline", bl]).stdout)
+    assert doc["summary"]["baseline_suppressed"] == 1
+    assert doc["summary"]["error_count"] == 1
+    # 페이지 무관: 앞에 슬라이드를 끼운 덱에서도 억제 유지
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "새로 삽입된 표지", font="Wanted Sans", size=20)
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    shifted = save(p, tmp_path, "shifted.pptx")
+    doc = json.loads(run_cli([shifted, "--json", "--baseline", bl]).stdout)
+    assert doc["summary"]["baseline_suppressed"] == 1 and doc["summary"]["error_count"] == 0
+    # 텍스트 모드 가시성: 억제가 각주로 표시(불가시 clean 오독 교정)
+    r = run_cli([shifted, "--baseline", bl])
+    assert "baseline" in r.stdout
+
+
+def test_lint_rejects_unknown_profile(tmp_path):
+    """라이브러리 API: 오타 프로파일이 조용히 full로 동작하던 것 교정(4차 리뷰)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "clean", font="Wanted Sans", size=20)
+    deck = save(p, tmp_path, "fx.pptx")
+    with pytest.raises(ValueError):
+        jl.lint(deck, profile="ful")
 
 
 def test_baseline_flow(tmp_path):

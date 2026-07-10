@@ -24,10 +24,11 @@ class Finding:
     {"shape_id", "shape_name", "paragraph", "run", "bbox"[x,y,w,h in], "part"} 중 가용 키.
     """
 
-    __slots__ = ("page", "code", "msg_id", "args", "detail", "loc", "_msg_override")
+    __slots__ = ("page", "code", "msg_id", "args", "detail", "loc", "fp_key", "_msg_override")
 
     def __init__(self, page: int, code: str, msg_id: str, args: Tuple = (),
                  detail: str = "", loc: Optional[Dict] = None,
+                 fp_key: Optional[str] = None,
                  _msg_override: Optional[str] = None):
         self.page = page
         self.code = code
@@ -35,6 +36,9 @@ class Finding:
         self.args = tuple(args)
         self.detail = detail
         self.loc = loc
+        # baseline 지문용 로케일 중립 키. detail에 번역 문자열이 섞이는 규칙(W6·W10·W16)은
+        # 여기에 데이터 부분만 넣는다(4차 리뷰 확정: ko baseline이 en 실행에서 무효였던 결함).
+        self.fp_key = fp_key
         # e3의 autofit 주석처럼 인자 안에 이미 렌더된 조각이 필요한 극소수 케이스,
         # 그리고 구형 코드가 완성 문자열을 넘기는 이행기 경로용(정본은 msg_id).
         self._msg_override = _msg_override
@@ -70,9 +74,15 @@ class Finding:
         return d
 
     def fingerprint(self) -> str:
-        """baseline 대조용 안정 지문: 페이지+코드+detail(메시지 언어와 무관)."""
+        """baseline 대조용 안정 지문 v2: 코드 + 로케일 중립 내용키.
+
+        의도적으로 페이지 번호를 넣지 않는다: 자동 생성 덱은 슬라이드 삽입·재배열이
+        흔해 페이지 기반 지문은 한 장만 끼워도 전부 무효가 됐다(4차 리뷰 확정).
+        같은 내용의 위반이 여러 곳에 있는 경우는 baseline이 발생 수(count)로 관리한다.
+        재생성형 산출물의 완전한 identity는 생성기 provenance(소스맵) 없이는 불가능하며,
+        그것이 0.5+ 로드맵이다."""
         import hashlib
-        raw = "%d|%s|%s" % (self.page, self.code, self.detail)
+        raw = "%s|%s" % (self.code, self.fp_key if self.fp_key is not None else self.detail)
         return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 

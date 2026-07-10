@@ -61,6 +61,7 @@ archforge deck.pptx --ghost         # per-page title list (horizontal-logic revi
 archforge deck.pptx --render pages/ # add on-image contrast check (W7) from p01.png-style renders
 archforge deck.pptx --skip W14,W6   # suppress specific WARNs (recorded in JSON)
 archforge deck.pptx --lang en       # report language (default: ARCHFORGE_LANG, then OS locale)
+archforge deck.pptx --no-config     # ignore config files (linting untrusted decks)
 archforge deck.pptx --sarif out.sarif        # SARIF 2.1.0 (GitHub code scanning)
 archforge deck.pptx --write-baseline bl.json # adopt an existing deck as-is
 archforge deck.pptx --baseline bl.json       # report only new findings after that
@@ -81,7 +82,7 @@ JSON output:
 ```json
 {
   "schema_version": "1.0",
-  "tool": { "name": "archforge", "version": "0.3.1" },
+  "tool": { "name": "archforge", "version": "x.y.z" },
   "target_renderer": "powerpoint-windows",
   "file": "deck.pptx",
   "lang": "en",
@@ -105,7 +106,7 @@ ERRORs block shipping (exit 1):
 | `E1` | The font that will actually render Hangul text is Latin-only: silent Malgun fallback. Resolution follows a measured PowerPoint model (see below) |
 | `E2` | Dash-family characters used as sentence punctuation (the top AI-generated-deck tell). Numeric ranges (2020 to 2024 with an en dash, Q1 to Q3, 5% to 10%) and minus signs pass by default; `--strict` blocks everything |
 | `E3` | Effective size below 5pt after autofit and the full placeholder inheritance chain: unreadable |
-| `E4` | Positive tracking on consecutive Hangul: letter-spacing damage (Hangul-scoped; kana tracking is legitimate Japanese practice) |
+| `E4` | Positive tracking on consecutive Hangul/Hanja: letter-spacing damage (kana-containing runs are exempt; tracked kana is legitimate Japanese practice) |
 
 WARNs are advisory:
 

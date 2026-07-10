@@ -188,8 +188,8 @@ MESSAGES = {
     "help_hard_min": {"ko": "E3 판독 불가 하한(pt, 기본 5.0)", "en": "E3 unreadable hard floor in pt (default 5.0)"},
     "help_body_min": {"ko": "W1 본문급 권장 하한(pt, 기본 9.0)", "en": "W1 body-class recommended floor in pt (default 9.0)"},
     "help_strict": {
-        "ko": "WARN도 exit 1 + E2 숫자 맥락 예외(범위 en dash·음수 부호) 해제",
-        "en": "WARNs also exit 1, and E2 numeric-context exemptions (range en dash, minus sign) are disabled",
+        "ko": "WARN도 exit 1. E2 숫자 맥락 예외 해제는 E2가 실행되는 프로파일(full)에서만 의미",
+        "en": "WARNs also exit 1. Lifting E2 numeric exemptions only matters in profiles that run E2 (full)",
     },
     "help_small_min": {"ko": "W8 좁은 프레임 소형 CJK 상한(pt)", "en": "W8 small-CJK ceiling in narrow frames (pt)"},
     "help_render": {
@@ -208,8 +208,8 @@ MESSAGES = {
     "help_w6_sim": {"ko": "W6 골격 유사도 임계(기본 0.90)", "en": "W6 skeleton similarity threshold (default 0.90)"},
     "help_w6_cluster": {"ko": "W6 클러스터 최소 이웃 수(기본 3 = 같은 골격 4장+)", "en": "W6 minimum cluster neighbors (default 3 = 4+ pages sharing a skeleton)"},
     "help_profile": {
-        "ko": "규칙 프리셋: full(기본, 전부) / core(객관 결함만: 스타일·관행 규칙 제외) / editorial(에디토리얼 덱: W6·W14 제외). 제외 내역은 JSON에 기록",
-        "en": "rule preset: full (default, everything) / core (objective defects only; style/convention rules off) / editorial (editorial decks; W6/W14 off). Exclusions are recorded in JSON",
+        "ko": "규칙 프리셋: core(기본, 객관 결함만) / full(전부: AI 티·스타일 규칙 포함) / editorial(에디토리얼 덱: W6·W14 제외). 제외 내역은 JSON에 기록",
+        "en": "rule preset: core (default, objective defects only) / full (everything incl. AI-tell/style rules) / editorial (editorial decks; W6/W14 off). Exclusions are recorded in JSON",
     },
     "help_lang": {
         "ko": "리포트 언어(ko/en). 기본은 ARCHFORGE_LANG 환경변수, 없으면 시스템 로케일",
@@ -247,6 +247,18 @@ MESSAGES = {
     "baseline_written": {
         "ko": "archforge: baseline 기록 완료(%d건) -> %s",
         "en": "archforge: baseline written (%d finding(s)) -> %s",
+    },
+    "help_no_config": {
+        "ko": "설정 파일 자동 탐색을 끔(신뢰할 수 없는 출처의 덱을 린트할 때)",
+        "en": "disable config file discovery (when linting decks from untrusted sources)",
+    },
+    "config_applied": {
+        "ko": "  (설정 적용: %s)",
+        "en": "  (config applied: %s)",
+    },
+    "baseline_applied": {
+        "ko": "  (baseline 억제: %d건, %s)",
+        "en": "  (baseline suppressed: %d finding(s), %s)",
     },
 }
 

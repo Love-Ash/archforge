@@ -34,7 +34,10 @@ def build_json_doc(path: str, errors: List, warns: List, ghost, summary: Dict) -
 
 
 def render_text(path: str, errors: List, warns: List, ghost,
-                profile: str, profile_excl, skip) -> List[str]:
+                profile: str, profile_excl, skip,
+                config_path: Optional[str] = None,
+                baseline_suppressed: int = 0,
+                baseline_path: Optional[str] = None) -> List[str]:
     lines = ["=== ARCHFORGE LINT: %s ===" % path]
     if ghost:
         lines.append(M("ghost_header"))
@@ -50,6 +53,12 @@ def render_text(path: str, errors: List, warns: List, ghost,
         lines.append(M("profile_applied") % (profile, ",".join(sorted(profile_excl))))
     if skip:
         lines.append(M("skip_applied") % ",".join(sorted(skip)))
+    if config_path:
+        # 신뢰 경계 가시성(4차 리뷰): 어떤 설정 파일이 게이트를 조정했는지 항상 표시
+        lines.append(M("config_applied") % config_path)
+    if baseline_suppressed:
+        # baseline 억제가 사람용 출력에서 완전 불가시라 'clean'으로 오독되던 것 교정
+        lines.append(M("baseline_applied") % (baseline_suppressed, baseline_path or ""))
     lines.append("--- ERROR %d, WARN %d ---" % (len(errors), len(warns)))
     return lines
 

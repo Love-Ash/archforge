@@ -33,7 +33,8 @@ archforge deck.pptx --render pages/   # + on-image contrast check (W7); needs p0
 archforge deck.pptx --skip W14,W6     # suppress specific WARNs (WARN-only; recorded in JSON)
 archforge deck.pptx --lang en         # report language (codes are language-independent)
 archforge deck.pptx --sarif out.sarif # SARIF 2.1.0 for GitHub code scanning
-archforge deck.pptx --write-baseline bl.json / --baseline bl.json   # adopt existing decks
+archforge deck.pptx --write-baseline bl.json / --baseline bl.json   # adopt existing decks (beta)
+archforge deck.pptx --no-config       # ignore config files (untrusted decks)
 archforge deck.pptx --w6-sim 0.95 --w6-cluster 5   # loosen W6 for template-driven houses
 archforge deck.pptx --hard-min 5 --body-min 9 --small-min 7.5   # size gate thresholds (pt)
 archforge skill --install        # install this skill pack into ./.claude/skills
@@ -47,7 +48,7 @@ No repo clone needed.
 
 ```json
 {"schema_version": "1.0",
- "tool": {"name": "archforge", "version": "0.3.1"},
+ "tool": {"name": "archforge", "version": "x.y.z"},
  "target_renderer": "powerpoint-windows",
  "file": "...",
  "lang": "en",
@@ -74,7 +75,7 @@ ERROR = ship-blockers. Fix, rebuild, re-lint. Never deliver with ERROR > 0.
 | E1 | The font that will actually render Hangul text is Latin-only (no Hangul glyphs), so Hangul silently falls back to Malgun. Effective font follows the measured PowerPoint model: run `a:ea` > lstStyle inheritance chain (shape > layout ph > master ph > master txStyles > defaultTextStyle) > theme ea (majorFont for title placeholders, minorFont otherwise; non-empty theme ea beats run `a:latin`) > run `a:latin` only when the theme ea slot is empty > OS fallback. Hangul-scoped: kana/hanzi-only runs are never judged with Hangul coverage knowledge | Give Korean runs a CJK-capable font. Setting only `font.name` (= `a:latin`) with a Korean font works when the theme ea slot is empty, but setting `a:ea` explicitly is the robust fix. Keep mono/Latin display fonts for ASCII-only labels |
 | E2 | A dash-family character used as sentence punctuation: em dash U+2014, en dash U+2013, figure dash U+2012, horizontal bar U+2015, 2/3-em dashes U+2E3A/U+2E3B, math minus U+2212, fullwidth hyphen U+FF0D, box-drawing line U+2500. Range-function en dashes pass by default: both neighbor tokens numeric-ish (2020, Q1, 5%, FY24; spaces allowed), or one numeric-ish neighbor with the dash attached. Spaced one-sided dashes (the AI parenthetical pattern) and word-to-word joins are blocked. Minus before a digit passes. Context is the full paragraph, so ranges split across runs don't false-positive | For prose dashes, use a colon, comma, parentheses, or line break. Ranges and negative numbers are fine by default; under `--strict`, use `~` for ranges and ASCII hyphen for minus |
 | E3 | Effective font size below 5pt (autofit scale, paragraph AND placeholder/layout/master/defaultTextStyle inheritance included): unreadable | Redesign, don't just bump the number: fewer items, one representative element bigger |
-| E4 | Positive letter-spacing (tracking) on consecutive Hangul: Hangul spacing breaks. Hangul-scoped (kana tracking is normal Japanese practice) | Set tracking to 0 on Hangul runs. Track ASCII-only labels only |
+| E4 | Positive letter-spacing (tracking) on consecutive Hangul/Hanja: letter-spacing damage. Kana-containing runs are exempt (tracked kana is normal Japanese practice) | Set tracking to 0 on Hangul/Hanja runs. Track ASCII-only labels only |
 
 WARN = advisory. Read each one; confirm on a rendered page image when the message
 says so. Most are approximation-based, calibrated against rendered output

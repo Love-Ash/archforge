@@ -1365,13 +1365,15 @@ def overflow_check(slide, si, sw_in, sh_in, warns,
     for gb in boxes:
         over = max(-gb.x0, -gb.y0, gb.x1 - sw_in, gb.y1 - sh_in)
         if over > TOL_T:
-            hits.append((over, M("w16_text") % gb.rep))
+            hits.append((over, M("w16_text") % gb.rep, "t|%r" % gb.rep))
     for (px0, py0, px1, py1, _z) in pics:
         over = max(-px0, -py0, px1 - sw_in, py1 - sh_in)
         if over > TOL_S:
-            hits.append((over, M("w16_pic") % (px1 - px0, py1 - py0)))
-    for over, what in sorted(hits, reverse=True)[:2]:
-        warns.append(Finding(si, "W16", "w16", (over,), what))
+            hits.append((over, M("w16_pic") % (px1 - px0, py1 - py0),
+                         "p|%.1fx%.1f" % (px1 - px0, py1 - py0)))
+    for over, what, fpk in sorted(hits, reverse=True)[:2]:
+        # fp_key: detail(what)은 로케일 문자열이라 baseline 지문에서 제외(4차 리뷰)
+        warns.append(Finding(si, "W16", "w16", (over,), what, fp_key=fpk))
 
 
 def _occluder_boxes(slide, sw_in, sh_in):
@@ -1655,6 +1657,9 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
     0.4.0 파괴적 변경: 기본 프로파일이 core(객관 결함만)다. AI 티·하우스 스타일 규칙
     (E2, W6, W9~W14)까지 원하면 profile="full"을 명시한다. 첫 사용자 무옵션 실행이
     정상 문장부호로 exit 1을 받는 첫인상 문제의 교정(외부 전략 리뷰, 사용자 확정)."""
+    if profile not in PROFILES:
+        # 오타 프로파일이 조용히 full(빈 제외집합)로 동작하던 것 교정(4차 리뷰)
+        raise ValueError("unknown profile %r (choices: %s)" % (profile, ", ".join(sorted(PROFILES))))
     prs = Presentation(path)
     sw, sh = prs.slide_width, prs.slide_height
     errors, warns = [], []
@@ -1955,7 +1960,8 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             worst_p, worst = max(adj.items(), key=lambda kv: len(kv[1]))
             if len(worst) >= w6_min_cluster:
                 ex = " ".join("p%d~p%d(%.2f)" % (worst_p, b, s) for b, s in sorted(worst, key=lambda x: -x[1])[:4])
-                warns.append(Finding(0, "W6", "w6", (len(worst) + 1,), M("w6_detail") % ex))
+                warns.append(Finding(0, "W6", "w6", (len(worst) + 1,), M("w6_detail") % ex,
+                                     fp_key=ex))
     except Exception as e:
         deck_skipped["w6"] += 1
         print("W6 skipped: %s" % e, file=sys.stderr)
@@ -1996,8 +2002,9 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             cw, cwl = max(cadj.items(), key=lambda kv: len(kv[1]))
             if len(cwl) >= 1:
                 grp = sorted({cw, *cwl})
+                pages_key = ",".join("p%d" % p for p in grp)
                 warns.append(Finding(0, "W10", "w10", (len(grp),),
-                                     M("w10_detail") % ",".join("p%d" % p for p in grp)))
+                                     M("w10_detail") % pages_key, fp_key=pages_key))
     except Exception as e:
         deck_skipped["w10"] += 1
         print("W10 skipped: %s" % e, file=sys.stderr)
@@ -2093,6 +2100,7 @@ def main():
     ap.add_argument("--w6-sim", type=float, default=None, help=M("help_w6_sim"))
     ap.add_argument("--w6-cluster", type=int, default=None, help=M("help_w6_cluster"))
     ap.add_argument("--config", default=None, metavar="PATH", help=M("help_config"))
+    ap.add_argument("--no-config", action="store_true", help=M("help_no_config"))
     ap.add_argument("--sarif", default=None, metavar="PATH", help=M("help_sarif"))
     ap.add_argument("--baseline", default=None, metavar="PATH", help=M("help_baseline"))
     ap.add_argument("--write-baseline", default=None, metavar="PATH", help=M("help_write_baseline"))
@@ -2102,10 +2110,12 @@ def main():
         print(M("err_notfound") % a.pptx, file=sys.stderr)
         sys.exit(2)
 
-    # 설정 파일(.archforge.json/.yml): CLI 플래그가 항상 이긴다(0.4.0)
+    # 설정 파일(.archforge.json/.yml): CLI 플래그가 항상 이긴다(0.4.0).
+    # 신뢰 경계(4차 리뷰): 덱 폴더의 설정이 게이트를 약화시킬 수 있으므로, 적용된 설정
+    # 경로를 출력 계약(JSON summary.config, 텍스트 각주)에 남기고 --no-config로 끌 수 있다.
     cfg = {}
-    cfg_path = _config.find_config(a.pptx, a.config)
-    if a.config and cfg_path is None:
+    cfg_path = None if a.no_config else _config.find_config(a.pptx, a.config)
+    if a.config and not a.no_config and cfg_path is None:
         print(M("err_config") % a.config, file=sys.stderr)
         sys.exit(2)
     if cfg_path:
@@ -2122,11 +2132,20 @@ def main():
             return cli_val
         return cfg.get(cfg_key, default)
 
-    hard_min = float(pick(a.hard_min, "hard_min", 5.0))
-    body_min = float(pick(a.body_min, "body_min", 9.0))
-    small_min = float(pick(a.small_min, "small_min", 7.5))
-    w6_sim = float(pick(a.w6_sim, "w6_sim", 0.90))
-    w6_cluster = int(pick(a.w6_cluster, "w6_cluster", 3))
+    try:
+        hard_min = float(pick(a.hard_min, "hard_min", 5.0))
+        body_min = float(pick(a.body_min, "body_min", 9.0))
+        small_min = float(pick(a.small_min, "small_min", 7.5))
+        w6_sim = float(pick(a.w6_sim, "w6_sim", 0.90))
+        w6_cluster = int(pick(a.w6_cluster, "w6_cluster", 3))
+    except (TypeError, ValueError) as e:
+        print(M("err_config") % ("threshold: %s" % e), file=sys.stderr)
+        sys.exit(2)
+    # 범위 검증: --hard-min 0 이 E3(판독 불가 차단)를 조용히 끄던 우회의 봉합(구 X1)
+    if hard_min <= 0 or body_min <= 0 or small_min <= 0 or not (0 < w6_sim <= 1) or w6_cluster < 1:
+        print(M("err_config") % ("threshold out of range (hard_min/body_min/small_min > 0, "
+                                 "0 < w6_sim <= 1, w6_cluster >= 1)"), file=sys.stderr)
+        sys.exit(2)
     profile = pick(a.profile, "profile", DEFAULT_PROFILE)
     if profile not in PROFILES:
         print(M("err_config") % ("profile=%r" % profile), file=sys.stderr)
@@ -2151,7 +2170,8 @@ def main():
     # baseline 기록 모드: 현재 위반(불완전성 신호 W18 제외)을 지문으로 저장하고 종료
     if a.write_baseline:
         n = _config.write_baseline(a.write_baseline,
-                                   [f for f in list(errors) + list(warns) if f.code != "W18"])
+                                   [f for f in list(errors) + list(warns) if f.code != "W18"],
+                                   profile=profile, lang=get_lang())
         print(M("baseline_written") % (n, a.write_baseline))
         sys.exit(0)
 
@@ -2194,7 +2214,8 @@ def main():
                "incomplete": has_w18,
                "profile": profile,
                "skipped_codes": sorted(excluded),
-               "baseline_suppressed": baseline_suppressed}
+               "baseline_suppressed": baseline_suppressed,
+               "config": cfg_path}   # 어떤 설정이 게이트를 조정했는지 항상 가시화(신뢰 경계)
 
     if a.sarif:
         import json
@@ -2208,7 +2229,10 @@ def main():
         print(json.dumps(doc, ensure_ascii=False, indent=2))
         sys.exit(1 if (errors or (a.strict and warns)) else 0)
 
-    for line in _reporters.render_text(a.pptx, errors, warns, ghost, profile, profile_excl, skip):
+    for line in _reporters.render_text(a.pptx, errors, warns, ghost, profile, profile_excl, skip,
+                                       config_path=cfg_path,
+                                       baseline_suppressed=baseline_suppressed,
+                                       baseline_path=baseline_path):
         print(line)
 
     if errors or (a.strict and warns):
