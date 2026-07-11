@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Love-Ash/archforge/blob/main/schemas/report-2.0.schema.json",
+  "title": "archforge single-file report, schema 2.0",
+  "type": "object",
+  "required": ["schema_version", "tool", "file", "findings", "capabilities",
+               "abstentions", "summary", "invocation", "rules"],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {"name": {"const": "archforge"}, "version": {"type": "string"}}
+    },
+    "target_renderer": {"type": "string"},
+    "file": {"type": "string"},
+    "lang": {"type": "string", "enum": ["ko", "en"]},
+    "invocation": {
+      "type": "object",
+      "required": ["profile", "policy", "thresholds"],
+      "properties": {
+        "profile": {"type": "string", "enum": ["core", "full", "editorial"]},
+        "policy": {
+          "type": "object",
+          "required": ["fail_on_warning", "fail_incomplete", "e2_no_exemptions"],
+          "properties": {
+            "fail_on_warning": {"type": "boolean"},
+            "fail_incomplete": {"type": "boolean"},
+            "e2_no_exemptions": {"type": "boolean"}
+          }
+        },
+        "config": {"type": ["string", "null"]},
+        "thresholds": {"type": "object"}
+      }
+    },
+    "rules": {
+      "type": "object",
+      "required": ["executed", "profile_excluded", "user_suppressed"],
+      "properties": {
+        "executed": {"type": "array", "items": {"$ref": "#/$defs/code"}},
+        "profile_excluded": {"type": "array", "items": {"$ref": "#/$defs/code"}},
+        "user_suppressed": {"type": "array", "items": {"$ref": "#/$defs/code"}}
+      }
+    },
+    "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+    "capabilities": {
+      "type": "object",
+      "required": ["typography", "geometry", "structure", "render_contrast"],
+      "additionalProperties": {"type": "string",
+                               "enum": ["complete", "partial", "not_requested"]}
+    },
+    "abstentions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["reason", "page", "count", "affected_rules"],
+        "properties": {
+          "reason": {"type": "string"},
+          "page": {"type": "integer", "minimum": 0},
+          "count": {"type": "integer", "minimum": 1},
+          "affected_rules": {"type": "array", "items": {"$ref": "#/$defs/code"}}
+        }
+      }
+    },
+    "ghost": {"type": "array"},
+    "summary": {"$ref": "#/$defs/summary"}
+  },
+  "$defs": {
+    "code": {"type": "string", "pattern": "^[EW][0-9]{1,2}$"},
+    "finding": {
+      "type": "object",
+      "required": ["page", "code", "message", "severity"],
+      "properties": {
+        "page": {"type": "integer", "minimum": 0},
+        "code": {"$ref": "#/$defs/code"},
+        "severity": {"type": "string", "enum": ["error", "warning"]},
+        "message": {"type": "string"},
+        "detail": {"type": "string"},
+        "data": {"type": "object"},
+        "location": {"type": "object"}
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["error_count", "warn_count", "pass", "incomplete", "policy",
+                   "profile", "skipped_codes"],
+      "properties": {
+        "error_count": {"type": "integer", "minimum": 0},
+        "warn_count": {"type": "integer", "minimum": 0},
+        "pass": {"type": "boolean"},
+        "incomplete": {"type": "boolean"},
+        "policy": {"type": "object"},
+        "profile": {"type": "string"},
+        "skipped_codes": {"type": "array", "items": {"$ref": "#/$defs/code"}},
+        "baseline_suppressed": {"type": "integer", "minimum": 0},
+        "config": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

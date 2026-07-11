@@ -72,18 +72,25 @@ class Finding:
     among {"shape_id", "shape_name", "paragraph", "run", "bbox"[x,y,w,h in], "part"}.
     """
 
-    __slots__ = ("page", "code", "msg_id", "args", "detail", "loc", "fp_key", "_msg_override")
+    __slots__ = ("page", "code", "msg_id", "args", "detail", "loc", "fp_key",
+                 "_msg_override", "_data")
 
     def __init__(self, page: int, code: str, msg_id: str, args: Tuple = (),
                  detail: str = "", loc: Optional[Dict] = None,
                  fp_key: Optional[str] = None,
-                 _msg_override: Optional[str] = None):
+                 _msg_override: Optional[str] = None,
+                 data: Optional[Dict] = None):
         self.page = page
         self.code = code
         self.msg_id = msg_id
         self.args = tuple(args)
         self.detail = detail
         self.loc = loc
+        # Typed payload emitted directly at the detection site (0.8, external review:
+        # structured data must come from the detector, not from re-parsing args). The
+        # positional _DATA_FIELDS derivation fills anything the site did not state;
+        # explicit values win on key collisions.
+        self._data = data
         # Locale-neutral key for baseline fingerprinting. For rules where detail mixes in a
         # translated string (W6, W10, W16), put only the data part here (fourth review
         # confirmed: this fixed a bug where a ko baseline was invalid under an en run).
@@ -117,16 +124,18 @@ class Finding:
         return "Finding(p%02d %s %s)" % (self.page, self.code, self.msg_id)
 
     def data(self) -> Dict:
-        """Structured numeric payload derived from args via _DATA_FIELDS (0.7). Numbers,
-        not a parsed sentence. Empty when the code carries no numeric args (E1/E2)."""
-        fields = _DATA_FIELDS.get(self.msg_id)
-        if not fields:
-            return {}
+        """Structured payload: positional fields derived from args (_DATA_FIELDS, 0.7)
+        overlaid with the typed data the detection site emitted directly (0.8). Numbers
+        and machine values, never a parsed sentence."""
         out = {}
-        for name, val in zip(fields, self.args):
-            if name is None:
-                continue
-            out[name] = val
+        fields = _DATA_FIELDS.get(self.msg_id)
+        if fields:
+            for name, val in zip(fields, self.args):
+                if name is None:
+                    continue
+                out[name] = val
+        if self._data:
+            out.update(self._data)
         return out
 
     def to_dict(self, schema: str = "1.0") -> Dict:

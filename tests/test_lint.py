@@ -2479,6 +2479,37 @@ def test_schema_2_invocation_and_rules(tmp_path):
     assert "W14" not in rules["executed"]
 
 
+def test_typed_finding_data(tmp_path):
+    """0.8: detection sites emit typed data directly. E1 carries script/effective_font/
+    font_source/fallback, E2 the offending code points, E3 nominal+autofit scale, E4
+    unit-explicit tracking, W16 the target kind (external review: E1/E2 had empty data,
+    E4's unit was ambiguous, W16 lacked kind)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "아리알 한글", font="Arial", size=12)                 # E1
+    tb(s, 1, 2, 8, 0.5, "구조적" + EM_DASH + "개선", size=14, ea="맑은 고딕")  # E2
+    tb(s, 1, 3, 5, 0.3, "tiny src", size=4, ea="맑은 고딕")                    # E3
+    tb(s, 1, 4, 5, 0.5, "자간 벌어진 한글", size=14, spc=300, ea="맑은 고딕")  # E4
+    tb(s, 12.8, 5, 3, 0.5, "off canvas text run", size=18, ea="맑은 고딕")     # W16 text
+    deck = save(p, tmp_path, "typed.pptx")
+    v2 = json.loads(run_cli([deck, "--profile", "full", "--schema", "2", "--json"]).stdout)
+    by = {}
+    for f in v2["findings"]:
+        by.setdefault(f["code"], []).append(f)
+    e1 = by["E1"][0]["data"]
+    assert e1["script"] == "hangul" and e1["effective_font"].lower() == "arial"
+    assert e1["font_source"] in ("run.latin", "run.ea", "theme.ea")
+    assert e1["fallback_font"] == "Malgun Gothic"
+    e2 = by["E2"][0]["data"]
+    assert e2["characters"] == ["U+2014"] and e2["function"] == "sentence_punctuation"
+    e3 = by["E3"][0]["data"]
+    assert e3["effective_pt"] == 4.0 and e3["nominal_pt"] == 4.0 and e3["autofit_scale"] == 1.0
+    e4 = by["E4"][0]["data"]
+    assert e4["tracking_raw_hundredths_pt"] == 300 and e4["tracking_pt"] == 3.0
+    w16 = by["W16"][0]["data"]
+    assert w16["kind"] == "text" and w16["overflow_in"] > 0
+
+
 def test_schema_2_abstentions(tmp_path):
     """A vertical-text frame abstains: schema 2 lists it in abstentions[] with the
     affected rules and marks geometry partial, alongside the W18 finding."""

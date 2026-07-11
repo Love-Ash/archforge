@@ -27,7 +27,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7", "hypothesis>=6"]
+test = ["pytest>=7", "hypothesis>=6", "jsonschema>=4"]
 yaml = ["PyYAML>=6"]   # .archforge.yml 설정용(JSON 설정은 의존성 없이 항상 지원)
 
 [project.urls]

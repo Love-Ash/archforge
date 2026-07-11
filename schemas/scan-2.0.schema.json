@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Love-Ash/archforge/blob/main/schemas/scan-2.0.schema.json",
+  "title": "archforge scan aggregate report, scan-2.0 (per-file objects are report-2.0)",
+  "type": "object",
+  "required": ["schema_version", "kind", "file_schema_version", "tool", "scan",
+               "files", "summary"],
+  "properties": {
+    "schema_version": {"const": "scan-2.0"},
+    "kind": {"const": "scan-report"},
+    "file_schema_version": {"const": "2.0"},
+    "tool": {"type": "object", "required": ["name", "version"]},
+    "lang": {"type": "string"},
+    "scan": {
+      "type": "object",
+      "required": ["inputs"],
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["pattern", "matches"],
+            "properties": {"pattern": {"type": "string"},
+                           "matches": {"type": "integer", "minimum": 0}}
+          }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["file", "status", "error"],
+            "properties": {"file": {"type": "string"},
+                           "status": {"const": "error"},
+                           "error": {"type": "string"}}
+          },
+          {
+            "allOf": [
+              {"$ref": "report-2.0.schema.json"},
+              {"type": "object", "required": ["status"],
+               "properties": {"status": {"enum": ["pass", "fail"]}}}
+            ]
+          }
+        ]
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["file_count", "failed_files", "error_files", "pass", "incomplete"],
+      "properties": {
+        "file_count": {"type": "integer", "minimum": 0},
+        "failed_files": {"type": "integer", "minimum": 0},
+        "error_files": {"type": "integer", "minimum": 0},
+        "error_count": {"type": "integer", "minimum": 0},
+        "warn_count": {"type": "integer", "minimum": 0},
+        "pass": {"type": "boolean"},
+        "incomplete": {"type": "boolean"}
+      }
+    }
+  }
+}

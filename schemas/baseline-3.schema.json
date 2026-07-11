@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Love-Ash/archforge/blob/main/schemas/baseline-3.schema.json",
+  "title": "archforge baseline file, schema 3",
+  "type": "object",
+  "required": ["schema_version", "findings"],
+  "properties": {
+    "schema_version": {"const": "3"},
+    "tool_version": {"type": "string"},
+    "profile": {"type": "string"},
+    "lang": {"type": "string"},
+    "threshold_hash": {"type": "string"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "fingerprint", "count"],
+        "properties": {
+          "code": {"type": "string", "pattern": "^[EW][0-9]{1,2}$"},
+          "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+          "count": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  }
+}

@@ -339,26 +339,37 @@ def e1_violation(text: str, fonts: Dict[str, str], thm_ea: Optional[str],
         theme_ea = (thm_ea or "").strip()
         cand = fonts.get("ea") or theme_ea or fonts.get("latin")
         if cand and is_latin_only_font(cand, script):
-            return ("e1_cjk_other", "font=%r text=%r" % (cand, text[:24]))
+            return ("e1_cjk_other", "font=%r text=%r" % (cand, text[:24]),
+                    {"script": script, "effective_font": cand,
+                     "font_source": ("run.ea" if fonts.get("ea") else
+                                     "theme.ea" if theme_ea else "run.latin")})
         return None
     run_ea = fonts.get("ea")
     if run_ea:
         if is_latin_only_font(run_ea):
-            return ("e1_run_ea", "font=%r text=%r" % (run_ea, text[:24]))
+            return ("e1_run_ea", "font=%r text=%r" % (run_ea, text[:24]),
+                    {"script": "hangul", "effective_font": run_ea,
+                     "font_source": "run.ea", "fallback_font": "Malgun Gothic"})
         return None
     theme_ea = (thm_ea or "").strip()
     if theme_ea:
         if is_latin_only_font(theme_ea):
-            return ("e1_theme_ea", "theme=%r text=%r" % (thm_ea, text[:24]))
+            return ("e1_theme_ea", "theme=%r text=%r" % (thm_ea, text[:24]),
+                    {"script": "hangul", "effective_font": theme_ea,
+                     "font_source": "theme.ea", "fallback_font": "Malgun Gothic"})
         return None   # a non-empty Hangul-capable theme ea gets rendered (run latin cannot
                        # beat it: measured)
     run_latin = fonts.get("latin")
     if run_latin:
         if is_latin_only_font(run_latin):
-            return ("e1_latin_empty_theme", "font=%r text=%r" % (run_latin, text[:24]))
+            return ("e1_latin_empty_theme", "font=%r text=%r" % (run_latin, text[:24]),
+                    {"script": "hangul", "effective_font": run_latin,
+                     "font_source": "run.latin", "fallback_font": "Malgun Gothic"})
         return None   # with an empty theme ea, a Hangul-capable latin font actually draws the
                        # Hangul (measured)
-    return ("e1_nofont", "text=%r" % text[:24])
+    return ("e1_nofont", "text=%r" % text[:24],
+            {"script": "hangul", "effective_font": None,
+             "font_source": "none", "fallback_font": "Malgun Gothic"})
 
 
 def _is_digit_ch(c: str) -> bool:
@@ -1670,7 +1681,8 @@ def overflow_check(slide, si, sw_in, sh_in, warns,
     for over, what, fpk, loc in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
         # fp_key: detail (what) is a locale-dependent string, so it's excluded from the
         # baseline fingerprint (fourth review)
-        warns.append(Finding(si, "W16", "w16", (over,), what, fp_key=fpk, loc=loc))
+        warns.append(Finding(si, "W16", "w16", (over,), what, fp_key=fpk, loc=loc,
+                             data={"kind": "text" if fpk.startswith("t|") else "picture"}))
 
 
 def _occluder_boxes(slide, sw_in, sh_in):
@@ -2282,6 +2294,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                             v = e1_violation(t, fonts, eff_thm_ea, script)
                             if v is not None:
                                 errors.append(Finding(si, "E1", v[0], (), v[1],
+                                                      data=v[2] if len(v) > 2 else None,
                                                       loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part, cell=cell_rc, xf=sp_xf, field=is_fld)))
 
                         # E2: long-dash class. Context is read from the whole paragraph
@@ -2292,8 +2305,12 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                             dash_violations(ptext, strict=strict,
                                             span=(run_offs[ii], run_offs[ii] + len(t)))
                         if bad:
+                            cps = ["U+%04X" % ord(c) for c in sorted(set(bad))]
                             errors.append(Finding(si, "E2", "e2", (),
-                                                  "cp=%s text=%r" % (",".join("U+%04X" % ord(c) for c in sorted(set(bad))), t[:24]),
+                                                  "cp=%s text=%r" % (",".join(cps), t[:24]),
+                                                  data={"characters": cps,
+                                                        "function": "sentence_punctuation",
+                                                        "strict": bool(strict)},
                                                   loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part, cell=cell_rc, xf=sp_xf, field=is_fld)))
 
                         # E3 / W1 / W5: effective font size (run -> paragraph -> placeholder
@@ -2336,6 +2353,9 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                             if eff < hard_min:
                                 note = "" if scale == 1.0 else M("e3_note") % (base_pt, scale)
                                 errors.append(Finding(si, "E3", "e3", (eff, hard_min, note), "text=%r" % t[:24],
+                                                      data={"nominal_pt": base_pt,
+                                                            "autofit_scale": scale,
+                                                            "size_source": size_src},
                                                       loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part, cell=cell_rc, xf=sp_xf, field=is_fld)))
                             elif eff < body_min and fw_in > 4.0 and len(ptext) >= 40:
                                 warns.append(Finding(si, "W1", "w1", (eff, body_min),
@@ -2367,7 +2387,12 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                                 and sum(1 for c in t if is_hangul(c) or is_hanja(c)) >= 2:
                             tr = run_track(run)
                             if tr is not None and tr > 50:
+                                # OOXML spc is hundredths of a point: state the unit
+                                # explicitly (0.8, external review: raw "tracking": 200
+                                # left the consumer guessing pt vs raw)
                                 errors.append(Finding(si, "E4", "e4", (tr,), "text=%r" % t[:24],
+                                                      data={"tracking_raw_hundredths_pt": tr,
+                                                            "tracking_pt": tr / 100.0},
                                                       loc=shape_loc(owner_sp, paragraph=pi, run=ri, part=slide_part, cell=cell_rc, xf=sp_xf, field=is_fld)))
                     except Exception as e:
                         skipped["run"] += 1
