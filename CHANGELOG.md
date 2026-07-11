@@ -1,12 +1,14 @@
 # Changelog
 
-## Unreleased (0.8.x consolidation; no new minor before an RC soak)
+## 0.8.1 (2026-07-11)
 
-An external product audit of 0.8.0 concluded the narration was running ahead of the
-evidence (tiny-sample "accuracy", unverifiable review scores, same-day version churn)
-and that consolidation, not features, is the next step. This batch implements that.
-The release cadence freezes at 0.8.x: these changes sit on main and ship only after a
-soak period.
+Consolidation plus the two presentation features. An external product audit of 0.8.0
+concluded the narration was running ahead of the evidence (tiny-sample "accuracy",
+unverifiable review scores, same-day version churn); this release implements that
+consolidation, and a distribution review added the visual report and the deterministic
+fixer. The cadence commitment stands: this is the 0.8.x line's patch train, the next
+minor waits for a real soak, and the soft-channel launch this release enables IS the
+start of that soak with outside users.
 
 - docs/ACCURACY.md renamed to "Regression corpus results" and rewritten honestly:
   exact one-sided 95% binomial lower bounds per gate (a 1/1 perfect score proves only

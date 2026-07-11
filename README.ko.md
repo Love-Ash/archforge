@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Love-Ash/archforge@v0.8.0
+      - uses: Love-Ash/archforge@v0.8.1
         with:
           files: |
             decks/
@@ -110,7 +110,7 @@ pre-commit:
 ```yaml
 repos:
   - repo: https://github.com/Love-Ash/archforge
-    rev: v0.8.0
+    rev: v0.8.1
     hooks:
       - id: archforge
         # args: [--profile, full]
