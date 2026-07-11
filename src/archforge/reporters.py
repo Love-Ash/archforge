@@ -32,8 +32,8 @@ def build_json_doc(path: str, errors: List, warns: List, ghost, summary: Dict,
     `rules` split (executed / profile_excluded / user_suppressed) so a consumer can tell
     why a rule produced nothing (0.7.1). Both shapes carry the same verdict."""
     if schema == "2.0":
-        findings = ([f.to_dict("2.0") for f in errors] +
-                    [f.to_dict("2.0") for f in warns])
+        findings = ([f.to_dict("2.0", severity_override="error") for f in errors] +
+                    [f.to_dict("2.0", severity_override="warning") for f in warns])
         return {
             "schema_version": "2.0",
             "tool": {"name": "archforge", "version": _tool_version()},
@@ -135,6 +135,8 @@ def build_junit_multi(items: List) -> str:
             errors_n += 1
             continue
         by_code: Dict[str, List] = {}
+        err_ids = {id(f) for f in errs}   # effective severity = list membership
+                                          # (severity overrides can demote E2, 0.8.x)
         for f in list(errs) + list(warns):
             by_code.setdefault(f.code, []).append(f)
         s_tests = s_fail = s_skip = 0
@@ -152,7 +154,7 @@ def build_junit_multi(items: List) -> str:
                 continue
             lines = "\n".join(_junit_sanitize("p%02d %s | %s" % (f.page, f.message, f.detail))
                               for f in hits)
-            is_fail = code.startswith("E") or warn_fail or \
+            is_fail = any(id(f) in err_ids for f in hits) or warn_fail or \
                 (code == "W18" and fail_incomplete)
             if is_fail:
                 fail = ET.SubElement(case, "failure",
@@ -200,10 +202,11 @@ def build_sarif_multi(items: List) -> Dict:
         })
     results = []
     for path, errors, warns in items:
+        err_ids = {id(f) for f in errors}   # effective severity = list membership
         for f in list(errors) + list(warns):
             res = {
                 "ruleId": f.code,
-                "level": "error" if severity(f.code) == "error" else "warning",
+                "level": "error" if id(f) in err_ids else "warning",
                 "message": {"text": "%s | %s" % (f.message, f.detail) if f.detail else f.message},
                 "locations": [{
                     "physicalLocation": {

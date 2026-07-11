@@ -138,18 +138,24 @@ class Finding:
             out.update(self._data)
         return out
 
-    def to_dict(self, schema: str = "1.0") -> Dict:
+    def to_dict(self, schema: str = "1.0", severity_override: Optional[str] = None) -> Dict:
         d = {"page": self.page, "code": self.code, "message": self.message,
              "detail": self.detail}
         if self.loc:
             d["location"] = self.loc
         if schema != "1.0":
-            # v2 adds severity (single findings[] array) and structured data
-            try:
-                from .rules import severity
-            except ImportError:
-                from rules import severity
-            d["severity"] = "error" if severity(self.code) == "error" else "warning"
+            # v2 adds severity (single findings[] array) and structured data. The
+            # effective severity is list membership, not the static registry level:
+            # a config severity override can demote E2 to warning (0.8.x), and the
+            # reporter must say what actually gated.
+            if severity_override:
+                d["severity"] = severity_override
+            else:
+                try:
+                    from .rules import severity
+                except ImportError:
+                    from rules import severity
+                d["severity"] = "error" if severity(self.code) == "error" else "warning"
             data = self.data()
             if data:
                 d["data"] = data

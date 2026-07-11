@@ -211,16 +211,18 @@ def _pct_attr(v, default):
 
 
 def frame_autofit(tf):
-    """The (fontScale, lnSpcReduction) ratio pair. (1.0, 0.0) if there is no normAutofit."""
-    try:
-        bodyPr = tf._txBody.find(NS + "bodyPr")
-        if bodyPr is not None:
-            na = bodyPr.find(NS + "normAutofit")
-            if na is not None:
-                return (_pct_attr(na.get("fontScale"), 1.0),
-                        _pct_attr(na.get("lnSpcReduction"), 0.0))
-    except Exception:
-        pass
+    """The (fontScale, lnSpcReduction) ratio pair. (1.0, 0.0) if there is no normAutofit.
+
+    Absence is handled explicitly; a malformed value now PROPAGATES instead of silently
+    reading as scale 1.0 (0.8.x exception audit: a garbled fontScale used to hide a real
+    autofit shrink from E3, a silent false negative). Every in-engine caller sits under
+    a page/run guard that converts the raise into a W18 abstention."""
+    bodyPr = tf._txBody.find(NS + "bodyPr")
+    if bodyPr is not None:
+        na = bodyPr.find(NS + "normAutofit")
+        if na is not None:
+            return (_pct_attr(na.get("fontScale"), 1.0),
+                    _pct_attr(na.get("lnSpcReduction"), 0.0))
     return 1.0, 0.0
 
 
@@ -258,6 +260,10 @@ def _group_xf(sp, xf):
         return (ax * sx, ax * (ox - cx * sx) + bx,
                 ay * sy, ay * (oy - cy * sy) + by)
     except Exception:
+        # Accepted-soft fallback (0.8.x exception audit): a malformed group transform
+        # falls back to the parent transform, so child coordinates are approximately
+        # placed instead of the whole page's geometry aborting into W18 over one odd
+        # group. The trade-off is documented in docs/EXCEPTION_AUDIT.md.
         return xf
 
 
@@ -1280,6 +1286,9 @@ def text_overlap_check(slide, si, warns, boxes: Optional[List[GlyphBox]] = None)
         if rel:
             loc["related"] = rel
         warns.append(Finding(si, "W15", "w15", (frac * 100,), "%r ~ %r" % (a.rep, b.rep),
+                             data={"confidence": "estimate",
+                                   "evidence_source": "xml_geometry",
+                                   "render_confirmed": False},
                              loc=loc or None))
 
 
@@ -1387,7 +1396,10 @@ def overflow_check(slide, si, sw_in, sh_in, warns,
         # fp_key: detail (what) is a locale-dependent string, so it's excluded from the
         # baseline fingerprint (fourth review)
         warns.append(Finding(si, "W16", "w16", (over,), what, fp_key=fpk, loc=loc,
-                             data={"kind": "text" if fpk.startswith("t|") else "picture"}))
+                             data={"kind": "text" if fpk.startswith("t|") else "picture",
+                                   "confidence": "estimate",
+                                   "evidence_source": "xml_geometry",
+                                   "render_confirmed": False}))
 
 
 def _occluder_boxes(slide, sw_in, sh_in):
@@ -1467,7 +1479,10 @@ def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
         rel = shape_loc(pic[4], bbox=[pic[0], pic[1], pic[2] - pic[0], pic[3] - pic[1]])
         if rel:
             loc["related"] = rel
-        warns.append(Finding(si, "W17", "w17", (frac * 100,), "%r" % gb.rep, loc=loc or None))
+        warns.append(Finding(si, "W17", "w17", (frac * 100,), "%r" % gb.rep, loc=loc or None,
+                             data={"confidence": "estimate",
+                                   "evidence_source": "xml_geometry",
+                                   "render_confirmed": False}))
 
 
 def action_title_check(titles, warns):
@@ -1701,6 +1716,9 @@ def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors
         if ratio < 2.5:
             warns.append(Finding(si, "W7", "w7", (ratio,),
                                  "text=%r" % sp.text_frame.text[:20],
+                                 data={"confidence": "measured",
+                                       "evidence_source": "render",
+                                       "render_confirmed": True},
                                  loc=shape_loc(sp, bbox=[gx, gy, gw_, gh_])))
             return "ok"
     return "ok"   # found and checked the render PNG for this page (regardless of whether
@@ -2753,6 +2771,19 @@ def _lint_one(path, a):
     if skip:
         warns = [w for w in warns if w[1] not in skip]
 
+    # Per-rule severity overrides from the config (policy-layer rules only; validated in
+    # config.load_config). "off" drops the findings, "warning"/"error" move them between
+    # the two lists. Applied before counting so summary/policy see the effective levels;
+    # recorded in the summary so a demoted E2 is never invisible (0.8.x, external audit).
+    sev_over = cfg.get("severity") or {}
+    if sev_over:
+        moved_to_warn = [f for f in errors if sev_over.get(f.code) == "warning"]
+        moved_to_err = [f for f in warns if sev_over.get(f.code) == "error"]
+        errors = [f for f in errors
+                  if sev_over.get(f.code) not in ("warning", "off")] + moved_to_err
+        warns = [f for f in warns
+                 if sev_over.get(f.code) not in ("error", "off")] + moved_to_warn
+
     schema = "2.0" if str(getattr(a, "schema", "1.0")) in ("2", "2.0") else "1.0"
     caps, abstentions = _capabilities_and_abstentions(warns, bool(a.render))
     # schema 2.0 invocation + rule accounting: skipped_codes mixed profile exclusion and
@@ -2783,6 +2814,8 @@ def _lint_one(path, a):
                "baseline_suppressed": baseline_suppressed,
                "config": cfg_path}   # always makes visible which config adjusted the gate
                                      # (trust boundary)
+    if sev_over:
+        summary["severity_overrides"] = dict(sorted(sev_over.items()))
 
     return {"errors": errors, "warns": warns, "ghost": ghost, "summary": summary,
             "fail": fail,

@@ -28,7 +28,7 @@ from typing import Dict, List, Optional, Tuple
 
 CONFIG_NAMES = (".archforge.json", ".archforge.yml", ".archforge.yaml")
 _ALLOWED_KEYS = {"profile", "lang", "skip", "hard_min", "body_min", "small_min",
-                 "w6_sim", "w6_cluster", "baseline"}
+                 "w6_sim", "w6_cluster", "baseline", "severity"}
 
 
 def find_config(deck_path: str, explicit: Optional[str] = None) -> Optional[str]:
@@ -119,6 +119,33 @@ def load_config(path: str) -> Tuple[Dict, List[str]]:
             raise RuntimeError("config 'baseline' must be a path string")
         out["baseline"] = os.path.normpath(
             os.path.join(os.path.dirname(os.path.abspath(path)), out["baseline"]))
+    if "severity" in out:
+        # Per-rule severity override (0.8.x, external audit: dash punctuation is not the
+        # same class of defect as font fallback, and a house style that legitimately
+        # uses dashes needs a knob short of --skip). Deliberately restricted to the
+        # policy layer (the rules core excludes: E2, W6, W9-W14): the mechanical gates
+        # (E1/E3/E4, size/geometry) and W18 are the product's trust anchor and cannot
+        # be demoted by a deck-side file.
+        try:
+            from .rules import PROFILES
+        except ImportError:
+            from rules import PROFILES
+        overridable = frozenset(PROFILES["core"])
+        sev = out["severity"]
+        if not isinstance(sev, dict):
+            raise RuntimeError("config 'severity' must be an object of code -> level")
+        norm = {}
+        for code, level in sev.items():
+            c = str(code).strip().upper()
+            if c not in overridable:
+                raise RuntimeError(
+                    "config 'severity' may only override the policy-layer rules (%s); "
+                    "%r is a mechanical gate" % (",".join(sorted(overridable)), c))
+            if level not in ("error", "warning", "off"):
+                raise RuntimeError(
+                    "config 'severity' values must be error|warning|off, got %r" % (level,))
+            norm[c] = level
+        out["severity"] = norm
     return out, warnings
 
 

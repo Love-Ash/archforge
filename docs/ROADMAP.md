@@ -1,9 +1,12 @@
 # Roadmap to 1.0
 
 Archforge is a strong beta. 1.0 is not "more rules"; it is the point where the internal
-model is unified, the accuracy claims are third-party reproducible, and there is
+model is unified, the accuracy claims are independently verifiable, and there is
 evidence of outside use. This page is the honest sequence and the bar for each step.
-It is shaped by an external review that scored 0.6.0 at 8.0/10.
+It is shaped by iterative adversarial reviews whose findings were reproduced as
+fixtures and are documented in the CHANGELOG and ADRs (review-driven hardening; no
+independent third party has audited the project yet, and this page does not claim one
+has).
 
 Development is currently maintainer-led and fast. Roadmap issues (#5, #6) are tracking,
 not up-for-grabs work; contributor-scoped tasks are labeled `good first issue`. If you
@@ -15,7 +18,7 @@ want to take one, comment first and it will be held for you.
 |---|---|---|
 | 0.6.x | Contract hardening (done) | Action/scan/policy/geometry contracts consistent; NaN, trust boundary, incompleteness all closed |
 | 0.7.0 | Contracts done (#6); architecture started (#5) | Shipped: structured `Finding.data`, JSON schema 2.0 (`findings[]`, `capabilities`, `abstentions`), baseline v3 identity, and the `scripts.py` parsing-layer extraction. Verdict-preserving (16-deck A/B and corpus identical). Continuing under #5: the physical split of the interleaved OOXML/resolution/detector body into one document model + one resolver, done as its own verified effort rather than a big-bang. |
-| 0.8.0 | Verification and structure | Shipped: typed `Finding.data` at detection sites, formal JSON Schemas (schemas/) validated in tests, per-gate precision/recall published as docs/ACCURACY.md with a CI drift gate, corpus grown to 19 manifests, baseline artifact identity + `baseline inspect`, and two more #5 kernel extractions (fonts.py, dashes.py). Still open for 0.8.x+: third-party generator exports (Google Slides / Canva / LibreOffice), multi-master corporate templates, JP-CN native review, HTML reporter (#4), renderer matrix expansion |
+| 0.8.0 | Verification and structure | Shipped: typed `Finding.data` at detection sites, formal JSON Schemas (schemas/) validated in tests, the regression-corpus record published as docs/ACCURACY.md (per-gate counts with exact binomial lower bounds) behind a CI drift gate, corpus grown to 19 manifests, baseline artifact identity + `baseline inspect`, and two more #5 kernel extractions (fonts.py, dashes.py). Still open for 0.8.x+: third-party generator exports (Google Slides / Canva / LibreOffice), multi-master corporate templates, JP-CN native review, HTML reporter (#4), renderer matrix expansion |
 | 0.9.0 | Release candidate | JSON + baseline schemas frozen; deprecation policy; public API surface pinned; 2-4 week RC soak; zero open P0 |
 | 1.0.0 | Stable contracts | 3+ external contributors; outside false-positive fixtures; used in 2+ generators' pipelines; docs/code auto-consistency checks; RC soak clean |
 
@@ -44,7 +47,7 @@ The review's per-area "10-point" conditions, and where each stands now:
 ## The honest gap
 
 1.0 is blocked less by code than by (a) unifying how the codebase reads a pptx (0.7),
-(b) third-party-reproducible accuracy (0.8 corpus growth + published precision/recall),
+(b) independently verifiable accuracy (corpus growth beyond author-written fixtures),
 and (c) real outside adoption. Adding a W19 does not move any of these.
 
 ## Rule candidates (not 1.0 blockers)

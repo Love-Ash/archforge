@@ -2586,6 +2586,77 @@ def test_reason_registry_covers_all_keys():
     assert not missing, "unregistered skip reasons: %s" % missing
 
 
+def test_malformed_autofit_marks_incomplete(tmp_path):
+    """0.8.x exception audit: a garbled normAutofit fontScale must not silently read as
+    scale 1.0 (hiding a real shrink from E3); the span aborts into W18 instead."""
+    p = new_prs()
+    s = add_slide(p)
+    box = tb(s, 1, 1, 5, 1, "autofit garbage frame", size=20, ea="맑은 고딕")
+    bodyPr = box.text_frame._txBody.find(qn("a:bodyPr"))
+    na = bodyPr.makeelement(qn("a:normAutofit"), {"fontScale": "garbage%"})
+    bodyPr.append(na)
+    deck = save(p, tmp_path, "af.pptx")
+    doc = json.loads(run_cli([deck, "--json"]).stdout)
+    assert doc["summary"]["incomplete"] is True, doc["summary"]
+    assert any(w["code"] == "W18" for w in doc["warnings"])
+
+
+def test_geometry_findings_carry_confidence(tmp_path):
+    """0.8.x: geometry findings state their evidence class (xml_geometry estimate,
+    not render-confirmed) so a consumer can rank them below measured findings."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 12.8, 3.0, 3.0, 0.5, "off canvas words here", size=18, ea="맑은 고딕")
+    deck = save(p, tmp_path, "conf.pptx")
+    v2 = json.loads(run_cli([deck, "--schema", "2", "--json"]).stdout)
+    w16 = [f for f in v2["findings"] if f["code"] == "W16"][0]
+    assert w16["data"]["confidence"] == "estimate"
+    assert w16["data"]["evidence_source"] == "xml_geometry"
+    assert w16["data"]["render_confirmed"] is False
+
+
+def test_severity_override_policy_rules_only(tmp_path):
+    """0.8.x (external audit): per-rule severity override, restricted to the policy
+    layer. E2 demoted to warning passes the default gate but stays visible (JSON
+    severity, summary.severity_overrides); a mechanical gate (E1) cannot be demoted;
+    W14 can be turned off."""
+    d = os.path.join(str(tmp_path), "deck")
+    os.makedirs(d)
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 8, 0.6, "구조적" + EM_DASH + "개선", size=14, ea="맑은 고딕")  # E2 only
+    deck = save(p, d, "styled.pptx")
+    with open(os.path.join(d, ".archforge.json"), "w", encoding="utf-8") as f:
+        f.write('{"profile": "full", "severity": {"E2": "warning"}}')
+    r = run_cli([deck, "--json"])
+    assert r.returncode == 0, (r.returncode, r.stdout)   # demoted: no longer blocks
+    doc = json.loads(r.stdout)
+    assert doc["summary"]["error_count"] == 0 and doc["summary"]["warn_count"] >= 1
+    assert doc["summary"]["severity_overrides"] == {"E2": "warning"}
+    assert any(w["code"] == "E2" for w in doc["warnings"])
+    # schema 2: the finding's severity says warning (list membership, not the registry)
+    v2 = json.loads(run_cli([deck, "--schema", "2", "--json"]).stdout)
+    e2 = [f for f in v2["findings"] if f["code"] == "E2"][0]
+    assert e2["severity"] == "warning"
+    # JUnit agrees: E2 is not a <failure> when demoted
+    import xml.etree.ElementTree as ET
+    jx = os.path.join(str(tmp_path), "j.xml")
+    run_cli([deck, "--junit", jx])
+    e2case = [c for c in ET.parse(jx).getroot().iter("testcase")
+              if c.get("name").startswith("E2")][0]
+    assert e2case.find("failure") is None
+    # mechanical gates cannot be demoted
+    with open(os.path.join(d, ".archforge.json"), "w", encoding="utf-8") as f:
+        f.write('{"severity": {"E1": "warning"}}')
+    r = run_cli([deck])
+    assert r.returncode == 2 and "mechanical" in (r.stderr or "")
+    # off drops the finding entirely
+    with open(os.path.join(d, ".archforge.json"), "w", encoding="utf-8") as f:
+        f.write('{"profile": "full", "severity": {"E2": "off"}}')
+    doc = json.loads(run_cli([deck, "--json"]).stdout)
+    assert not any(x["code"] == "E2" for x in doc["errors"] + doc["warnings"])
+
+
 def test_baseline_artifact_identity_and_inspect(tmp_path):
     """0.8: a baseline records the deck it was written from; applying it to a
     differently-named deck warns, and `baseline inspect` shows what is suppressed."""

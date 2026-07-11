@@ -1,9 +1,38 @@
 # Changelog
 
+## Unreleased (0.8.x consolidation; no new minor before an RC soak)
+
+An external product audit of 0.8.0 concluded the narration was running ahead of the
+evidence (tiny-sample "accuracy", unverifiable review scores, same-day version churn)
+and that consolidation, not features, is the next step. This batch implements that.
+The release cadence freezes at 0.8.x: these changes sit on main and ship only after a
+soak period.
+
+- docs/ACCURACY.md renamed to "Regression corpus results" and rewritten honestly:
+  exact one-sided 95% binomial lower bounds per gate (a 1/1 perfect score proves only
+  >=5%), the fixture-author-equals-rule-author caveat stated plainly, "publicly
+  reproducible" replacing "third-party reproducible", corpus-wide FP per 10 slides.
+- Numeric review scores removed from ROADMAP/CHANGELOG framing: reframed as
+  review-driven hardening with findings reproduced as fixtures, explicitly not an
+  independent third-party audit.
+- scripts/check_version_consistency.py + a CI gate: pyproject, __init__, CHANGELOG
+  heading, README Action tags, and pre-commit revs must agree exactly (the audit
+  caught README still citing v0.7.1 under a 0.8.0 package).
+- Per-rule severity overrides in config, restricted to the policy layer (E2, W6,
+  W9-W14): {"severity": {"E2": "warning", "W14": "off"}}. Mechanical gates and W18
+  cannot be demoted; overrides are recorded in summary.severity_overrides, and JSON
+  schema 2, JUnit, and SARIF all report the effective severity (list membership), not
+  the registry default.
+- Geometry findings (W15-W17) carry confidence/evidence data ("estimate",
+  "xml_geometry", render_confirmed: false); W7 marks itself "measured"/"render".
+- Broad-exception audit published as docs/EXCEPTION_AUDIT.md with per-class rules.
+  One silent false negative fixed: a garbled normAutofit fontScale used to read as
+  scale 1.0 and hide a real shrink from E3; it now aborts the span into W18.
+
 ## 0.8.0 (2026-07-11)
 
-Verification and structure: the release makes the accuracy claims third-party
-checkable and continues the #5 decomposition. Verdict-preserving throughout (16-deck
+Verification and structure: the release makes the verification record publicly
+reproducible and continues the #5 decomposition. Verdict-preserving throughout (16-deck
 A/B and corpus identical).
 
 ### Typed Finding.data
@@ -48,8 +77,10 @@ lint.py is down from ~3350 to ~3050 lines with two more pure seams established.
 
 ## 0.7.1 (2026-07-11)
 
-A contract-integrity release driven by an external review of 0.7.0 (82/100: right
-direction, but the new contracts were not yet fully consistent). No new rules; the point
+A contract-integrity release: an adversarial review pass over 0.7.0 found the new
+contracts not yet fully consistent, and every reproducible finding below was verified
+against the code before fixing (review-driven hardening; the reviews are internal
+adversarial passes, not an independent third-party audit). No new rules; the point
 is that every contract holds across all reporters and modes. Verdict-preserving: the
 16-deck A/B and the public corpus stay identical.
 
@@ -161,8 +192,8 @@ Reporters, reproducibility, and resource bounds. Additive; no contract changes.
 ## 0.6.1 (2026-07-11)
 
 A contract-consistency release driven by an external review of 0.6.0 (overall verdict:
-the integration layer is now sound; the remaining risks are policy/messaging mismatches
-and the monolith). Every reproducible finding was verified against the code before
+the integration layer is now sound; the remaining risks were policy/messaging
+mismatches and the monolith). Every reproducible finding was verified against the code before
 fixing.
 
 ### Policy and contract fixes

@@ -33,6 +33,8 @@ jobs:
         run: |
           python scripts/make_accuracy_table.py
           git diff --exit-code docs/ACCURACY.md
+      - name: Version references are consistent
+        run: python scripts/check_version_consistency.py
 
   package:
     # 배포 회귀 게이트: wheel에 스킬팩이 실제로 동봉되고, 설치본에서 skill 서브커맨드와

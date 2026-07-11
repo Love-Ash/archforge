@@ -13,7 +13,7 @@ before a human ever sees a render.
 ![license](https://img.shields.io/badge/license-MIT-green)
 [![ci](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml)
 
-[Quickstart](#30-seconds) · [What it catches](#what-it-catches) · [CI](#ci) · [Calibration record](docs/CALIBRATION.md) · [Accuracy](docs/ACCURACY.md) · [Discussions](https://github.com/Love-Ash/archforge/discussions) · [한국어 README](README.ko.md)
+[Quickstart](#30-seconds) · [What it catches](#what-it-catches) · [CI](#ci) · [Calibration record](docs/CALIBRATION.md) · [Corpus results](docs/ACCURACY.md) · [Discussions](https://github.com/Love-Ash/archforge/discussions) · [한국어 README](README.ko.md)
 
 **AI agents / LLMs:** read [llms.txt](llms.txt), or `pip install archforge` then `archforge skill --install` to teach your agent the build-lint-fix loop.
 
@@ -96,7 +96,8 @@ Project defaults live in `.archforge.json` (or `.archforge.yml` with
 override the config file, and the applied config path is always visible in the output.
 
 ```json
-{ "profile": "full", "skip": ["W14"], "baseline": ".archforge-baseline.json" }
+{ "profile": "full", "skip": ["W14"], "baseline": ".archforge-baseline.json",
+  "severity": { "E2": "warning" } }   // severity overrides: policy-layer rules only
 ```
 
 JSON output (single file; `scan --json` wraps one of these per file plus an aggregate
@@ -146,7 +147,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Love-Ash/archforge@v0.7.1
+      - uses: Love-Ash/archforge@v0.8.0
         with:
           files: |
             decks/
@@ -163,7 +164,7 @@ pre-commit:
 ```yaml
 repos:
   - repo: https://github.com/Love-Ash/archforge
-    rev: v0.7.1
+    rev: v0.8.0
     hooks:
       - id: archforge
         # args: [--profile, full]
