@@ -2311,6 +2311,35 @@ def test_timeout_flag(tmp_path):
     assert json.loads(r.stdout)["summary"]["pass"] is True
     r = run_cli([deck, "--timeout", "0"])
     assert r.returncode == 2
+    # 0.7.1: inf passes ">0" and would disable the timeout; nan fails comparisons. Both
+    # must be controlled usage errors, not a silently-unbounded run.
+    for bad in ("inf", "nan", "-inf"):
+        r = run_cli([deck, "--timeout", bad])
+        assert r.returncode == 2, (bad, r.returncode)
+
+
+def test_output_path_missing_dir_is_controlled(tmp_path):
+    """0.7.1: a --sarif/--junit/--write-baseline target under a nonexistent directory is
+    a controlled exit 2, not a traceback after linting."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    deck = save(p, tmp_path, "o.pptx")
+    ghost = os.path.join(str(tmp_path), "nope", "out")
+    for flag, ext in (("--sarif", ".sarif"), ("--junit", ".xml"),
+                      ("--write-baseline", ".json")):
+        r = run_cli([deck, flag, ghost + ext])
+        assert r.returncode == 2, (flag, r.returncode, r.stderr)
+        assert "does not exist" in (r.stderr or "") or "없습니다" in (r.stderr or "")
+    # scan mode too
+    d = os.path.join(str(tmp_path), "decks")
+    os.makedirs(d)
+    p2 = new_prs()
+    s2 = add_slide(p2)
+    tb(s2, 1, 1, 4, 1, "x", size=14)
+    save(p2, d, "a.pptx")
+    r = run_cli(["scan", d, "--sarif", ghost + ".sarif"])
+    assert r.returncode == 2, (r.returncode, r.stderr)
 
 
 def test_junit_reporter(tmp_path):

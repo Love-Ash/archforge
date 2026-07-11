@@ -2030,8 +2030,19 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
         # (fourth review)
         raise ValueError("unknown profile %r (choices: %s)" % (profile, ", ".join(sorted(PROFILES))))
     _zip_preflight(path)
-    prs = Presentation(path)
-    sw, sh = prs.slide_width, prs.slide_height
+    # A package that passes the zip preflight can still be un-parseable (a truncated or
+    # attribute-corrupted part). python-pptx raises lxml/opc errors that are not
+    # ValueError; the library contract is a controlled ValueError the CLI maps to a clean
+    # exit, never a raw traceback (0.7.1, external review: the fuzzer must see no other
+    # exception class escape).
+    try:
+        prs = Presentation(path)
+        sw, sh = prs.slide_width, prs.slide_height
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError("could not open %r as a valid .pptx: %s: %s"
+                         % (path, type(e).__name__, e))
     errors, warns = [], []
     sigs = []
     toks = {}
@@ -2551,11 +2562,13 @@ def _timeout_reexec(argv):
         return None
     try:
         secs_f = float(secs)
-        if not (secs_f > 0):
+        # inf passes `> 0` and would silently disable the timeout; nan fails every
+        # comparison. Require a finite positive value (0.7.1, external review).
+        if not (math.isfinite(secs_f) and secs_f > 0):
             raise ValueError
     except ValueError:
-        print(M("err_config") % ("--timeout must be a positive number of seconds, got %r"
-                                 % secs), file=sys.stderr)
+        print(M("err_config") % ("--timeout must be a finite positive number of seconds, "
+                                 "got %r" % secs), file=sys.stderr)
         return 2
     import subprocess
     env = dict(os.environ)
@@ -2625,6 +2638,13 @@ def main():
     ap.add_argument("--write-baseline", default=None, metavar="PATH", help=M("help_write_baseline"))
     _add_common_flags(ap)
     a = ap.parse_args(argv)
+
+    # Validate output-path parents up front so a bad --sarif/--junit/--write-baseline
+    # target is a controlled exit 2, not a traceback after linting (0.7.1).
+    err = _validate_cli_globals(a)
+    if err:
+        print(err, file=sys.stderr)
+        sys.exit(2)
 
     try:
         res = _lint_one(a.pptx, a)
@@ -2746,6 +2766,18 @@ def _capabilities_and_abstentions(warns, render_requested):
     return caps, abstentions
 
 
+def _check_out_dir(path):
+    """Error string if an output path's parent directory is missing, so a bad
+    --sarif/--junit/--write-baseline target is a controlled exit 2 rather than a
+    traceback mid-run (0.7.1, external review)."""
+    if not path:
+        return None
+    d = os.path.dirname(os.path.abspath(path))
+    if not os.path.isdir(d):
+        return M("err_out_path") % path
+    return None
+
+
 def _validate_cli_globals(a):
     """Validation of CLI-supplied values that are identical for every file in a scan.
     Returns an error string (caller exits 2) or None. Deck-config-supplied values stay
@@ -2772,6 +2804,11 @@ def _validate_cli_globals(a):
             return M("err_skip_unknown") % ",".join(unknown)
         if "W18" in codes_:
             return M("err_skip_w18")
+    for outp in (getattr(a, "sarif", None), getattr(a, "junit", None),
+                 getattr(a, "write_baseline", None)):
+        err = _check_out_dir(outp)
+        if err:
+            return err
     return None
 
 

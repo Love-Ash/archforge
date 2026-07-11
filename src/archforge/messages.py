@@ -311,6 +311,10 @@ MESSAGES = {
         "ko": "JUnit XML 결과를 이 경로에 기록(Jenkins·GitLab 등 테스트 리포트 UI 연동)",
         "en": "write JUnit XML results to this path (Jenkins/GitLab test-report UIs)",
     },
+    "err_out_path": {
+        "ko": "archforge: 출력 경로의 상위 폴더가 없습니다: %s",
+        "en": "archforge: the parent directory of the output path does not exist: %s",
+    },
     "help_timeout": {
         "ko": "전체 실행에 초 단위 벽시계 제한. 자식 프로세스로 격리해 시간 초과 시 exit 124(악성·병적 덱이 CI를 멈추는 것 방지)",
         "en": "wall-clock limit in seconds for the whole run, isolated in a child process; exit 124 on timeout (keeps a hostile/pathological deck from hanging CI)",

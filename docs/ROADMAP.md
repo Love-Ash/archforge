@@ -46,3 +46,13 @@ The review's per-area "10-point" conditions, and where each stands now:
 1.0 is blocked less by code than by (a) unifying how the codebase reads a pptx (0.7),
 (b) third-party-reproducible accuracy (0.8 corpus growth + published precision/recall),
 and (c) real outside adoption. Adding a W19 does not move any of these.
+
+## Rule candidates (not 1.0 blockers)
+
+Tracked here so they are not lost. Per the note above, none of these gate a release.
+
+- W14-EN: extend the W14 nominal-title heuristic (currently Korean-only) to English.
+  Field evidence: English-deck users report the same failure shape, fragment titles
+  that name a topic without making a claim ("Eight rungs, gates not dates";
+  r/ClaudeAI, 2026-07). English needs its own claim/verb detection, so it ships only
+  with its own measured precision bar, like the Korean heuristic did.

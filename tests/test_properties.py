@@ -132,10 +132,13 @@ def test_fuzz_attribute_mutation_never_tracebacks(tmp_path):
         try:
             jl.lint(mut, profile="full")
         except Exception as e:
-            # A controlled rejection is acceptable; what we forbid is an unhandled
-            # crash class that would escape the CLI's err_open mapping
-            if isinstance(e, (MemoryError, RecursionError, SystemExit)):
-                failures.append((i, target, type(e).__name__))
+            # The contract is that lint() either returns a report or raises a controlled
+            # input error the CLI maps to a clean exit. Only ValueError (the type the CLI
+            # err_open handler catches) is acceptable here; any other exception class is a
+            # real crash the fuzzer must surface (0.7.1, external review: the old test
+            # allowed KeyError/IndexError/TypeError, so it did not guarantee much).
+            if not isinstance(e, ValueError):
+                failures.append((i, target, type(e).__name__, str(e)[:80]))
     assert not failures, failures
 
 
