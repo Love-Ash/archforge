@@ -1725,6 +1725,40 @@ def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors
                   # W7 actually fired)
 
 
+def collect_wireframe(path):
+    """Per-slide shape geometry for the annotated HTML report (0.8.x): slide size in
+    inches and, per slide, every shape's absolute bbox with a coarse kind
+    (text/picture/other) and a short text sample. Read-only and best-effort: a shape
+    whose geometry cannot be resolved is simply omitted (the report draws what it can;
+    findings carry their own bboxes independently)."""
+    prs = Presentation(path)
+    sw, sh = prs.slide_width / EMU_PER_IN, prs.slide_height / EMU_PER_IN
+    slides = []
+    for slide in prs.slides:
+        shapes = []
+        for sp, _z, xf in iter_shapes_geo(slide.shapes):
+            geo = _geo_rect(sp, xf)
+            if geo is None:
+                continue
+            x, y, w, h, _rot = geo
+            if _is_pic(sp):
+                kind = "picture"
+            elif getattr(sp, "has_text_frame", False) and sp.text_frame.text.strip():
+                kind = "text"
+            else:
+                kind = "other"
+            sample = ""
+            try:
+                if kind == "text":
+                    sample = sp.text_frame.text.strip().splitlines()[0][:40]
+            except Exception:
+                pass
+            shapes.append({"x": x, "y": y, "w": w, "h": h, "kind": kind,
+                           "text": sample})
+        slides.append(shapes)
+    return {"sw": sw, "sh": sh, "slides": slides}
+
+
 def _zip_preflight(path):
     """A cheap decompression-bomb screen before python-pptx parses the package (0.6.0,
     external review: the linter takes untrusted input, and the only budgets so far were
@@ -2367,12 +2401,12 @@ def main():
         if os.path.exists("skill"):
             print(M("skill_conflict"), file=sys.stderr)
         sys.exit(skill_main(rest[1:]))
-    if rest and rest[0] in ("scan", "demo", "rules", "explain", "baseline"):
+    if rest and rest[0] in ("scan", "demo", "rules", "explain", "baseline", "fix"):
         if os.path.exists(rest[0]) and os.path.isfile(rest[0]):
             print(M("subcmd_conflict") % (rest[0], rest[0]), file=sys.stderr)
         dispatch = {"scan": scan_main, "demo": demo_main,
                     "rules": rules_main, "explain": explain_main,
-                    "baseline": baseline_main}
+                    "baseline": baseline_main, "fix": fix_main}
         sys.exit(dispatch[rest[0]](rest[1:]))
     if rest and rest[0] == "lint":
         # Explicit alias for single-file mode (`archforge lint deck.pptx`), so scripts
@@ -2416,6 +2450,9 @@ def main():
               res["summary"]["policy"], None)])
         with open(a.junit, "w", encoding="utf-8", newline="\n") as f:
             f.write(xml_text)
+
+    if a.html:
+        _write_html_report(a.html, [(a.pptx, res, None, a.render)])
 
     if a.json:
         import json
@@ -2527,6 +2564,52 @@ def _check_out_dir(path):
     return None
 
 
+def _html_thumbs(render_dir, n_slides, max_w=640):
+    """Optional render thumbnails for the HTML report: p01.png-style files downscaled
+    to JPEG bytes. Empty dict when no render dir; failures skip that page (the
+    wireframe is the fallback)."""
+    out = {}
+    if not render_dir or not os.path.isdir(render_dir):
+        return out
+    try:
+        from PIL import Image
+        import io as _io
+    except ImportError:
+        return out
+    for si in range(1, n_slides + 1):
+        p = os.path.join(render_dir, "p%02d.png" % si)
+        if not os.path.exists(p):
+            continue
+        try:
+            im = Image.open(p).convert("RGB")
+            if im.width > max_w:
+                im = im.resize((max_w, int(im.height * max_w / im.width)))
+            buf = _io.BytesIO()
+            im.save(buf, "JPEG", quality=72)
+            out[si] = buf.getvalue()
+        except Exception:
+            continue
+    return out
+
+
+def _write_html_report(out_path, entries):
+    """entries = [(path, res_or_None, err_or_None, render_dir)] -> one HTML file."""
+    items = []
+    for p, res, e, rdir in entries:
+        if res is None:
+            items.append((p, [], [], {}, {"sw": 13.333, "sh": 7.5, "slides": []},
+                          {}, e))
+            continue
+        try:
+            wf = collect_wireframe(p)
+        except Exception:
+            wf = {"sw": 13.333, "sh": 7.5, "slides": []}
+        thumbs = _html_thumbs(rdir, len(wf["slides"]))
+        items.append((p, res["errors"], res["warns"], res["summary"], wf, thumbs, None))
+    with open(out_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(_reporters.build_html_multi(items))
+
+
 def _validate_cli_globals(a):
     """Validation of CLI-supplied values that are identical for every file in a scan.
     Returns an error string (caller exits 2) or None. Deck-config-supplied values stay
@@ -2554,7 +2637,7 @@ def _validate_cli_globals(a):
         if "W18" in codes_:
             return M("err_skip_w18")
     for outp in (getattr(a, "sarif", None), getattr(a, "junit", None),
-                 getattr(a, "write_baseline", None)):
+                 getattr(a, "html", None), getattr(a, "write_baseline", None)):
         err = _check_out_dir(outp)
         if err:
             return err
@@ -2604,6 +2687,7 @@ def _add_common_flags(ap):
     ap.add_argument("--no-config", action="store_true", help=M("help_no_config"))
     ap.add_argument("--sarif", default=None, metavar="PATH", help=M("help_sarif"))
     ap.add_argument("--junit", default=None, metavar="PATH", help=M("help_junit"))
+    ap.add_argument("--html", default=None, metavar="PATH", help=M("help_html"))
     ap.add_argument("--timeout", default=None, metavar="SECONDS", help=M("help_timeout"))
     ap.add_argument("--baseline", default=None, metavar="PATH", help=M("help_baseline"))
 
@@ -2949,6 +3033,9 @@ def scan_main(argv=None):
         with open(a.junit, "w", encoding="utf-8", newline="\n") as f:
             f.write(_reporters.build_junit_multi(junit_items))
 
+    if a.html:
+        _write_html_report(a.html, [(p, r, e, None) for p, r, e in results])
+
     if a.json:
         import json
         # The scan report is its own document type. Its root schema_version tracks the
@@ -3022,6 +3109,45 @@ def rules_main(argv=None):
         return 0
     for r in rows:
         print("%-4s %-8s %-11s %s" % (r["code"], r["severity"], r["category"], r["title"]))
+    return 0
+
+
+def fix_main(argv=None):
+    """`archforge fix deck.pptx -o fixed.pptx`: deterministic auto-fixes for the three
+    mechanically safe rules (E1 a:ea font, E2 dash punctuation, E4 tracking). Everything
+    that needs layout judgment stays find-only; re-lint after fixing."""
+    ap = argparse.ArgumentParser(prog="archforge fix", description=M("fix_desc"))
+    ap.add_argument("pptx")
+    ap.add_argument("-o", "--output", required=True, metavar="PATH",
+                    help=M("help_fix_output"))
+    ap.add_argument("--rules", default="E1,E2,E4", metavar="CODES",
+                    help=M("help_fix_rules"))
+    ap.add_argument("--ea-font", default=None, metavar="FONT", help=M("help_fix_ea"))
+    ap.add_argument("--lang", default=None, choices=("ko", "en"), help=M("help_lang"))
+    a = ap.parse_args(argv)
+    from . import fixes as _fixes
+    rules = {c.strip().upper() for c in a.rules.split(",") if c.strip()}
+    bad = sorted(rules - set(_fixes.FIXABLE))
+    if bad:
+        print(M("err_fix_rules") % (",".join(bad), ",".join(_fixes.FIXABLE)),
+              file=sys.stderr)
+        return 2
+    if not os.path.exists(a.pptx):
+        print(M("err_notfound") % a.pptx, file=sys.stderr)
+        return 2
+    err = _check_out_dir(a.output)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
+    try:
+        changes = _fixes.apply_fixes(a.pptx, a.output, rules=rules,
+                                     ea_font=a.ea_font or _fixes.DEFAULT_EA)
+    except Exception as e:
+        print(M("err_open") % (a.pptx, e), file=sys.stderr)
+        return 2
+    for ch in changes:
+        print("  FIX p%02d [%s] %s" % (ch["page"], ch["code"], ch["detail"]))
+    print(M("fix_summary") % (len(changes), a.output))
     return 0
 
 

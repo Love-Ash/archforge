@@ -63,68 +63,21 @@ archforge scan decks/ --profile full   # 파일·디렉터리·글롭 여러 개
 ## 사용
 
 ```bash
-archforge deck.pptx --fail-incomplete   # 검사 불완전(W18)이면 실패: CI 권장
-archforge deck.pptx --fail-on-warning   # WARN도 실패
-archforge deck.pptx --e2-no-exemptions  # E2 숫자 범위·음수 예외 해제(full 프로파일)
-archforge deck.pptx --strict            # 위 세 플래그의 합집합
-archforge deck.pptx --ghost         # 페이지별 타이틀 나열(수평 논리 검토)
-archforge deck.pptx --render pages/ # p01.png 형식 렌더로 이미지 위 대비(W7)까지
-archforge deck.pptx --skip W14,W6   # 특정 WARN 억제(JSON에 기록됨)
-archforge deck.pptx --lang ko       # 리포트 언어(기본: ARCHFORGE_LANG, 그다음 OS 로케일)
-archforge deck.pptx --no-config     # 설정 파일 무시(신뢰 불가 덱을 린트할 때)
-archforge deck.pptx --sarif out.sarif        # SARIF 2.1.0(GitHub code scanning)
-archforge deck.pptx --junit out.xml          # JUnit XML(Jenkins·GitLab 테스트 리포트)
-archforge deck.pptx --json --schema 2        # 스키마 2.0: findings[]+severity+data+capabilities
-archforge deck.pptx --timeout 60             # 자식 프로세스로 격리한 벽시계 제한(초)
-archforge deck.pptx --write-baseline bl.json # 기존 덱을 있는 그대로 수용(베타)
-archforge deck.pptx --baseline bl.json       # 이후 신규 위반만 보고
-archforge deck.pptx --hard-min 5 --body-min 9 --small-min 7.5   # 크기 게이트 임계
-archforge deck.pptx --w6-sim 0.95 --w6-cluster 5                # W6 반복 임계
-archforge scan out/**/*.pptx --json          # 집계 JSON, 한 파일이라도 실패면 exit 1
-                                             # (아무것도 매치 못한 입력은 exit 2)
-archforge rules                              # 규칙 한 줄 요약 목록
-archforge explain W15                        # 규칙 하나의 의미와 수정법
-archforge baseline inspect bl.json           # baseline이 무엇을 억제하는지 점검
-archforge demo --dir tour                    # 데모 덱 쌍을 원하는 위치에 재생성
+archforge deck.pptx --profile full --fail-incomplete --json   # 에이전트·CI 표준 명령
+archforge scan decks/ --profile full         # 파일·디렉터리·글롭 여러 개를 한 번에
+archforge fix deck.pptx -o fixed.pptx        # E1/E2/E4 자동 수정 (0.8.1 신규)
+archforge deck.pptx --html report.html       # 주석 시각 리포트 (0.8.1 신규)
+archforge deck.pptx --sarif o.sarif          # SARIF / --junit o.xml (CI 연동)
+archforge rules                              # 규칙 목록, 개별 설명은 `archforge explain W15`
 ```
 
-프로젝트 기본값은 덱 폴더나 작업 폴더의 `.archforge.json`(PyYAML 설치 시
-`.archforge.yml`)에 둡니다. CLI 플래그가 설정 파일을 이기고, 적용된 설정 경로는
-출력에 항상 표시됩니다.
+전체 플래그(임계값, baseline, severity 오버라이드, 스키마 2.0, timeout)와 설정 파일,
+JSON 계약: **[docs/USAGE.md](docs/USAGE.md)** (영문). 레시피:
+[Claude Code](docs/recipes/claude-code.md) ·
+[Codex/에이전트](docs/recipes/codex.md) ·
+[PptxGenJS](docs/recipes/pptxgenjs.md) ·
+[GitHub Actions](docs/recipes/github-actions.md).
 
-```json
-{ "profile": "full", "skip": ["W14"], "baseline": ".archforge-baseline.json",
-  "severity": { "E2": "warning" } }   // severity 오버라이드: 정책 계열 규칙만 가능
-```
-
-`--json` 출력(단일 파일. `scan --json`은 파일별 문서에 집계 summary를 얹습니다):
-
-```json
-{
-  "schema_version": "1.0",
-  "tool": { "name": "archforge", "version": "x.y.z" },
-  "target_renderer": "powerpoint-windows",
-  "file": "deck.pptx",
-  "lang": "ko",
-  "errors":   [{ "page": 3, "code": "E1", "message": "...", "detail": "...",
-                 "location": { "shape_id": 7, "shape_name": "TextBox 6",
-                               "bbox": [1.0, 2.4, 5.0, 1.0], "paragraph": 0, "run": 1,
-                               "part": "/ppt/slides/slide3.xml" } }],
-  "warnings": [{ "page": 5, "code": "W15", "message": "...", "detail": "...",
-                 "location": { "shape_id": 4, "bbox": [1.0, 2.4, 3.1, 0.4],
-                               "related": { "shape_id": 9, "bbox": [1.2, 2.5, 3.3, 0.4] } } }],
-  "ghost":    [{ "page": 1, "title": "..." }],
-  "summary":  { "error_count": 1, "warn_count": 2, "pass": false, "incomplete": false,
-                "profile": "full", "skipped_codes": [], "baseline_suppressed": 0,
-                "config": null }
-}
-```
-
-`location`은 에이전트 자동 수정용 타깃입니다: 도형 id·이름, 절대 bbox(인치, 그룹
-변환 반영), 문단·run 인덱스, 표 셀 `cell`=[행,열], 자동 필드(슬라이드 번호·날짜)의
-`field: true`, 그리고 쌍 판정(W15/W17)의 상대 프레임 `related`. 코드(E1, W15)는 언어
-무관 안정 식별자이고, 메시지 언어는 덱이 아니라 사용자를 따릅니다(`--lang` >
-`ARCHFORGE_LANG` > OS 로케일).
 
 ## CI
 

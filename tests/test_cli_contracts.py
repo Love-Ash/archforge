@@ -626,3 +626,66 @@ def test_reason_registry_covers_all_keys():
     used |= set(re.findall(r'skipped\.get\(\"([a-z0-9_]+)\"', src))
     missing = sorted(k for k in used if k not in jl.KNOWN_REASON_KEYS)
     assert not missing, "unregistered skip reasons: %s" % missing
+
+
+def test_html_report(tmp_path):
+    """0.8.x (#4): the annotated visual report is one self-contained static HTML file:
+    an SVG wireframe per slide, finding bboxes overlaid with their codes, error entry
+    for an unreadable file in scan mode, and no external requests."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 6.9, 5, 0.3, "tiny", size=4, ea="맑은 고딕")            # E3
+    tb(s, 12.8, 3.0, 3.0, 0.5, "off canvas", size=18, ea="맑은 고딕")  # W16
+    s2 = add_slide(p)
+    tb(s2, 1, 1, 4, 1, "clean page", size=14, ea="맑은 고딕")
+    deck = save(p, tmp_path, "h.pptx")
+    out = os.path.join(str(tmp_path), "r.html")
+    run_cli([deck, "--profile", "full", "--html", out])
+    with open(out, encoding="utf-8") as f:
+        html = f.read()
+    assert html.count("<svg") == 2                      # one wireframe per slide
+    assert ">E3</text>" in html and ">W16</text>" in html
+    assert "clean" in html                              # the clean slide says so
+    assert "http://" not in html and "https://" not in html   # self-contained
+    # scan mode: an unreadable file becomes an error entry, not a crash
+    d = os.path.join(str(tmp_path), "batch")
+    os.makedirs(d)
+    save(p, d, "ok.pptx")
+    with open(os.path.join(d, "corrupt.pptx"), "w") as f:
+        f.write("nope")
+    out2 = os.path.join(str(tmp_path), "r2.html")
+    run_cli(["scan", d, "--html", out2])
+    with open(out2, encoding="utf-8") as f:
+        html2 = f.read()
+    assert "could not check" in html2 and html2.count("<svg") == 2
+
+
+def test_fix_subcommand(tmp_path):
+    """0.8.x: deterministic auto-fix for E1/E2/E4 only. The fixed copy re-lints clean of
+    those codes, judgment rules (E3) are untouched, exempt range dashes survive, and a
+    non-fixable rule is a usage error."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.6, "아리알 한글 제목", font="Arial", size=20)              # E1
+    tb(s, 1, 2, 8, 0.6, "구조적" + EM_DASH + "개선 흐름", size=14, ea="맑은 고딕")  # E2
+    tb(s, 1, 3, 8, 0.6, "FY2020" + EN_DASH + "2024 실적", size=14, ea="맑은 고딕")  # exempt range
+    tb(s, 1, 4, 5, 0.6, "자간 벌어진 한글", size=14, spc=300, ea="맑은 고딕")   # E4
+    tb(s, 1, 6.9, 5, 0.3, "tiny src", size=4, ea="맑은 고딕")                    # E3 (untouched)
+    deck = save(p, tmp_path, "fixme.pptx")
+    out = os.path.join(str(tmp_path), "fixed.pptx")
+    r = run_cli(["fix", deck, "-o", out])
+    assert r.returncode == 0, r.stderr
+    assert os.path.exists(out)
+    doc = json.loads(run_cli([out, "--profile", "full", "--json"]).stdout)
+    left = sorted(f["code"] for f in doc["errors"])
+    assert "E1" not in left and "E2" not in left and "E4" not in left, left
+    assert "E3" in left                                  # judgment rule untouched
+    # the exempt range dash survived the E2 fix
+    from pptx import Presentation
+    texts = " ".join(sh.text_frame.text for sh in Presentation(out).slides[0].shapes
+                     if sh.has_text_frame)
+    assert "FY2020" + EN_DASH + "2024" in texts
+    assert "구조적, 개선" in texts                        # prose dash became a comma
+    # non-fixable rule -> controlled usage error
+    r = run_cli(["fix", deck, "-o", out, "--rules", "W15"])
+    assert r.returncode == 2

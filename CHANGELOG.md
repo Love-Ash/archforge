@@ -28,6 +28,19 @@ soak period.
 - Broad-exception audit published as docs/EXCEPTION_AUDIT.md with per-class rules.
   One silent false negative fixed: a garbled normAutofit fontScale used to read as
   scale 1.0 and hide a real shrink from E3; it now aborts the span into W18.
+- Annotated visual report: `--html PATH` renders one self-contained static HTML file
+  with an SVG wireframe per slide (drawn from the shape geometry), finding bboxes
+  overlaid and labeled by effective severity, related-pair boxes dashed, and optional
+  embedded render thumbnails when `--render` pages exist. Works in scan mode too
+  (unreadable files become error entries). Closes #4.
+- `archforge fix deck.pptx -o fixed.pptx`: deterministic auto-fixes for the three
+  mechanically safe rules only: E1 sets a Hangul-capable `a:ea`, E2 replaces a dash
+  used as sentence punctuation with a comma (exempt range dashes are never touched),
+  E4 removes positive tracking on Hangul runs. Everything needing layout judgment
+  stays find-only; the fixer mirrors each detector's firing condition exactly.
+- README compressed for first-visit clarity (external distribution review): the full
+  flag reference, config file, and JSON contract moved to docs/USAGE.md; integration
+  recipes added for Claude Code, Codex/agents, PptxGenJS, and GitHub Actions.
 
 ## 0.8.0 (2026-07-11)
 

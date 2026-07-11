@@ -40,6 +40,8 @@ archforge deck.pptx --sarif out.sarif # SARIF 2.1.0 for GitHub code scanning
 archforge deck.pptx --junit out.xml   # JUnit XML for Jenkins/GitLab test reports
 archforge deck.pptx --write-baseline bl.json / --baseline bl.json   # adopt existing decks (beta)
 archforge baseline inspect bl.json    # what a baseline suppresses, under which conditions
+archforge fix deck.pptx -o fixed.pptx # deterministic auto-fix for E1/E2/E4 only; re-lint after
+archforge deck.pptx --html report.html # annotated visual report (wireframe + finding boxes)
 archforge deck.pptx --no-config       # ignore config files (untrusted decks)
 archforge deck.pptx --w6-sim 0.95 --w6-cluster 5   # loosen W6 for template-driven houses
 archforge deck.pptx --hard-min 5 --body-min 9 --small-min 7.5   # size gate thresholds (pt)

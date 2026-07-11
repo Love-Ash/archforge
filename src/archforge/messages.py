@@ -335,6 +335,34 @@ MESSAGES = {
         "ko": "규칙 한 줄 요약 목록(코드·심각도·카테고리·프로파일)",
         "en": "one-line summary of every rule (code, severity, category, profiles)",
     },
+    "help_html": {
+        "ko": "주석 시각 리포트를 이 경로에 기록(슬라이드 와이어프레임+판정 박스, 단일 정적 HTML)",
+        "en": "write the annotated visual report to this path (slide wireframes + finding boxes, one static HTML file)",
+    },
+    "fix_desc": {
+        "ko": "기계적으로 안전한 세 규칙(E1 폰트·E2 대시·E4 자간)만 결정적으로 자동 수정. 수정 후 재린트 권장",
+        "en": "deterministic auto-fixes for the three mechanically safe rules (E1 font, E2 dash, E4 tracking); re-lint afterwards",
+    },
+    "help_fix_output": {
+        "ko": "수정본을 저장할 경로(원본은 건드리지 않음)",
+        "en": "where to write the fixed copy (the original is never touched)",
+    },
+    "help_fix_rules": {
+        "ko": "적용할 규칙(기본 E1,E2,E4. 그 외 규칙은 레이아웃 판단이 필요해 자동수정 제외)",
+        "en": "which rules to apply (default E1,E2,E4; everything else needs layout judgment and stays find-only)",
+    },
+    "help_fix_ea": {
+        "ko": "E1 수정에 쓸 한글 폰트(기본: 맑은 고딕)",
+        "en": "the Hangul-capable font for E1 fixes (default: Malgun Gothic)",
+    },
+    "err_fix_rules": {
+        "ko": "archforge: 자동수정 불가 규칙: %s (가능: %s)",
+        "en": "archforge: not auto-fixable: %s (fixable: %s)",
+    },
+    "fix_summary": {
+        "ko": "%d건 수정 → %s (재린트로 확인하세요)",
+        "en": "%d fix(es) applied -> %s (re-lint to verify)",
+    },
     "baseline_desc": {
         "ko": "baseline 파일 점검: 무엇을 억제하는지, 어떤 기록 조건인지",
         "en": "inspect a baseline file: what it suppresses, under which recorded conditions",

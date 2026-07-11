@@ -178,6 +178,140 @@ def build_junit_multi(items: List) -> str:
     return '<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(root, encoding="unicode")
 
 
+def _esc(s):
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;"))
+
+
+_HTML_CSS = """
+body{font-family:ui-sans-serif,system-ui,'Segoe UI',sans-serif;margin:0;
+     background:#fafafa;color:#1a1d21}
+header{padding:20px 28px;border-bottom:1px solid #d9dee4;background:#fff}
+h1{font-size:17px;margin:0 0 6px;font-weight:600}
+.meta{font-size:12.5px;color:#5b6570}
+.chip{display:inline-block;padding:1px 9px;border-radius:10px;font-size:12px;
+      font-weight:600;margin-left:8px;border:1px solid}
+.pass{color:#1d7a4f;border-color:#1d7a4f}.fail{color:#b3261e;border-color:#b3261e}
+main{padding:20px 28px;max-width:1200px}
+.slide{display:flex;gap:18px;margin:0 0 22px;padding:16px;background:#fff;
+       border:1px solid #d9dee4;border-radius:6px;align-items:flex-start}
+.canvas{flex:0 0 auto}
+svg{border:1px solid #c9cfd6;background:#fff;display:block}
+.flist{flex:1;min-width:0;font-size:13px}
+.flist h3{font-size:13px;margin:0 0 8px;color:#5b6570;font-weight:600}
+.f{margin:0 0 7px;padding-left:9px;border-left:3px solid}
+.f.err{border-color:#b3261e}.f.warn{border-color:#b8860b}
+.f code{font-weight:700;font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.f .d{color:#5b6570;font-size:12px}
+footer{padding:14px 28px;font-size:12px;color:#5b6570;border-top:1px solid #d9dee4}
+.thumb{max-width:420px;display:block;border:1px solid #c9cfd6;margin-bottom:6px}
+"""
+
+
+def build_html_multi(items: List) -> str:
+    """Annotated visual report as ONE self-contained static HTML file (issue #4, taken
+    one step past the original static-list scope). Per slide: a wireframe SVG drawn
+    from the shape geometry with finding bboxes overlaid and colored by effective
+    severity; when the caller supplies render thumbnails they are embedded (base64)
+    above the wireframe. No external requests of any kind.
+
+    items = [(path, errors, warns, summary, wireframe, thumbs, usage_error)] where
+    wireframe = lint.collect_wireframe(path) and thumbs = {page: jpeg_bytes} or {}."""
+    import base64
+    parts = []
+    total_err = total_warn = 0
+    for path, errors, warns, summary, wf, thumbs, usage_error in items:
+        if usage_error is not None:
+            parts.append('<main><div class="slide"><div class="flist">'
+                         '<h3>%s</h3><p class="f err">could not check: %s</p>'
+                         '</div></div></main>' % (_esc(path), _esc(usage_error)))
+            continue
+        total_err += len(errors)
+        total_warn += len(warns)
+        err_ids = {id(f) for f in errors}
+        by_page: Dict[int, List] = {}
+        for f in list(errors) + list(warns):
+            by_page.setdefault(f.page, []).append(f)
+        sw, sh = wf["sw"], wf["sh"]
+        scale = 420.0 / sw
+        body = ['<main>']
+        ok = summary.get("pass")
+        body.append('<header style="padding:0 0 14px;border:0;background:none">'
+                    '<h1>%s <span class="chip %s">%s</span></h1>'
+                    '<div class="meta">ERROR %d &middot; WARN %d &middot; profile %s'
+                    '%s</div></header>'
+                    % (_esc(path), "pass" if ok else "fail",
+                       "PASS" if ok else "FAIL",
+                       summary.get("error_count", 0), summary.get("warn_count", 0),
+                       _esc(summary.get("profile", "")),
+                       " &middot; INCOMPLETE" if summary.get("incomplete") else ""))
+        for si, shapes in enumerate(wf["slides"], 1):
+            findings = by_page.get(si, [])
+            svg = ['<svg width="420" height="%d" viewBox="0 0 %f %f">'
+                   % (int(sh * scale), sw, sh)]
+            for s in shapes:
+                color = {"picture": "#8fa6bd", "text": "#b9c2cc"}.get(s["kind"], "#d5dae0")
+                svg.append('<rect x="%f" y="%f" width="%f" height="%f" fill="none" '
+                           'stroke="%s" stroke-width="0.03"/>'
+                           % (s["x"], s["y"], s["w"], s["h"], color))
+            for f in findings:
+                bbox = (f.loc or {}).get("bbox")
+                if not bbox:
+                    continue
+                is_err = id(f) in err_ids
+                c = "#b3261e" if is_err else "#b8860b"
+                svg.append('<rect x="%f" y="%f" width="%f" height="%f" fill="%s" '
+                           'fill-opacity="0.12" stroke="%s" stroke-width="0.045"/>'
+                           % (bbox[0], bbox[1], bbox[2], bbox[3], c, c))
+                svg.append('<text x="%f" y="%f" font-size="0.28" fill="%s" '
+                           'font-family="monospace" font-weight="bold">%s</text>'
+                           % (bbox[0] + 0.06, max(bbox[1] - 0.08, 0.25), c, f.code))
+                rel = (f.loc or {}).get("related", {})
+                rbox = rel.get("bbox") if isinstance(rel, dict) else None
+                if rbox:
+                    svg.append('<rect x="%f" y="%f" width="%f" height="%f" fill="none" '
+                               'stroke="%s" stroke-width="0.03" '
+                               'stroke-dasharray="0.09,0.06"/>'
+                               % (rbox[0], rbox[1], rbox[2], rbox[3], c))
+            svg.append('</svg>')
+            flist = ['<div class="flist"><h3>slide %d</h3>' % si]
+            for f in findings:
+                is_err = id(f) in err_ids
+                flist.append('<p class="f %s"><code>%s</code> %s'
+                             '<br><span class="d">%s</span></p>'
+                             % ("err" if is_err else "warn", _esc(f.code),
+                                _esc(f.message), _esc(f.detail)))
+            if not findings:
+                flist.append('<p class="f" style="border-color:#1d7a4f">clean</p>')
+            flist.append('</div>')
+            thumb = ""
+            if thumbs.get(si):
+                thumb = ('<img class="thumb" alt="slide %d render" '
+                         'src="data:image/jpeg;base64,%s">'
+                         % (si, base64.b64encode(thumbs[si]).decode("ascii")))
+            body.append('<div class="slide"><div class="canvas">%s%s</div>%s</div>'
+                        % (thumb, "".join(svg), "".join(flist)))
+        deck_level = by_page.get(0, [])
+        if deck_level:
+            flist = ['<div class="slide"><div class="flist"><h3>deck-level</h3>']
+            for f in deck_level:
+                is_err = id(f) in err_ids
+                flist.append('<p class="f %s"><code>%s</code> %s'
+                             '<br><span class="d">%s</span></p>'
+                             % ("err" if is_err else "warn", _esc(f.code),
+                                _esc(f.message), _esc(f.detail)))
+            flist.append('</div></div>')
+            body.append("".join(flist))
+        body.append('</main>')
+        parts.append("".join(body))
+    return ("<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+            "<title>archforge report</title><style>%s</style></head><body>"
+            "%s<footer>archforge %s &middot; wireframes are drawn from the file's "
+            "geometry; boxes are the linter's own finding locations. Verify WARNs on a "
+            "real render.</footer></body></html>"
+            % (_HTML_CSS, "".join(parts), _tool_version()))
+
+
 def build_sarif(path: str, errors: List, warns: List) -> Dict:
     """Minimal valid SARIF 2.1.0 document (a shape GitHub code scanning accepts)."""
     return build_sarif_multi([(path, errors, warns)])
