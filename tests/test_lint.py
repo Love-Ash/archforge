@@ -2112,6 +2112,34 @@ def test_sarif_rule_metadata_static(tmp_path):
     assert all("partialFingerprints" in res for res in run0["results"])
 
 
+def test_sarif_v3_fingerprint_and_related(tmp_path):
+    """0.7.1: the SARIF cross-run identity matches the baseline v3 structural fingerprint,
+    and pair findings (W15/W17) use the SARIF-standard relatedLocations."""
+    import archforge.lint as _jl
+    # E3 finding: fingerprint parity with baseline v3
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "tiny", size=3)          # E3
+    # a W15 overlap pair for relatedLocations
+    tb(s, 2, 2, 5, 1, "overlap sentence one here", size=24)
+    tb(s, 2.1, 2.05, 5, 1, "overlap sentence two here", size=24)
+    deck = save(p, tmp_path, "s.sarif.pptx")
+    out = os.path.join(str(tmp_path), "o.sarif")
+    run_cli([deck, "--profile", "full", "--sarif", out])
+    with open(out, encoding="utf-8") as f:
+        doc = json.load(f)
+    results = doc["runs"][0]["results"]
+    for res in results:
+        assert "archforgeFinding/v3" in res["partialFingerprints"]
+    w15 = [r for r in results if r["ruleId"] == "W15"]
+    assert w15 and "relatedLocations" in w15[0], "W15 must carry relatedLocations"
+    # parity: recompute the E3 finding's structural_fp and match the SARIF v3 print
+    errors, warns = _jl.lint(deck, profile="full")
+    e3 = [f for f in errors if f.code == "E3"][0]
+    e3res = [r for r in results if r["ruleId"] == "E3"][0]
+    assert e3res["partialFingerprints"]["archforgeFinding/v3"] == e3.structural_fp()
+
+
 # ---------------------------------------------------------------- 0.6.1: contract batch
 def test_scan_empty_pattern_fails(tmp_path):
     """One input matching nothing must not hide behind another that matched: exit 2
@@ -2391,6 +2419,26 @@ def test_schema_2_shape(tmp_path):
     assert e3["data"]["effective_pt"] == 4.0 and e3["data"]["hard_min_pt"] == 5.0
     assert set(v2["capabilities"]) == {"typography", "geometry", "structure",
                                        "render_contrast"}
+
+
+def test_schema_2_invocation_and_rules(tmp_path):
+    """0.7.1: schema 2.0 records the invocation (profile/policy/config/thresholds) and a
+    rules split (executed / profile_excluded / user_suppressed), so a consumer can tell a
+    rule that ran-and-passed from one the profile never ran (external review section 5)."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    deck = save(p, tmp_path, "inv.pptx")
+    v2 = json.loads(run_cli([deck, "--profile", "core", "--skip", "W14",
+                             "--schema", "2", "--json"]).stdout)
+    inv = v2["invocation"]
+    assert inv["profile"] == "core"
+    assert inv["policy"]["fail_incomplete"] is False
+    assert inv["thresholds"]["hard_min"] == 5.0
+    rules = v2["rules"]
+    assert "E1" in rules["executed"] and "W14" in rules["user_suppressed"]
+    assert "E2" in rules["profile_excluded"]        # core excludes the AI-tell rules
+    assert "W14" not in rules["executed"]
 
 
 def test_schema_2_abstentions(tmp_path):

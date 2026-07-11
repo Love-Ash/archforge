@@ -2654,7 +2654,9 @@ def main():
                                         res["ghost"], res["summary"],
                                         schema=res["schema"],
                                         capabilities=res["capabilities"],
-                                        abstentions=res["abstentions"])
+                                        abstentions=res["abstentions"],
+                                        invocation=res["invocation"],
+                                        rules_split=res["rules_split"])
         print(json.dumps(doc, ensure_ascii=False, indent=2))
         sys.exit(1 if res["fail"] else 0)
 
@@ -2976,6 +2978,19 @@ def _lint_one(path, a):
 
     schema = "2.0" if str(getattr(a, "schema", "1.0")) in ("2", "2.0") else "1.0"
     caps, abstentions = _capabilities_and_abstentions(warns, bool(a.render))
+    # schema 2.0 invocation + rule accounting: skipped_codes mixed profile exclusion and
+    # --skip, which mean different things to a consumer (0.7.1, external review section 5).
+    invocation = {"profile": profile,
+                  "policy": {"fail_on_warning": bool(fail_on_warning),
+                             "fail_incomplete": bool(fail_incomplete),
+                             "e2_no_exemptions": bool(e2_no_exemptions)},
+                  "config": cfg_path,
+                  "thresholds": {"hard_min": hard_min, "body_min": body_min,
+                                 "small_min": small_min, "w6_sim": w6_sim,
+                                 "w6_cluster": w6_cluster}}
+    rules_split = {"executed": sorted(ALL_CODES - excluded),
+                   "profile_excluded": sorted(profile_excl),
+                   "user_suppressed": sorted(skip)}
     fail = bool(errors or (fail_on_warning and warns) or (fail_incomplete and has_w18))
     summary = {"error_count": len(errors), "warn_count": len(warns),
                "pass": not fail,
@@ -2997,7 +3012,8 @@ def _lint_one(path, a):
             "profile": profile, "profile_excl": profile_excl, "skip": skip,
             "cfg_path": cfg_path, "baseline_suppressed": baseline_suppressed,
             "baseline_path": baseline_path,
-            "schema": schema, "capabilities": caps, "abstentions": abstentions}
+            "schema": schema, "capabilities": caps, "abstentions": abstentions,
+            "invocation": invocation, "rules_split": rules_split}
 
 
 def _expand_scan_paths(patterns):
@@ -3139,7 +3155,9 @@ def scan_main(argv=None):
                 doc = _reporters.build_json_doc(p, r["errors"], r["warns"], r["ghost"],
                                                 r["summary"], schema=r["schema"],
                                                 capabilities=r["capabilities"],
-                                                abstentions=r["abstentions"])
+                                                abstentions=r["abstentions"],
+                                                invocation=r["invocation"],
+                                                rules_split=r["rules_split"])
                 doc["status"] = "fail" if r["fail"] else "pass"
                 docs.append(doc)
         agg = {"schema_version": root_schema,

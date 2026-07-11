@@ -22,11 +22,15 @@ def _tool_version() -> str:
 
 def build_json_doc(path: str, errors: List, warns: List, ghost, summary: Dict,
                    schema: str = "1.0", capabilities: Optional[Dict] = None,
-                   abstentions: Optional[List] = None) -> Dict:
+                   abstentions: Optional[List] = None,
+                   invocation: Optional[Dict] = None,
+                   rules_split: Optional[Dict] = None) -> Dict:
     """schema "1.0" (default, stable through 1.x): split errors[]/warnings[], no per-item
     severity. schema "2.0" (0.7, opt-in via --schema 2): a single findings[] array with
-    severity and structured `data` on each item, plus `capabilities` and structured
-    `abstentions[]` in place of reading the W18 blob. Both shapes carry the same verdict."""
+    severity and structured `data` on each item, plus `capabilities`, structured
+    `abstentions[]`, an `invocation` block (profile/policy/config/thresholds), and a
+    `rules` split (executed / profile_excluded / user_suppressed) so a consumer can tell
+    why a rule produced nothing (0.7.1). Both shapes carry the same verdict."""
     if schema == "2.0":
         findings = ([f.to_dict("2.0") for f in errors] +
                     [f.to_dict("2.0") for f in warns])
@@ -36,6 +40,8 @@ def build_json_doc(path: str, errors: List, warns: List, ghost, summary: Dict,
             "target_renderer": "powerpoint-windows",
             "file": path,
             "lang": get_lang(),
+            "invocation": invocation or {},
+            "rules": rules_split or {},
             "findings": findings,
             "capabilities": capabilities or {},
             "abstentions": abstentions or [],
@@ -205,13 +211,37 @@ def build_sarif_multi(items: List) -> Dict:
                     },
                     "logicalLocations": [{"name": "slide %d" % f.page, "kind": "module"}],
                 }],
-                # The baseline fingerprint doubles as a cross-run identity so GitHub code
-                # scanning can track a finding between runs instead of re-opening it on
-                # every push (0.6.0, external review)
-                "partialFingerprints": {"archforgeFinding/v2": f.fingerprint()},
+                # The cross-run identity matches the baseline v3 fingerprint (structural,
+                # location-aware) so GitHub code scanning and the baseline agree on when a
+                # finding is "the same" instead of diverging (0.7.1, external review). The
+                # v2 content-only fingerprint stays alongside for one release for tools
+                # that pinned it.
+                "partialFingerprints": {"archforgeFinding/v3": f.structural_fp(),
+                                        "archforgeFinding/v2": f.fingerprint()},
             }
+            props = {}
             if f.loc:
-                res["properties"] = {"target": f.loc}
+                props["target"] = f.loc
+            data = f.data()
+            if data:
+                props["data"] = data
+            if props:
+                res["properties"] = props
+            # Pair findings (W15 overlap, W17 straddle) carry the counterpart in loc.related;
+            # surface it via the SARIF-standard relatedLocations, not only properties
+            # (0.7.1, external review, section 10).
+            rel = (f.loc or {}).get("related")
+            if isinstance(rel, dict) and rel:
+                phys = {"artifactLocation": {"uri": path.replace("\\", "/")}}
+                bbox = rel.get("bbox")
+                res["relatedLocations"] = [{
+                    "physicalLocation": phys,
+                    "message": {"text": "related shape %s" % (rel.get("shape_name")
+                                                              or rel.get("shape_id") or "")},
+                    "logicalLocations": [{"name": "slide %d" % f.page, "kind": "module"}],
+                }]
+                if bbox:
+                    res["relatedLocations"][0]["properties"] = {"bbox": bbox}
             results.append(res)
     return {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
