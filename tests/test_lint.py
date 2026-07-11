@@ -1665,12 +1665,22 @@ def _repo_root():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def _require_repo_file(*parts):
+    """Skip (not fail) when a repo-root asset is absent: an installed wheel ships only the
+    package, not repo-root skills/ or action_runner.py, so those tests apply to the repo
+    and the sdist, not the wheel (0.7.1, external review P0-5)."""
+    path = os.path.join(_repo_root(), *parts)
+    if not os.path.exists(path):
+        pytest.skip("repo-root asset not present in this install: %s" % os.path.join(*parts))
+    return path
+
+
 def test_skill_pack_sync():
     """The repo-root skills/ (for discovery) and the package-bundled copy (the
     canonical one) must not drift apart."""
-    root = _repo_root()
-    a = os.path.join(root, "skills", "archforge-pptx-lint", "SKILL.md")
-    b = os.path.join(root, "src", "archforge", "skills", "archforge-pptx-lint", "SKILL.md")
+    a = _require_repo_file("skills", "archforge-pptx-lint", "SKILL.md")
+    b = os.path.join(_repo_root(), "src", "archforge", "skills",
+                     "archforge-pptx-lint", "SKILL.md")
     with open(a, "rb") as fa, open(b, "rb") as fb:
         assert fa.read() == fb.read(), "루트 skills/ 사본과 패키지 정본이 다릅니다"
 
@@ -1678,8 +1688,7 @@ def test_skill_pack_sync():
 def test_skill_frontmatter_name_matches_dir():
     """Agent Skills spec: frontmatter name == the skill directory name (regression
     for an external review finding)."""
-    root = _repo_root()
-    path = os.path.join(root, "skills", "archforge-pptx-lint", "SKILL.md")
+    path = _require_repo_file("skills", "archforge-pptx-lint", "SKILL.md")
     with open(path, encoding="utf-8") as f:
         head = f.read(500)
     m = re.search(r"^name:\s*(\S+)", head, re.M)
@@ -2277,7 +2286,7 @@ def test_lint_subcommand_alias(tmp_path):
 def test_action_runner_rejects_bool_typo(tmp_path):
     """A typo'd boolean input must fail the job, not silently disable a safety default
     (external review P0)."""
-    runner = os.path.join(_repo_root(), "action_runner.py")
+    runner = _require_repo_file("action_runner.py")
     env = dict(os.environ)
     env.update({"AF_FILES": "whatever.pptx", "AF_FAIL_INCOMPLETE": "ture"})
     r = subprocess.run([sys.executable, runner], capture_output=True, text=True,

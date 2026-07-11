@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.7.1 (2026-07-11)
+
+A contract-integrity release driven by an external review of 0.7.0 (82/100: right
+direction, but the new contracts were not yet fully consistent). No new rules; the point
+is that every contract holds across all reporters and modes. Verdict-preserving: the
+16-deck A/B and the public corpus stay identical.
+
+### Contract consistency
+
+- `scan --schema 2` now declares a `scan-2.0` root with `kind` and `file_schema_version`,
+  instead of a `1.0` root over `2.0` file objects a consumer would misparse.
+- JUnit reflects `--fail-incomplete`: W18 becomes a `<failure>`, so the report matches
+  the CLI exit code instead of reading green while the run exited 1.
+- Baseline v3 stops trusting generator auto-names (`TextBox N`, `Google Shape;...`) as
+  identity and uses the bbox grid for them, so a defect that moves to a far-away box is
+  no longer silently re-suppressed.
+- Every skip-reason key is registered in the capability map, enforced by a test, so a
+  structural abstention never lands with no affected rules while `structure` reads
+  `complete`.
+- SARIF `partialFingerprints` carry `archforgeFinding/v3` (the structural fingerprint the
+  baseline uses) so code scanning and the baseline agree on identity; pair findings use
+  the SARIF-standard `relatedLocations`.
+- schema 2.0 gains an `invocation` block (profile/policy/config/thresholds) and a `rules`
+  split (executed / profile_excluded / user_suppressed).
+
+### Robustness and packaging
+
+- `--timeout` rejects `inf`/`nan` (inf passed `>0` and silently disabled the bound). A
+  `--sarif`/`--junit`/`--write-baseline` path under a missing directory is a controlled
+  exit 2 up front, not a traceback mid-run. `lint()` maps an un-parseable package to a
+  ValueError instead of leaking an lxml exception.
+- The fuzz test now fails on any non-ValueError (it previously allowed
+  KeyError/TypeError/etc.), which caught a real open-path crash now fixed. The corpus
+  runner drives the CLI to check the exact exit code and verifies incompleteness in both
+  directions.
+- The sdist now includes `action.yml`, `action_runner.py`, and the corpus, and excludes
+  `node_modules`, so the published source passes its own full suite (a CI job now
+  installs the sdist and runs its tests). The three repo-root-asset tests skip on a wheel
+  install rather than fail.
+
+### Docs
+
+- Version references in the README, pre-commit config, and Action example moved to
+  v0.7.1; the config module docstring and ADR 004 updated to baseline v3; GOVERNANCE
+  scopes the "batched releases" policy to 1.0+ so it no longer contradicts fast pre-1.0
+  iteration.
+
+### Deferred (0.8, per the review's own sequencing)
+
+- Full typed `Finding.data` with detectors emitting structured data directly (E1/E2
+  payloads, E4 units, E3 nominal/scale, W16 kind), the physical module decomposition
+  (#5), artifact-level baseline identity, formal JSON Schema files, and corpus growth
+  with per-gate precision/recall.
+
 ## 0.7.0 (2026-07-11)
 
 The contract half of the 0.7 architecture work (issue #6), plus the first step of the

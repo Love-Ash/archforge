@@ -24,8 +24,11 @@ A small document so contributors know how decisions get made here.
   file schema, CLI exit codes, and the Action inputs. Breaking any of these requires a
   minor version bump before 1.0 (and a major after), a CHANGELOG entry, and where
   feasible a compatibility alias for two minor releases.
-- Releases are batched: an rc or soak period precedes announcement-grade releases.
-  Same-day version churn is a known past mistake we do not repeat.
+- Pre-1.0, releases iterate fast: a 0.x bump can ship the day it is ready, and several
+  in one day is expected while contracts are still settling. What is gated is
+  announcement-grade visibility, not the version number: a public launch (Show HN,
+  broad posts) waits for an RC soak period. From 1.0 on, minor releases are batched and
+  an RC precedes each one; same-day churn on stable contracts is the mistake to avoid.
 
 ## Security
 

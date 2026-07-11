@@ -31,6 +31,17 @@ jobs:
           python -m pip install build twine
           python -m build
           python -m twine check dist/*
+      - name: sdist self-test (the published source must pass its own suite)
+        run: |
+          set -euo pipefail
+          # A distributed sdist that cannot pass its own tests is not shippable
+          # (0.7.1, external review P0-5). Unpack, install, and run the full suite from
+          # inside the unpacked tree, not the checkout.
+          tmp=$(mktemp -d)
+          tar -xzf dist/*.tar.gz -C "$tmp"
+          pkg=$(ls -d "$tmp"/archforge-*)
+          python -m pip install "$pkg[test,yaml]"
+          ( cd "$pkg" && python -m pytest tests -q )
       - name: Tag/version consistency
         run: |
           python - <<'EOF'

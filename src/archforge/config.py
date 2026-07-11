@@ -14,11 +14,12 @@ Supported keys:
   baseline: baseline file path (recorded existing violations are suppressed; only new ones
     are reported)
 
-The baseline file (schema 2) has the shape {"findings": [{"code","fingerprint","count"}...]}
-plus run-condition metadata, produced by `archforge deck.pptx --write-baseline PATH`. The v2
-fingerprint is code + a locale-neutral content key with the page number deliberately
-excluded (multiple occurrences are managed by count), so it survives both message-language
-changes and slide insertion.
+The baseline file (schema 3) has the shape {"findings": [{"code","fingerprint","count"}...]}
+plus run-condition metadata (tool_version/profile/lang/threshold_hash), produced by
+`archforge deck.pptx --write-baseline PATH`. The v3 fingerprint is the locale-neutral
+content key (page-independent, so it survives message-language changes and slide insertion)
+combined with a structural location bucket, so a defect that moves to a genuinely different
+place is not silently re-suppressed. v1/v2 files are rejected with a regenerate message.
 """
 import json
 import math
