@@ -12,7 +12,7 @@
 ![license](https://img.shields.io/badge/license-MIT-green)
 [![ci](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml)
 
-[30초 시작](#30초) · [무엇을 잡나](#무엇을-잡나) · [CI](#ci) · [실측 기록](docs/CALIBRATION.md) · [Discussions](https://github.com/Love-Ash/archforge/discussions) · [English README](README.md)
+[30초 시작](#30초) · [무엇을 잡나](#무엇을-잡나) · [CI](#ci) · [실측 기록](docs/CALIBRATION.md) · [정확도](docs/ACCURACY.md) · [Discussions](https://github.com/Love-Ash/archforge/discussions) · [English README](README.md)
 
 **AI 에이전트 / LLM:** [llms.txt](llms.txt)를 읽히거나, `pip install archforge` 후 `archforge skill --install` 이면 에이전트가 빌드-린트-수정 루프를 배웁니다.
 
@@ -84,6 +84,7 @@ archforge scan out/**/*.pptx --json          # 집계 JSON, 한 파일이라도 
                                              # (아무것도 매치 못한 입력은 exit 2)
 archforge rules                              # 규칙 한 줄 요약 목록
 archforge explain W15                        # 규칙 하나의 의미와 수정법
+archforge baseline inspect bl.json           # baseline이 무엇을 억제하는지 점검
 archforge demo --dir tour                    # 데모 덱 쌍을 원하는 위치에 재생성
 ```
 

@@ -98,6 +98,39 @@ def main():
     emit("clean_bilingual", clean, {"expected": {},
          "notes": "negative fixture: correct ea font, no dash, readable sizes"})
 
+    EN_DASH = chr(0x2013)
+
+    def e2_range_negative(p):
+        s = p.slides.add_slide(p.slide_layouts[6])
+        _tb(s, 1, 1, 8, 0.6, "FY2020" + EN_DASH + "2024 revenue up 18%", size=16,
+            ea="맑은 고딕")
+    emit("e2_range_negative", e2_range_negative, {"expected": {},
+         "notes": "negative fixture: a numeric-range en dash is legitimate typography "
+                  "and must pass (E2's exemption contract)"})
+
+    def w1_small_body(p):
+        s = p.slides.add_slide(p.slide_layouts[6])
+        _tb(s, 1, 2, 9, 1.2,
+            "This body-class paragraph runs well past forty characters of text "
+            "so the frame is judged as body copy.", size=8, ea="맑은 고딕")
+    emit("w1_small_body", w1_small_body, {"expected": {"W1": 1},
+         "notes": "wide frame, long text, 8pt: below the 9pt body floor"})
+
+    def w8_small_cjk(p):
+        s = p.slides.add_slide(p.slide_layouts[6])
+        _tb(s, 1, 1, 2.0, 0.4, "목업 안 라벨", size=6, ea="맑은 고딕")
+    emit("w8_small_cjk", w8_small_cjk, {"expected": {"W8": 1},
+         "notes": "narrow (<=4in) frame, 6pt CJK: the mockup-label pattern"})
+
+    def w6_repeated_skeleton(p):
+        for i in range(5):
+            s = p.slides.add_slide(p.slide_layouts[6])
+            _tb(s, 1, 0.8, 8, 0.6, "Section title %d" % i, size=24, ea="맑은 고딕")
+            _tb(s, 1, 2.0, 6, 2.5, "Body block content", size=12, ea="맑은 고딕")
+            _tb(s, 8, 2.0, 4, 2.5, "Side note block", size=12, ea="맑은 고딕")
+    emit("w6_repeated_skeleton", w6_repeated_skeleton, {"expected": {"W6": 1},
+         "notes": "the same 3-frame skeleton on 5 pages: the recycled-grid tell"})
+
 
 if __name__ == "__main__":
     main()

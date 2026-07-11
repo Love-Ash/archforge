@@ -13,7 +13,7 @@ before a human ever sees a render.
 ![license](https://img.shields.io/badge/license-MIT-green)
 [![ci](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Love-Ash/archforge/actions/workflows/ci.yml)
 
-[Quickstart](#30-seconds) · [What it catches](#what-it-catches) · [CI](#ci) · [Calibration record](docs/CALIBRATION.md) · [Discussions](https://github.com/Love-Ash/archforge/discussions) · [한국어 README](README.ko.md)
+[Quickstart](#30-seconds) · [What it catches](#what-it-catches) · [CI](#ci) · [Calibration record](docs/CALIBRATION.md) · [Accuracy](docs/ACCURACY.md) · [Discussions](https://github.com/Love-Ash/archforge/discussions) · [한국어 README](README.ko.md)
 
 **AI agents / LLMs:** read [llms.txt](llms.txt), or `pip install archforge` then `archforge skill --install` to teach your agent the build-lint-fix loop.
 
@@ -87,6 +87,7 @@ archforge scan out/**/*.pptx --json          # aggregated JSON; exit 1 if any fi
                                              # (an input matching nothing exits 2)
 archforge rules                              # one-line summary of every rule
 archforge explain W15                        # what a rule means and how to fix it
+archforge baseline inspect bl.json           # what a baseline suppresses, under which conditions
 archforge demo --dir tour                    # regenerate the demo pair anywhere
 ```
 

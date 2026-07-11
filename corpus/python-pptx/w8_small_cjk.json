@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W8": 1
+  },
+  "notes": "narrow (<=4in) frame, 6pt CJK: the mockup-label pattern",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

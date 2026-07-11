@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.8.0 (2026-07-11)
+
+Verification and structure: the release makes the accuracy claims third-party
+checkable and continues the #5 decomposition. Verdict-preserving throughout (16-deck
+A/B and corpus identical).
+
+### Typed Finding.data
+
+Detection sites now emit structured data directly instead of leaving it to positional
+derivation: E1 carries `script` / `effective_font` / `font_source` / `fallback_font`,
+E2 the offending code points and function, E3 `nominal_pt` + `autofit_scale` +
+`size_source`, E4 unit-explicit tracking (`tracking_raw_hundredths_pt` and
+`tracking_pt`), W16 the target `kind` (text | picture). The positional derivation
+stays as a fallback; explicit values win.
+
+### Formal JSON Schemas
+
+`schemas/` holds machine-validatable JSON Schemas for report-1.0, report-2.0,
+scan-2.0, and baseline-3; tests validate real CLI output against each, and the schemas
+ship in the sdist. `schema_version` now points at something a consumer can actually
+validate with.
+
+### Accuracy record
+
+The public corpus grew to 19 manifests (new: an en-dash range negative for E2's
+exemption contract, W1 body floor, W8 narrow-frame CJK, W6 repeated skeleton), and
+`scripts/make_accuracy_table.py` generates docs/ACCURACY.md: per-gate TP / FP / FN /
+deck-level TN with precision and recall, measured through the CLI on the shipped
+corpus. CI regenerates the table and fails on drift, so the published numbers cannot
+go stale. Scope is stated honestly: a seed corpus proving constructed ground truth,
+not yet a field-scale benchmark.
+
+### Baseline artifact identity and inspect
+
+A baseline records the deck it was written from (file name + content hash);
+applying it to a differently-named deck warns. `archforge baseline inspect PATH`
+(with `--json`) shows what a baseline suppresses per code and under which recorded
+conditions, ending the opaque-blob era.
+
+### Architecture (#5, continued)
+
+Extracted the E1 font kernel (`fonts.py`: blocklist, slot parsing, theme-token
+resolution, the measured E1 decision) and the E2 dash kernel (`dashes.py`) as pure
+modules with no Finding and no I/O, re-exported from lint for compatibility.
+lint.py is down from ~3350 to ~3050 lines with two more pure seams established.
+
 ## 0.7.1 (2026-07-11)
 
 A contract-integrity release driven by an external review of 0.7.0 (82/100: right

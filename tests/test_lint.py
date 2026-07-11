@@ -2586,6 +2586,33 @@ def test_reason_registry_covers_all_keys():
     assert not missing, "unregistered skip reasons: %s" % missing
 
 
+def test_baseline_artifact_identity_and_inspect(tmp_path):
+    """0.8: a baseline records the deck it was written from; applying it to a
+    differently-named deck warns, and `baseline inspect` shows what is suppressed."""
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 5, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    deck = save(p, tmp_path, "quarterly.pptx")
+    bl = os.path.join(str(tmp_path), "bl.json")
+    run_cli([deck, "--write-baseline", bl])
+    with open(bl, encoding="utf-8") as f:
+        doc = json.load(f)
+    assert doc["artifact"]["file_name"] == "quarterly.pptx"
+    assert len(doc["artifact"]["sha256_12"]) == 12
+    # same deck under a different name: still applies (warning, baselines are beta),
+    # and the mismatch is surfaced on stderr
+    other = save(p, tmp_path, "unrelated.pptx")
+    r = run_cli([other, "--baseline", bl])
+    assert "quarterly.pptx" in (r.stderr or "")
+    # inspect: machine-readable summary of what the baseline suppresses
+    r = run_cli(["baseline", "inspect", bl, "--json"])
+    assert r.returncode == 0
+    info = json.loads(r.stdout)
+    assert info["schema_version"] == "3"
+    assert info["suppressed_by_code"].get("E1") == 1
+    assert info["artifact"]["file_name"] == "quarterly.pptx"
+
+
 def test_baseline_v2_rejected(tmp_path):
     """A v2 baseline is rejected with a regenerate message (the one migration ADR 004
     committed to)."""

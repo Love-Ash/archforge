@@ -2349,11 +2349,12 @@ def main():
         if os.path.exists("skill"):
             print(M("skill_conflict"), file=sys.stderr)
         sys.exit(skill_main(rest[1:]))
-    if rest and rest[0] in ("scan", "demo", "rules", "explain"):
+    if rest and rest[0] in ("scan", "demo", "rules", "explain", "baseline"):
         if os.path.exists(rest[0]) and os.path.isfile(rest[0]):
             print(M("subcmd_conflict") % (rest[0], rest[0]), file=sys.stderr)
         dispatch = {"scan": scan_main, "demo": demo_main,
-                    "rules": rules_main, "explain": explain_main}
+                    "rules": rules_main, "explain": explain_main,
+                    "baseline": baseline_main}
         sys.exit(dispatch[rest[0]](rest[1:]))
     if rest and rest[0] == "lint":
         # Explicit alias for single-file mode (`archforge lint deck.pptx`), so scripts
@@ -2699,7 +2700,8 @@ def _lint_one(path, a):
                                    profile=profile, lang=get_lang(),
                                    thresholds={"hard_min": hard_min, "body_min": body_min,
                                                "small_min": small_min, "w6_sim": w6_sim,
-                                               "w6_cluster": w6_cluster})
+                                               "w6_cluster": w6_cluster},
+                                   artifact=_config.deck_artifact(path))
         print(M("baseline_written") % (n, a.write_baseline))
         return None
 
@@ -2733,6 +2735,14 @@ def _lint_one(path, a):
             if cur_hash != rec_thr:
                 print(M("note_baseline_meta") % ("thresholds", rec_thr, cur_hash),
                       file=sys.stderr)
+        # Artifact identity (0.8): a baseline written from one deck applied to a
+        # different one still suppresses shared fingerprints; the file basename is the
+        # identity signal that survives regeneration, so a mismatch is surfaced.
+        rec_art = meta.get("artifact") or {}
+        rec_name = rec_art.get("file_name")
+        if rec_name and rec_name != os.path.basename(path):
+            print(M("note_baseline_meta") % ("artifact", rec_name,
+                                             os.path.basename(path)), file=sys.stderr)
         errors, s1 = _config.apply_baseline(errors, known)
         warns, s2 = _config.apply_baseline(warns, known)
         baseline_suppressed = s1 + s2
@@ -2979,6 +2989,55 @@ def rules_main(argv=None):
         return 0
     for r in rows:
         print("%-4s %-8s %-11s %s" % (r["code"], r["severity"], r["category"], r["title"]))
+    return 0
+
+
+def baseline_main(argv=None):
+    """`archforge baseline inspect PATH`: what a baseline actually suppresses, and under
+    which recorded conditions (0.8, external review: baselines were opaque blobs)."""
+    ap = argparse.ArgumentParser(prog="archforge baseline",
+                                 description=M("baseline_desc"))
+    ap.add_argument("action", choices=("inspect",))
+    ap.add_argument("path")
+    ap.add_argument("--json", action="store_true", help=M("help_json"))
+    ap.add_argument("--lang", default=None, choices=("ko", "en"), help=M("help_lang"))
+    a = ap.parse_args(argv)
+    import json
+    from collections import Counter
+    try:
+        with open(a.path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except Exception as e:
+        print(M("err_config") % ("baseline %s (%s)" % (a.path, e)), file=sys.stderr)
+        return 2
+    by_code = Counter()
+    total = 0
+    for e in doc.get("findings", []):
+        by_code[e.get("code", "?")] += int(e.get("count", 1))
+        total += int(e.get("count", 1))
+    info = {"schema_version": doc.get("schema_version"),
+            "tool_version": doc.get("tool_version"),
+            "profile": doc.get("profile"),
+            "lang": doc.get("lang"),
+            "threshold_hash": doc.get("threshold_hash"),
+            "artifact": doc.get("artifact"),
+            "suppressed_total": total,
+            "suppressed_by_code": dict(sorted(by_code.items()))}
+    if a.json:
+        print(json.dumps(info, ensure_ascii=False, indent=2))
+        return 0
+    print("baseline %s (schema %s, tool %s, profile %s)"
+          % (a.path, info["schema_version"], info["tool_version"], info["profile"]))
+    art = info["artifact"] or {}
+    if art:
+        print("  artifact: %s (sha256 %s)"
+              % (art.get("file_name"), art.get("sha256_12")))
+    print("  suppresses %d finding(s):" % total)
+    for code, n in info["suppressed_by_code"].items():
+        print("    %-4s x%d" % (code, n))
+    if str(info["schema_version"]) != "3":
+        print(M("err_config") % ("outdated baseline schema; regenerate"), file=sys.stderr)
+        return 1
     return 0
 
 

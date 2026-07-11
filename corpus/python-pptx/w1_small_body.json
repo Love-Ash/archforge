@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W1": 1
+  },
+  "notes": "wide frame, long text, 8pt: below the 9pt body floor",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

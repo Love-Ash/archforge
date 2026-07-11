@@ -335,6 +335,10 @@ MESSAGES = {
         "ko": "규칙 한 줄 요약 목록(코드·심각도·카테고리·프로파일)",
         "en": "one-line summary of every rule (code, severity, category, profiles)",
     },
+    "baseline_desc": {
+        "ko": "baseline 파일 점검: 무엇을 억제하는지, 어떤 기록 조건인지",
+        "en": "inspect a baseline file: what it suppresses, under which recorded conditions",
+    },
     "explain_desc": {
         "ko": "규칙 하나의 의미·발화 조건·수정법 설명",
         "en": "what one rule means, when it fires, and how to fix it",

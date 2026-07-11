@@ -122,12 +122,28 @@ def load_config(path: str) -> Tuple[Dict, List[str]]:
     return out, warnings
 
 
+def deck_artifact(deck_path: str) -> Optional[Dict]:
+    """Artifact identity for a baseline (0.8, external review: a baseline applied to an
+    unrelated deck would still suppress shared fingerprints). Deliberately coarse: the
+    file basename survives regeneration while a content hash would not, so the basename
+    is the identity signal and the hash is recorded for exact-copy detection only."""
+    try:
+        import hashlib
+        with open(deck_path, "rb") as f:
+            digest = hashlib.sha256(f.read()).hexdigest()[:12]
+        return {"file_name": os.path.basename(deck_path), "sha256_12": digest}
+    except Exception:
+        return None
+
+
 def write_baseline(path: str, findings, profile: str = "", lang: str = "",
-                   thresholds: Optional[Dict] = None) -> int:
+                   thresholds: Optional[Dict] = None,
+                   artifact: Optional[Dict] = None) -> int:
     """Fingerprint v3 (schema 3): the v2 page-free content key plus a structural location
     bucket, so a defect that moves to a genuinely different place is treated as new rather
     than silently re-suppressed (external review). Records policy identity (profile,
-    lang, tool version, threshold hash) that the reader checks on load."""
+    lang, tool version, threshold hash) and, when given, the artifact identity that the
+    reader checks on load."""
     from collections import Counter
     counts = Counter()
     codes = {}
@@ -156,6 +172,8 @@ def write_baseline(path: str, findings, profile: str = "", lang: str = "",
         "findings": [{"code": codes[fp], "fingerprint": fp, "count": counts[fp]}
                      for fp in sorted(counts)],
     }
+    if artifact:
+        doc["artifact"] = artifact
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
     return total
@@ -169,7 +187,7 @@ def load_baseline_meta(path: str) -> Dict:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
         return {k: data.get(k) for k in ("tool_version", "profile", "lang",
-                                         "threshold_hash")}
+                                         "threshold_hash", "artifact")}
     except Exception:
         return {}
 
