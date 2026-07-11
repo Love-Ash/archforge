@@ -2644,7 +2644,7 @@ def main():
         xml_text = _reporters.build_junit_multi(
             [(a.pptx, res["errors"], res["warns"],
               set(res["summary"]["skipped_codes"]),
-              res["summary"]["policy"]["fail_on_warning"], None)])
+              res["summary"]["policy"], None)])
         with open(a.junit, "w", encoding="utf-8", newline="\n") as f:
             f.write(xml_text)
 
@@ -2691,10 +2691,20 @@ _REASON_RULES = {
     "render_dir_missing": (["W7"], "render"),
     "w9": (["W9"], "structure"),
     "w6_sig": (["W6"], "structure"),
+    "w6": (["W6"], "structure"),
+    "w6_capped": (["W6"], "structure"),
     "w10_tokens": (["W10"], "structure"),
+    "w10": (["W10"], "structure"),
+    "w10_capped": (["W10"], "structure"),
+    "w11_w14": (["W11", "W12", "W13", "W14"], "structure"),
     "w12_w13": (["W12", "W13"], "structure"),
     "theme_parse": (["E1"], "typography"),
 }
+
+# Every skip-reason key a detector can emit must be registered above, so a structural
+# abstention never lands as ([], "meta") with structure still reported "complete"
+# (0.7.1, external review P0). test_reason_registry_covers_all_keys enforces this.
+KNOWN_REASON_KEYS = frozenset(_REASON_RULES)
 
 
 def _capabilities_and_abstentions(warns, render_requested):
@@ -2727,6 +2737,10 @@ def _capabilities_and_abstentions(warns, render_requested):
     caps["structure"] = "partial" if "structure" in degraded else "complete"
     caps["render_contrast"] = ("partial" if "render" in degraded
                                else ("complete" if render_requested else "not_requested"))
+    # An unregistered reason (should not happen: enforced by test) still surfaces here
+    # rather than vanishing into a "complete" verdict.
+    if "meta" in degraded:
+        caps["meta"] = "partial"
     return caps, abstentions
 
 
@@ -3100,16 +3114,23 @@ def scan_main(argv=None):
         junit_items = []
         for p, r, e in results:
             if r is None:
-                junit_items.append((p, [], [], set(), False, e))
+                junit_items.append((p, [], [], set(),
+                                    {"fail_on_warning": False, "fail_incomplete": False}, e))
             else:
                 junit_items.append((p, r["errors"], r["warns"],
                                     set(r["summary"]["skipped_codes"]),
-                                    r["summary"]["policy"]["fail_on_warning"], None))
+                                    r["summary"]["policy"], None))
         with open(a.junit, "w", encoding="utf-8", newline="\n") as f:
             f.write(_reporters.build_junit_multi(junit_items))
 
     if a.json:
         import json
+        # The scan report is its own document type. Its root schema_version tracks the
+        # per-file schema so a consumer that keys on the root does not misparse a v2 file
+        # object under a v1 root (0.7.1, external review P0). file_schema_version names the
+        # per-file shape explicitly.
+        file_schema = "2.0" if str(getattr(a, "schema", "1.0")) in ("2", "2.0") else "1.0"
+        root_schema = "scan-2.0" if file_schema == "2.0" else "scan-1.0"
         docs = []
         for p, r, e in results:
             if r is None:
@@ -3121,7 +3142,9 @@ def scan_main(argv=None):
                                                 abstentions=r["abstentions"])
                 doc["status"] = "fail" if r["fail"] else "pass"
                 docs.append(doc)
-        agg = {"schema_version": "1.0",
+        agg = {"schema_version": root_schema,
+               "kind": "scan-report",
+               "file_schema_version": file_schema,
                "tool": {"name": "archforge", "version": _reporters._tool_version()},
                "lang": get_lang(),
                "scan": {"inputs": [{"pattern": pat, "matches": n}

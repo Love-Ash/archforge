@@ -42,6 +42,28 @@ _DATA_FIELDS = {
 }
 
 
+# Auto-generated shape names that carry no identity: PowerPoint / python-pptx assign
+# these by shape kind + a counter, so two unrelated textboxes are "TextBox 1"/"TextBox 2"
+# and collapse to the same token once the counter is stripped. Google Slides exports use
+# "Google Shape;<id>;<page>". For these the bbox is the identity (0.7.1, external review).
+_GENERIC_NAME_BASES = frozenset((
+    "textbox", "text box", "rectangle", "rounded rectangle", "oval", "ellipse",
+    "shape", "freeform", "content placeholder", "text placeholder", "title",
+    "subtitle", "picture", "image", "group", "table", "chart", "diagram",
+    "straight connector", "elbow connector", "line", "arrow", "placeholder",
+    "autoshape", "object", "graphic frame",
+))
+
+
+def _is_generic_shape_name(name: str) -> bool:
+    import re
+    n = name.strip()
+    if n.lower().startswith("google shape"):
+        return True
+    base = re.sub(r"[\s\d]+$", "", n).strip().lower()
+    return base in _GENERIC_NAME_BASES or base == ""
+
+
 class Finding:
     """A single check result. msg_id+args is canonical and message is a view rendered in the
     current language.
@@ -139,29 +161,31 @@ class Finding:
 
     def _location_bucket(self) -> str:
         """A page-free, coarse structural key for the finding's location (0.7 baseline v3).
-        Page is excluded so slide insertion/reorder does not invalidate it; a normalized
-        shape name (trailing counter digits stripped) plus cell/paragraph/field, or a
-        0.5in bbox grid when only geometry is known, so a finding that moves to a
-        genuinely different place gets a different key and is not re-suppressed. Empty
-        when there is no location (locationless deck-level rules fall back to content)."""
+        Page is excluded so slide insertion/reorder does not invalidate it. A semantic
+        shape name is trusted as identity (regeneration keeps it, position may jitter);
+        a generator's auto-name ("TextBox 12", "Rectangle 3", "Google Shape;...") is NOT
+        trusted, because stripping its counter collapses every textbox to the same token
+        and a defect that moved elsewhere would be silently re-suppressed (0.7.1, external
+        review P0). For auto-named or nameless shapes the 0.5in bbox grid is the identity.
+        cell/paragraph/field always participate. Empty for locationless deck-level rules."""
         loc = self.loc or {}
         parts = []
         name = loc.get("shape_name")
-        if name:
+        if name and not _is_generic_shape_name(str(name)):
             import re
             parts.append("n=" + re.sub(r"[\s\d]+$", "", str(name)).strip().lower())
+        elif "bbox" in loc:
+            try:
+                bx = loc["bbox"]
+                parts.append("g=%d,%d" % (round(bx[0] * 2), round(bx[1] * 2)))
+            except Exception:
+                pass
         if "cell" in loc:
             parts.append("c=%s" % (loc["cell"],))
         if "paragraph" in loc:
             parts.append("p=%s" % loc["paragraph"])
         if loc.get("field"):
             parts.append("fld")
-        if not parts and "bbox" in loc:
-            try:
-                bx = loc["bbox"]
-                parts.append("g=%d,%d" % (round(bx[0] * 2), round(bx[1] * 2)))
-            except Exception:
-                pass
         return "|".join(parts)
 
     def structural_fp(self) -> str:

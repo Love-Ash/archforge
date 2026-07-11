@@ -94,13 +94,15 @@ def _junit_sanitize(s):
 def build_junit_multi(items: List) -> str:
     """JUnit XML for CI systems that consume test reports (Jenkins, GitLab, ...).
 
-    items = [(path, errors, warns, excluded_codes, warn_fail, usage_error)], one
-    testsuite per file. The honest mapping (issue #2 design discussion): a testcase is
-    a RULE THAT RAN, so "tests" means "checks executed". ERROR findings map to
-    <failure>; WARN findings fail only under a warn-failing policy and otherwise land
-    in <system-out> (JUnit <skipped> means "not run", so it is reserved for rules
-    excluded by the active profile/--skip). A file that could not be checked at all
-    (corrupt package, bad per-deck config) becomes a single <error> testcase."""
+    items = [(path, errors, warns, excluded_codes, policy, usage_error)], one testsuite
+    per file, where policy = {"fail_on_warning": bool, "fail_incomplete": bool}. The
+    honest mapping (issue #2 design discussion): a testcase is a RULE THAT RAN, so
+    "tests" means "checks executed". ERROR findings map to <failure>; WARN findings fail
+    only under fail_on_warning and otherwise land in <system-out> (JUnit <skipped> means
+    "not run", so it is reserved for rules excluded by the active profile/--skip). W18 is
+    a <failure> when fail_incomplete is set, so the JUnit verdict matches the CLI exit
+    code instead of a suite reading green while the run exited 1 (0.7.1, external review
+    P0). A file that could not be checked at all becomes a single <error> testcase."""
     import xml.etree.ElementTree as ET
     from .rules import ALL_CODES, TITLES
 
@@ -109,7 +111,11 @@ def build_junit_multi(items: List) -> str:
 
     root = ET.Element("testsuites", name="archforge")
     total = failures = errors_n = skipped_n = 0
-    for path, errs, warns, excluded, warn_fail, usage_error in items:
+    for path, errs, warns, excluded, policy, usage_error in items:
+        if isinstance(policy, bool):   # back-compat: a bare warn_fail flag
+            policy = {"fail_on_warning": policy, "fail_incomplete": False}
+        warn_fail = policy.get("fail_on_warning", False)
+        fail_incomplete = policy.get("fail_incomplete", False)
         suite = ET.SubElement(root, "testsuite", name=path)
         if usage_error is not None:
             case = ET.SubElement(suite, "testcase", classname=path, name="usage")
@@ -140,7 +146,9 @@ def build_junit_multi(items: List) -> str:
                 continue
             lines = "\n".join(_junit_sanitize("p%02d %s | %s" % (f.page, f.message, f.detail))
                               for f in hits)
-            if code.startswith("E") or warn_fail:
+            is_fail = code.startswith("E") or warn_fail or \
+                (code == "W18" and fail_incomplete)
+            if is_fail:
                 fail = ET.SubElement(case, "failure",
                                      message="%d finding(s)" % len(hits))
                 fail.text = lines

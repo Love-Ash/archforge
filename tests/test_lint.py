@@ -2327,6 +2327,49 @@ def test_junit_reporter(tmp_path):
     assert w16b.find("failure") is not None
 
 
+def test_junit_fail_incomplete_matches_exit(tmp_path):
+    """0.7.1 P0: under --fail-incomplete the CLI exits 1 for a W18-only deck, and the
+    JUnit report must agree (W18 as <failure>), not read green while the run failed."""
+    import xml.etree.ElementTree as ET
+    # a vertical-text frame abstains -> W18, no ERROR
+    p = new_prs()
+    s = add_slide(p)
+    box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(2), Inches(4))
+    r = box.text_frame.paragraphs[0].add_run()
+    r.text = "세로쓰기 텍스트"
+    r.font.size = Pt(18)
+    r._r.get_or_add_rPr().append(box._element.makeelement(qn("a:ea"), {"typeface": "맑은 고딕"}))
+    box.text_frame._txBody.find(qn("a:bodyPr")).set("vert", "eaVert")
+    deck = save(p, tmp_path, "vt.pptx")
+    out = os.path.join(str(tmp_path), "v.xml")
+    r1 = run_cli([deck, "--profile", "full", "--junit", out])
+    w18 = [c for c in ET.parse(out).getroot().iter("testcase")
+           if c.get("name").startswith("W18")]
+    assert r1.returncode == 0 and (not w18 or w18[0].find("failure") is None)
+    r2 = run_cli([deck, "--profile", "full", "--fail-incomplete", "--junit", out])
+    w18 = [c for c in ET.parse(out).getroot().iter("testcase")
+           if c.get("name").startswith("W18")]
+    assert r2.returncode == 1 and w18 and w18[0].find("failure") is not None
+
+
+def test_scan_schema2_aggregate_root(tmp_path):
+    """0.7.1 P0: scan --schema 2 must not declare schema 1.0 at the root over 2.0 file
+    objects. The root is a distinct scan document type carrying file_schema_version."""
+    d = os.path.join(str(tmp_path), "decks")
+    os.makedirs(d)
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 1, 1, 4, 1, "x", size=14)
+    save(p, d, "a.pptx")
+    agg = json.loads(run_cli(["scan", d, "--json", "--schema", "2"]).stdout)
+    assert agg["schema_version"] == "scan-2.0"
+    assert agg["kind"] == "scan-report"
+    assert agg["file_schema_version"] == "2.0"
+    assert agg["files"][0]["schema_version"] == "2.0"
+    agg1 = json.loads(run_cli(["scan", d, "--json"]).stdout)
+    assert agg1["schema_version"] == "scan-1.0" and agg1["file_schema_version"] == "1.0"
+
+
 # ---------------------------------------------------------------- 0.7: schema 2.0 + baseline v3
 def test_schema_2_shape(tmp_path):
     """--schema 2: single findings[] with severity + structured data, plus capabilities
@@ -2389,6 +2432,41 @@ def test_baseline_v3_move_not_resuppressed(tmp_path):
     moved = save(p2, tmp_path, "moved.pptx")
     doc = json.loads(run_cli([moved, "--json", "--baseline", bl]).stdout)
     assert doc["summary"]["error_count"] == 1, doc["summary"]
+
+
+def test_baseline_v3_generic_name_uses_position(tmp_path):
+    """0.7.1 P0: with the generator default names ('TextBox N'), a defect that moves to a
+    far-away box must NOT be re-suppressed. Stripping the counter used to collapse both
+    to 'textbox' and hide the moved finding."""
+    p = new_prs()
+    b1 = tb(add_slide(p), 1, 1, 4, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    b1.name = "TextBox 3"   # generator default
+    deck = save(p, tmp_path, "b.pptx")
+    bl = os.path.join(str(tmp_path), "bl.json")
+    run_cli([deck, "--write-baseline", bl])
+    # same generic name, far-away position: identity is the bbox, so it is a NEW finding
+    p2 = new_prs()
+    b2 = tb(add_slide(p2), 9, 6, 3, 0.5, "모노 폴백 한글", font="IBM Plex Mono", size=12)
+    b2.name = "TextBox 7"
+    moved = save(p2, tmp_path, "moved.pptx")
+    doc = json.loads(run_cli([moved, "--json", "--baseline", bl]).stdout)
+    assert doc["summary"]["error_count"] == 1, doc["summary"]
+    # same generic name, same position: still suppressed
+    same = json.loads(run_cli([deck, "--json", "--baseline", bl]).stdout)
+    assert same["summary"]["error_count"] == 0 and same["summary"]["baseline_suppressed"] == 1
+
+
+def test_reason_registry_covers_all_keys():
+    """0.7.1 P0: every skip-reason key a detector can write must be registered, so a
+    structural abstention never lands with no affected rules while structure reads
+    'complete'. Scans the source for the Counter keys the guards use."""
+    import re
+    with open(jl.__file__, encoding="utf-8") as _f:
+        src = _f.read()
+    used = set(re.findall(r'(?:skipped|deck_skipped)\[\"([a-z0-9_]+)\"\]', src))
+    used |= set(re.findall(r'skipped\.get\(\"([a-z0-9_]+)\"', src))
+    missing = sorted(k for k in used if k not in jl.KNOWN_REASON_KEYS)
+    assert not missing, "unregistered skip reasons: %s" % missing
 
 
 def test_baseline_v2_rejected(tmp_path):
