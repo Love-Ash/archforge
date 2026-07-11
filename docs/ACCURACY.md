@@ -13,21 +13,21 @@ so this is regression verification, not independent ground truth. Second, the
 per-gate samples are tiny; the exact one-sided 95% lower bound below shows how
 little a small perfect score proves (1/1 -> 5%, 3/3 -> 37%).
 
-Corpus: 18 decks, 3 generator families, 5 clean negatives, 22 slides, all
+Corpus: 20 decks, 4 generator families, 6 clean negatives, 24 slides, all
 synthetic (no field decks yet). Observed false positives across the whole
 corpus: 0 (0.00 per 10 slides on this corpus).
 
 | Gate | TP | FP | FN | Deck-level TN | Recall (95% LB) |
 |:----:|---:|---:|---:|---:|:---|
-| E1 | 3 | 0 | 0 | 15 | 3/3 (>= 37%) |
-| E2 | 2 | 0 | 0 | 16 | 2/2 (>= 22%) |
-| E3 | 1 | 0 | 0 | 17 | 1/1 (>= 5%) |
-| E4 | 2 | 0 | 0 | 16 | 2/2 (>= 22%) |
-| W1 | 1 | 0 | 0 | 17 | 1/1 (>= 5%) |
-| W6 | 1 | 0 | 0 | 17 | 1/1 (>= 5%) |
-| W8 | 1 | 0 | 0 | 17 | 1/1 (>= 5%) |
-| W15 | 1 | 0 | 0 | 17 | 1/1 (>= 5%) |
-| W16 | 1 | 0 | 0 | 17 | 1/1 (>= 5%) |
+| E1 | 4 | 0 | 0 | 16 | 4/4 (>= 47%) |
+| E2 | 2 | 0 | 0 | 18 | 2/2 (>= 22%) |
+| E3 | 1 | 0 | 0 | 19 | 1/1 (>= 5%) |
+| E4 | 2 | 0 | 0 | 18 | 2/2 (>= 22%) |
+| W1 | 1 | 0 | 0 | 19 | 1/1 (>= 5%) |
+| W6 | 1 | 0 | 0 | 19 | 1/1 (>= 5%) |
+| W8 | 1 | 0 | 0 | 19 | 1/1 (>= 5%) |
+| W15 | 1 | 0 | 0 | 19 | 1/1 (>= 5%) |
+| W16 | 1 | 0 | 0 | 19 | 1/1 (>= 5%) |
 
 Gates absent from the table have no positive fixture in the corpus yet (their
 behavior is covered by the unit/property suites, not by corpus ground truth).
