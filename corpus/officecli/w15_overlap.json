@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W15": 1
+  },
+  "notes": "two OfficeCLI text shapes placed at the same frame position so their first glyph lines fully occlude (estimated overlap 100%)",
+  "generator": "officecli",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

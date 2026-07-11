@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E2": 1
+  },
+  "notes": "one U+2014 used as prose punctuation in an OfficeCLI-authored run; no numeric-range context, so the exemption must not apply",
+  "generator": "officecli",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

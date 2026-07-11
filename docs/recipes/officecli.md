@@ -30,8 +30,11 @@ officecli add deck.pptx '/slide[1]' --type shape --prop text="한글 본문" --p
 archforge fix deck.pptx -o deck.pptx --lang en
 ```
 
-Both fixtures (defect and clean) ship in [../../corpus/officecli/](../../corpus/officecli/)
-with manifests enforced in CI, so this exact behavior cannot silently regress.
+An OfficeCLI fixture family ships in [../../corpus/officecli/](../../corpus/officecli/)
+with manifests enforced in CI: the default-theme E1 above, a clean pass with `font.ea`
+set, and OfficeCLI-authored reproductions of the other flagship classes (dash
+punctuation, sub-5pt text, Hangul tracking damage, frame collision, off-canvas
+overflow). None of this can silently regress.
 
 In an agent loop, the pattern is: author with OfficeCLI, then gate before delivery:
 

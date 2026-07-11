@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E4": 1
+  },
+  "notes": "positive tracking (a:rPr/@spc=300, 3pt) on a Hangul run via --prop spacing=3; font.ea is set so E1 stays quiet and the finding isolates tracking damage",
+  "generator": "officecli",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

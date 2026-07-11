@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W16": 1
+  },
+  "notes": "body frame anchored at x=11in with a long sentence on a 13.33in canvas, so estimated glyphs run 1.57in past the right edge",
+  "generator": "officecli",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}
