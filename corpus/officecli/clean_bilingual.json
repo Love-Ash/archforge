@@ -1,0 +1,6 @@
+{
+  "expected": {},
+  "notes": "negative fixture: same OfficeCLI structure with the East Asian slot set explicitly (--prop font.ea=\"Malgun Gothic\"), proving the author-with-OfficeCLI, gate-with-archforge pipeline composes to a clean pass",
+  "generator": "officecli",
+  "profile": "full"
+}

@@ -5,6 +5,10 @@
 > silent font fallback (Hangul-deep, CJK-aware), unreadable sizes, colliding frames,
 > off-canvas text, and AI-tell punctuation before a human sees a render.
 
+It is generator-independent: python-pptx, PptxGenJS, OfficeCLI, PowerPoint itself, or
+any other writer, the same file goes in and the same exit code comes out. Author with
+whatever tool fits your loop, then gate the built file with archforge before delivery.
+
 Quick use for agents: `pip install archforge`, then `archforge deck.pptx --profile full --json`.
 Ship condition: `summary.error_count == 0` AND `summary.incomplete == false`. Findings carry a
 `location` payload (shape id, absolute bbox in inches, paragraph/run, table cell, `related`

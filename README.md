@@ -61,7 +61,10 @@ The worst pptx defects are silent. No error is raised when:
 
 These are exactly the defects machine-generated decks produce, and exactly the ones
 an LLM cannot see in its own output. Archforge is the gate between "the build
-succeeded" and "a human would sign off on the render."
+succeeded" and "a human would sign off on the render." It is deliberately independent
+of the authoring side: whether the deck came from python-pptx, PptxGenJS, OfficeCLI,
+or PowerPoint itself, the same file goes in and the same exit code comes out, and the
+[public corpus](corpus/) keeps fixtures from all four writers to enforce that.
 
 ## Usage
 
@@ -79,6 +82,7 @@ file, and the JSON contract: **[docs/USAGE.md](docs/USAGE.md)**. Recipes:
 [Claude Code](docs/recipes/claude-code.md) ·
 [Codex/agents](docs/recipes/codex.md) ·
 [PptxGenJS](docs/recipes/pptxgenjs.md) ·
+[OfficeCLI](docs/recipes/officecli.md) ·
 [GitHub Actions](docs/recipes/github-actions.md).
 
 

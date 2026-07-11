@@ -58,7 +58,9 @@ archforge scan decks/ --profile full   # 파일·디렉터리·글롭 여러 개
 
 기계가 만든 덱이 내는 결함이 정확히 이것들이고, LLM이 자기 산출물에서 못 보는 것도
 정확히 이것들입니다. Archforge는 "빌드 성공"과 "사람이 렌더를 보고 서명"의 사이를
-지키는 게이트입니다.
+지키는 게이트입니다. 저작 도구와는 의도적으로 분리돼 있습니다: python-pptx든
+PptxGenJS든 OfficeCLI든 PowerPoint 자체든, 같은 파일이 들어가면 같은 exit code가
+나오고, [공개 코퍼스](corpus/)가 네 가지 작성기의 픽스처로 이를 강제합니다.
 
 ## 사용
 
@@ -76,6 +78,7 @@ JSON 계약: **[docs/USAGE.md](docs/USAGE.md)** (영문). 레시피:
 [Claude Code](docs/recipes/claude-code.md) ·
 [Codex/에이전트](docs/recipes/codex.md) ·
 [PptxGenJS](docs/recipes/pptxgenjs.md) ·
+[OfficeCLI](docs/recipes/officecli.md) ·
 [GitHub Actions](docs/recipes/github-actions.md).
 
 

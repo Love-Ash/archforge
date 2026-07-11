@@ -68,6 +68,28 @@ LibreOffice) may resolve fonts differently. Archforge performs a resource prefli
 `--timeout` bounds wall-clock time, but it is not a sandbox for hostile documents; see
 [SECURITY.md](../SECURITY.md).
 
+## Why the gate is a separate tool
+
+Archforge is deliberately not part of any authoring tool, and that is a design position,
+not an accident of history. Three reasons:
+
+1. **A generator grading its own output shares its own blind spots.** If the authoring
+   tool's writer leaves the theme ea slot empty, its checker was built by the same
+   people with the same model of what "correct" looks like. The corpus has a live
+   example: OfficeCLI 1.0.135's default deck with Hangul text ships an E1 blocker
+   ([corpus/officecli/](../corpus/officecli/)), and its own effective-font readback
+   models the latin slot only. An independent gate answers to a different ground truth:
+   PowerPoint's measured render behavior ([CALIBRATION.md](CALIBRATION.md)).
+2. **Preview engines are not the target renderer.** Tools that render their own HTML
+   preview resolve fonts with their own logic. The defect class E1 goes deepest on
+   (a non-empty theme ea beating the run's own a:latin) is a property of PowerPoint's
+   resolver specifically; a preview drawing the right font is not evidence PowerPoint
+   will.
+3. **The gate must outlive any one generator.** Pipelines swap authoring tools;
+   the acceptance criterion should not swap with them. Same file in, same exit code
+   out, regardless of what wrote the file, and the corpus keeps fixtures from four
+   writers (python-pptx, PptxGenJS, PowerPoint's own writer, OfficeCLI) to hold that.
+
 ## Per-rule pages
 
 Every rule has its own page under [docs/rules/](rules/) with its meaning, a fix, and the

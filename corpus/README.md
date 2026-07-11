@@ -22,6 +22,12 @@ python corpus/run_corpus.py     # lint every deck, compare against manifests, ex
 - `powerpoint-native/`: the python-pptx decks re-saved by real PowerPoint via COM
   (`gen_powerpoint_native.py`), so files written by PowerPoint's own writer (different
   normalization, part ordering) are covered.
+- `officecli/`: decks authored through the OfficeCLI binary (`gen_officecli.py`,
+  OfficeCLI 1.0.135), a third-party .NET writer. The defect fixture is OfficeCLI's own
+  defaults: its blank-document theme ships empty ea slots and `add shape` writes no run
+  `a:ea`, so a Hangul run lands on a Latin-only face (the E1 class). The clean fixture
+  sets `--prop font.ea` explicitly, proving the author-with-X, gate-with-archforge
+  pipeline composes.
 - `malformed/`: inputs that must produce a controlled outcome: a truncated package is
   a usage error, vertical text must mark the report incomplete instead of guessing.
 

@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E1": 1
+  },
+  "notes": "Hangul body on OfficeCLI 1.0.135 defaults: the blank-document theme ships empty ea slots and 'add shape' writes no run a:ea, so resolution falls through to a Latin-only face (guaranteed Malgun fallback). Font sizes are set explicitly to isolate E1.",
+  "generator": "officecli",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded via generator defaults)"
+}
