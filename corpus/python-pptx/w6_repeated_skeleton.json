@@ -1,8 +1,9 @@
 {
   "expected": {
-    "W6": 1
+    "W6": 1,
+    "W14": 1
   },
-  "notes": "the same 3-frame skeleton on 5 pages: the recycled-grid tell",
+  "notes": "the same 3-frame skeleton on 5 pages: the recycled-grid tell; English noun-phrase section titles also trip W14 under the English path",
   "generator": "python-pptx",
   "profile": "full",
   "ground_truth": "by construction (defect deliberately seeded)"

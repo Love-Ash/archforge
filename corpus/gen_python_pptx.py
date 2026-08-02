@@ -128,8 +128,8 @@ def main():
             _tb(s, 1, 0.8, 8, 0.6, "Section title %d" % i, size=24, ea="맑은 고딕")
             _tb(s, 1, 2.0, 6, 2.5, "Body block content", size=12, ea="맑은 고딕")
             _tb(s, 8, 2.0, 4, 2.5, "Side note block", size=12, ea="맑은 고딕")
-    emit("w6_repeated_skeleton", w6_repeated_skeleton, {"expected": {"W6": 1},
-         "notes": "the same 3-frame skeleton on 5 pages: the recycled-grid tell"})
+    emit("w6_repeated_skeleton", w6_repeated_skeleton, {"expected": {"W6": 1, "W14": 1},
+         "notes": "the same 3-frame skeleton on 5 pages: the recycled-grid tell; English noun-phrase section titles also trip W14"})
 
     def w14_en_nominal(p):
         for t in ("Market Overview", "Competitive Analysis", "Product Lineup",
