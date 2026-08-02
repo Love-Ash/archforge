@@ -8,9 +8,11 @@ fixtures and are documented in the CHANGELOG and ADRs (review-driven hardening; 
 independent third party has audited the project yet, and this page does not claim one
 has).
 
-Development is currently maintainer-led and fast. Roadmap issues (#5, #6) are tracking,
-not up-for-grabs work; contributor-scoped tasks are labeled `good first issue`. If you
-want to take one, comment first and it will be held for you.
+Development is currently maintainer-led and fast. Roadmap issue #5 is tracking, not
+up-for-grabs work; contributor-scoped tasks are labeled `good first issue`. If you want to
+take one, comment first and it will be held for you, and a held claim lapses after 14 days
+without visible progress so an issue never sits reserved indefinitely (see
+[CONTRIBUTING](../CONTRIBUTING.md)).
 
 ## Version sequence
 

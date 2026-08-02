@@ -9,6 +9,16 @@ is that it makes the linter's verdicts more *true*, not just bigger.
 > The single most valuable contribution regardless of phase is a false-positive
 > reproduction deck (see below) - those are never at risk of collision.
 
+## How long a claim is held
+
+A claim is held for **14 days without visible progress**, then the issue is unassigned
+and returns to the pool. This is a timer, not a judgment: life happens, no explanation is
+owed, and the claim is yours again whenever you ask.
+
+The commitment runs both ways for the same window. While your claim is live the maintainer
+stays out of that area so your branch does not get rebased out from under you, and that
+hold ends when the claim lapses. Saying "still on it" in the issue is enough to keep it.
+
 ## The one rule that shapes everything
 
 Gates are calibrated against **rendered output**, not the OOXML spec. If your

@@ -144,7 +144,7 @@ WARNs are advisory:
 | `W5` | No font size anywhere in the inheritance chain |
 | `W6` | Same layout skeleton on 4+ pages (tunable; template systems: tune or skip) |
 | `W7` | Low text-over-image contrast (needs `--render`) |
-| `W8` | Small CJK in narrow frames (device mockups, cards) |
+| `W8` | Small CJK in narrow frames, no wider than 4in (device mockups, cards) |
 | `W9` | Accent vertical bars repeated as list markers |
 | `W10` | Hand-drawn diagram cloned across pages |
 | `W11` | AI-tell copy: buzzwords, stock openings |
