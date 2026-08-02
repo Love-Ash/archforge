@@ -117,6 +117,10 @@ MESSAGES = {
         "ko": "텍스트가 이미지 경계에 걸침(안 %.0f%%, 잘려 보임 의심, 렌더 확인)",
         "en": "Text straddles an image ink edge (%.0f%% inside; may look clipped; verify on render)",
     },
+    "w19": {
+        "ko": "본문급 텍스트가 푸터 괘선 아래로 %.2fin 침범(푸터 존, 렌더 확인)",
+        "en": "Content-class text extends %.2fin below the footer rule (footer zone; verify on render)",
+    },
     "w18_page": {
         "ko": "일부 구간을 검사하지 못함(손상·비정형 속성): 이 페이지 결과는 불완전할 수 있음",
         "en": "Some spans on this page could not be checked (malformed/atypical attributes); results may be incomplete",
@@ -403,6 +407,7 @@ MESSAGES = {
     "fix_w16": {"ko": "내용을 캔버스 안으로. 장식 도형 블리드는 자동 제외됩니다", "en": "Pull content inside the canvas; decorative shape bleed is auto-excluded"},
     "fix_w17": {"ko": "캡션을 이미지 위나 밖으로 완전히 옮기세요", "en": "Move the caption fully on or off the image"},
     "fix_w18": {"ko": "검사 못 한 구간이 있습니다. stderr에서 원인을 보고 원본을 고친 뒤 재린트하세요. CI는 --fail-incomplete 권장", "en": "Part of the deck went unchecked; see stderr for why, fix the malformed source, re-lint. Use --fail-incomplete in CI"},
+    "fix_w19": {"ko": "본문을 푸터 괘선 위로 올리거나 간격을 줄여 하단 여유를 확보하세요", "en": "Move the content above the footer rule, or tighten spacing to restore bottom clearance"},
     "subcmd_conflict": {
         "ko": "archforge: 참고: 현재 폴더에 %r 파일이 있지만 서브커맨드를 실행합니다. 그 파일을 린트하려면 `archforge ./%s`",
         "en": "archforge: note: a file named %r exists here, but the subcommand runs. To lint that file use `archforge ./%s`",

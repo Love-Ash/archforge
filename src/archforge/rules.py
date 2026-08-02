@@ -28,6 +28,7 @@ RULES = {
     "W16": ("warning", "geometry",  "w16"),
     "W17": ("warning", "geometry",  "w17"),
     "W18": ("warning", "meta",      "w18_page"),
+    "W19": ("warning", "geometry",  "w19"),
 }
 
 ALL_CODES = frozenset(RULES)
@@ -55,6 +56,7 @@ TITLES = {
     "W16": "Text or picture ink off-canvas",
     "W17": "Text straddling a picture ink edge",
     "W18": "Some spans could not be checked (incomplete result)",
+    "W19": "Content-class text invading the footer zone",
 }
 
 # Profile = engine execution policy (since 0.3.1, excluded rules simply do not run).

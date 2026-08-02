@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased (branch `w19-footer-zone`, not shippable yet)
+
+Work in progress. Nothing here has met the CONTRIBUTING evidence bar, and this section
+must not ship as release notes until W19_CONTINUATION.md is closed out.
+
+- New rule W19 (warning, geometry), engine side only: content-class text (>10.5pt) whose
+  effective glyphs extend below a footer hairline = content invading the footer zone. A
+  bottom-band (top > 0.85H) hairline (<=0.05in thick, >=50% slide width, non-picture)
+  qualifies as a footer rule only when text glyphs sit fully below it, so text underlines
+  do not qualify; footers and page numbers (<=10.5pt) pass. Found live (2026-07-19): a
+  12.5pt so-what line pushed below the footer rule passed W12/W15-W17 because footers hold
+  no glyphs at that x and the frame never left the canvas.
+  Not done: no fixtures exist for this rule, `_footer_rules_y` reads pre-transform local
+  coordinates while the glyph boxes it compares against are absolute, no rule page or
+  README/SKILL/llms.txt entry exists, and the thresholds are unrecorded in CALIBRATION.md.
+- Guard in `contrast_check` against ink contamination of the background quantile
+  (measured live 2026-07-19: a 210pt amber divider numeral scored 1.0:1 against itself).
+  Not done: thresholds (0.06 luma, 20-sample floor, //6 margin, //32 ring step) are
+  unrecorded in CALIBRATION.md and no test covers either the guard or the ring fallback.
+  This changes the behaviour of a rule that shipped in 0.8.1, so it carries regression risk.
+
 ## 0.8.1 (2026-07-11)
 
 Consolidation plus the two presentation features. An external product audit of 0.8.0

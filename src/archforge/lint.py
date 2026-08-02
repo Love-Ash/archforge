@@ -67,6 +67,10 @@ WARN = informational (deployment still passes):
       is not checked (rejected after measured-by-render testing)
   W17 Text straddles the ink boundary of a non-background image (only 25-75% of the glyph is
       inside) = looks cropped. Fully on top of the image is W7's jurisdiction
+  W19 Content-class text (>10.5pt) whose glyphs extend below a footer hairline = content
+      invading the footer zone. The hairline qualifies as a footer only when text glyphs sit
+      fully below it (footers/page numbers <=10.5pt pass). Glyph-overlap gates cannot see
+      this (footers hold no glyphs at that x), reproduced on a live deck 2026-07-19
   W5 Font size found nowhere in the run, paragraph, or inheritance chain (only when the whole
      chain is silent)
   W18 Some region could not be checked due to corrupted or non-standard attributes: the result
@@ -910,6 +914,60 @@ def footer_check(foot_tops, warns):
         warns.append(Finding(0, "W12", "w12", (base, len(off)), ex))
 
 
+def _footer_rules_y(slide, sw, sh):
+    """Candidate footer hairlines (in inches): thin (<=0.05in) horizontal bars spanning at
+    least half the slide width, sitting in the bottom band (top > 0.85H). Pictures are
+    excluded (a photo strip is not a rule). Underline-decoration false positives are culled
+    by the caller, which requires text glyphs below the bar before treating it as a footer
+    rule (2026-07-19, reproduced on a live deck: a so-what line pushed below the footer rule
+    passed every glyph-overlap gate because footers hold no glyphs at that x)."""
+    ys = []
+    for sp in iter_shapes(slide.shapes):
+        try:
+            if getattr(sp, "shape_type", None) == MSO_SHAPE_TYPE.PICTURE:
+                continue
+            t, w, h = sp.top, sp.width, sp.height
+        except Exception:
+            continue
+        if t is None or w is None or h is None:
+            continue
+        if h / EMU_PER_IN > 0.05 or w < 0.5 * sw or t <= 0.85 * sh:
+            continue
+        ys.append(t / EMU_PER_IN)
+    return sorted(ys)
+
+
+def footer_zone_check(slide, si, sw_in, sh_in, warns, boxes):
+    """W19: content-class text invading the footer zone. For each qualified footer rule
+    (a bottom-band hairline with at least one text glyph box fully below it = the footer
+    itself), flag text whose glyphs extend below the rule while being bigger than
+    footer/caption class (>10.5pt). Footers, page numbers, and mockup captions (<=10.5pt)
+    pass; a 12.5pt so-what line pushed under the rule fires. WARN, at most 2 per page."""
+    rules_y = _footer_rules_y(slide, sw_in * EMU_PER_IN, sh_in * EMU_PER_IN)
+    if not rules_y or not boxes:
+        return
+    hits = 0
+    for ry in rules_y:
+        has_footer_text = any(b.y0 >= ry - 0.03 for b in boxes)
+        if not has_footer_text:
+            continue   # an underline decoration, not a footer rule
+        for b in boxes:
+            if hits >= 2:
+                return
+            if b.y1 <= ry + 0.03:
+                continue
+            if b.max_pt is not None and b.max_pt <= 10.5:
+                continue
+            loc = shape_loc(b.sp, bbox=[b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0],
+                            cell=b.cell) if b.sp is not None else None
+            warns.append(Finding(si, "W19", "w19", (b.y1 - ry,),
+                                 "%r (rule y=%.2fin)" % (b.rep, ry), loc=loc,
+                                 data={"confidence": "estimate",
+                                       "evidence_source": "xml_geometry",
+                                       "render_confirmed": False}))
+            hits += 1
+
+
 _EFFECT_TAGS = tuple(NS + t for t in ("outerShdw", "innerShdw", "glow", "reflection"))
 _3D_TAGS = tuple(NS + t for t in ("sp3d", "scene3d"))
 
@@ -1703,6 +1761,26 @@ def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors
         if not lumas:
             continue
         L_txt = _luma(txt_rgb)
+        # Ink contamination guard (measured live 2026-07-19: a 210pt amber divider numeral
+        # scored 1.0:1 against itself). Display-size glyphs put enough ink pixels in the
+        # frame that the quantile "background" lands on the text color, so ink-luma pixels
+        # are excluded from the background sample first. When almost nothing remains, the
+        # background is either genuinely at the text luma (real low contrast) or the glyphs
+        # fill the frame entirely; the surrounding band disambiguates: a band at the text
+        # luma keeps the finding, a contrasting band clears it.
+        non_ink = [v for v in lumas if abs(v - L_txt) >= 0.06]
+        if len(non_ink) >= 20:
+            lumas = non_ink
+        else:
+            mx_px = max(12, (x1 - x0) // 6); my_px = max(12, (y1 - y0) // 6)
+            ex0, ey0 = max(0, x0 - mx_px), max(0, y0 - my_px)
+            ex1, ey1 = min(PW, x1 + mx_px), min(PH, y1 + my_px)
+            esx = max(1, (ex1 - ex0) // 32); esy = max(1, (ey1 - ey0) // 32)
+            ring = sorted(_luma(px[x, y]) for x in range(ex0, ex1, esx)
+                          for y in range(ey0, ey1, esy)
+                          if not (x0 <= x < x1 and y0 <= y < y1))
+            if len(ring) >= 20:
+                lumas = ring
         # Background luma is taken from the quantile at the opposite extreme of the text
         # color: this measures worst-case local contrast (WCAG is based on the worst case)
         # and avoids mean contamination from mixed-in text ink (dark 15th percentile for light
@@ -1931,6 +2009,12 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             except Exception as e:
                 skipped["w15"] += 1
                 print("W15 skipped p%02d: %s" % (si, e), file=sys.stderr)
+        if "W19" not in excl and tboxes is not None:
+            try:
+                footer_zone_check(slide, si, sw_in, sh_in, warns, boxes=tboxes)
+            except Exception as e:
+                skipped["w19"] += 1
+                print("W19 skipped p%02d: %s" % (si, e), file=sys.stderr)
         try:
             overflow_check(slide, si, sw_in, sh_in, warns,
                            boxes=tboxes if tboxes is not None else [],
@@ -2482,9 +2566,10 @@ def main():
 _REASON_RULES = {
     "vertical_text": (["W15", "W16", "W17"], "geometry"),
     "complex_script": (["W15", "W16", "W17"], "geometry"),
-    "glyph_boxes": (["W15", "W16", "W17"], "geometry"),
+    "glyph_boxes": (["W15", "W16", "W17", "W19"], "geometry"),
     "pic_boxes": (["W16", "W17"], "geometry"),
     "w15": (["W15"], "geometry"),
+    "w19": (["W19"], "geometry"),
     "w16_w17": (["W16", "W17"], "geometry"),
     "image_decode": (["W16", "W17"], "geometry"),
     "image_decode_budget": (["W16", "W17"], "geometry"),

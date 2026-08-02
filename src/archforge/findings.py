@@ -39,6 +39,7 @@ _DATA_FIELDS = {
     "w15": ("overlap_pct",),
     "w16": ("overflow_in",),
     "w17": ("inside_pct",),
+    "w19": ("below_in",),
 }
 
 
