@@ -35,6 +35,11 @@ jobs:
           git diff --exit-code docs/ACCURACY.md
       - name: Version references are consistent
         run: python scripts/check_version_consistency.py
+      - name: Rule inventory matches the registry
+        run: |
+          python scripts/check_rule_docs.py
+          python scripts/make_rule_docs.py
+          git diff --exit-code docs/rules
 
   package:
     # 배포 회귀 게이트: wheel에 스킬팩이 실제로 동봉되고, 설치본에서 skill 서브커맨드와
