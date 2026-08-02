@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W14": 1
+  },
+  "notes": "positive W14-EN fixture: English noun-phrase titles across pages",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

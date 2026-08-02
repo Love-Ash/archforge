@@ -182,11 +182,13 @@ Pairs each check with the script of the text run (Unicode code point, determinis
   decks measured.
 - W13 effects: an empty effectLst with no children exists to block inheritance and is not
   counted. Aggregated once per deck (firing repeatedly per page is noise).
-- W14 action titles: fires once per deck when 3 or more Hangul titles are noun phrases and
-  they make up half or more of all titles. In addition to the sentence-ending heuristic, a
-  title containing a number + unit ("3x", "42%", "12 billion") is recognized as an assertion
-  even if it ends in a noun (0.2.0). Editorial/portfolio-showcase decks should use
-  `--skip W14`.
+- W14 action titles: fires once per deck when 3 or more eligible titles are noun phrases and
+  they make up half or more of all eligible titles. Hangul titles use the sentence-ending
+  heuristic; English titles use a finite-verb allowlist or number+unit (W14-EN). A title
+  containing a number + unit ("3x", "42%", "$12 million") is recognized as an assertion even
+  if it ends in a noun (0.2.0; English path mirrors this). Prefer false negatives on
+  editorial headlines. Editorial/portfolio-showcase decks should use `--skip W14` or
+  `--profile editorial`.
 
 ## Robustness policy
 

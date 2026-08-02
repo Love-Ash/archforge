@@ -1,0 +1,7 @@
+{
+  "expected": {},
+  "notes": "negative W14-EN fixture: finite verb or number+unit counts as a claim",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}
