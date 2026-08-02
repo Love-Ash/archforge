@@ -131,6 +131,26 @@ def main():
     emit("w6_repeated_skeleton", w6_repeated_skeleton, {"expected": {"W6": 1},
          "notes": "the same 3-frame skeleton on 5 pages: the recycled-grid tell"})
 
+    def w14_en_nominal(p):
+        for t in ("Market Overview", "Competitive Analysis", "Product Lineup",
+                  "Expansion Strategy", "Financial Plan", "Next Steps Summary"):
+            s = p.slides.add_slide(p.slide_layouts[6])
+            _tb(s, 1, 0.8, 9, 0.8, t, size=26, ea="맑은 고딕")
+            _tb(s, 1, 2.2, 10, 3, "Supporting body copy", size=12, ea="맑은 고딕")
+    emit("w14_en_nominal", w14_en_nominal, {"expected": {"W14": 1},
+         "notes": "positive W14-EN fixture: English noun-phrase titles across pages"})
+
+    def w14_en_action(p):
+        for t in ("Market grows 18% on subscriptions", "Revenue reaches $12 million",
+                  "Costs fall 8pp year over year", "Retention improves 2x",
+                  "Margin expands after price cuts", "Pipeline adds 40% coverage"):
+            s = p.slides.add_slide(p.slide_layouts[6])
+            _tb(s, 1, 0.8, 9, 0.8, t, size=26, ea="맑은 고딕")
+            _tb(s, 1, 2.2, 10, 3, "Supporting body copy", size=12, ea="맑은 고딕")
+    emit("w14_en_action", w14_en_action, {"expected": {},
+         "notes": "negative W14-EN fixture: finite verb or number+unit counts as a claim"})
+
+
 
 if __name__ == "__main__":
     main()

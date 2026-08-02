@@ -1485,32 +1485,72 @@ def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
                                    "render_confirmed": False}))
 
 
+# English finite-verb forms that mark a claim-style title. Prefer false negatives over
+# false positives: copulas/auxiliaries and ambiguous noun/verb homographs are omitted.
+# Measured against the issue fixtures (noun-phrase decks fire; verb/number+unit decks do not).
+_EN_CLAIM_VERBS = frozenset({
+    "grows", "grew", "rises", "rose", "falls", "fell", "jumps", "jumped",
+    "drives", "drove", "reaches", "reached", "beats", "misses", "missed",
+    "expands", "expanded", "cuts", "gains", "gained", "loses", "lost",
+    "improves", "improved", "declines", "declined", "surges", "surged",
+    "drops", "dropped", "hits", "tops", "topped", "leads", "led", "lags",
+    "lagged", "remains", "remained", "continues", "continued", "accelerates",
+    "accelerated", "slows", "slowed", "climbs", "climbed", "slides", "slid",
+    "boosts", "boosted", "lifts", "lifted", "shrinks", "shrank", "narrows",
+    "narrowed", "widens", "widened", "outpaces", "outpaced", "outperforms",
+    "outperformed", "underperforms", "underperformed", "adds", "added",
+    "opens", "opened", "closes", "closed", "launches", "launched", "ships",
+    "shipped", "wins", "won", "fails", "failed", "holds", "held", "keeps",
+    "kept", "sets", "set", "breaks", "broke", "posts", "posted", "reports",
+    "reported", "delivers", "delivered", "fuels", "fueled", "fuelled",
+})
+
+
+def _en_is_claim(title):
+    """English W14 claim signal: finite verb from a measured allowlist, or number+unit.
+    Bare noun phrases return False. Prefer false negatives on editorial headlines."""
+    if "?" in title or "!" in title:
+        return True
+    # number + unit (%, pp/bp, x multiplier, currency); keeps the Korean contract's spirit
+    if re.search(
+        r"(?:[$€£]\s*[0-9]|[0-9][0-9,.]*\s*(?:%|pp|bp|[xX]|million|billion|thousand|percent))",
+        title,
+    ):
+        return True
+    words = re.findall(r"[A-Za-z]+", title)
+    return any(w.lower() in _EN_CLAIM_VERBS for w in words)
+
+
 def action_title_check(titles, warns):
     """W14: a majority of titles are descriptive noun phrases (e.g. "Market Overview,"
     "Competitive Analysis") = not action titles (the MBB idea that reading only the titles
-    should carry the argument). Because this uses a sentence-ending heuristic, there can be
-    false negatives that misjudge a phrase as a claim (e.g. a noun ending in "da" like "bada"
-    [sea]), but false positives are kept narrow: fires once per deck only when 3+ Hangul
-    titles are noun phrases and they make up at least half of all titles."""
+    should carry the argument). Hangul titles use a sentence-ending heuristic; English
+    titles use a finite-verb allowlist or number+unit (see `_en_is_claim`). False positives
+    are kept narrow: fires once per deck only when 3+ eligible titles are noun phrases and
+    they make up at least half of all eligible titles. Gate: full profile (editorial skips)."""
     entries = []
     for si in sorted(titles):
         txt = " ".join(titles[si][1]).strip()
         chars = [c for c in txt if not c.isspace()]
-        cjk_n = sum(1 for c in chars if is_cjk(c))
-        # Excludes titles with fewer than 3 Hangul characters or under 30% Hangul share: this
-        # filters out big-stat numbers ("3M+ 18.3%") and short brand names that were being
-        # mistaken for titles (measured in the 50-deck scan), as well as English titles.
-        if len(chars) < 4 or cjk_n < 3 or cjk_n < 0.3 * len(chars):
+        if len(chars) < 4:
             continue
-        core = txt.rstrip(" ?!.…”’")
-        # A title with a number+unit embedded (e.g. "Revenue Grows 3x") is a claim-style
-        # headline even if it ends in a noun: fixes a case where a judgment based on the
-        # sentence ending alone misclassified such titles as noun phrases (external review,
-        # 2026-07-10).
-        numeric_claim = bool(re.search(r"[0-9][0-9,.]*\s*(%|배|억|조|만|천|pp|bp|x|X|원|건|명|개)", txt))
-        claim = ("?" in txt or "!" in txt or numeric_claim
-                 or core.endswith(("다", "까", "요", "자", "죠", "함", "임")))
-        entries.append((si, txt, claim))
+        cjk_n = sum(1 for c in chars if is_cjk(c))
+        latin_n = sum(1 for c in chars if ("A" <= c <= "Z") or ("a" <= c <= "z"))
+        # Hangul path: excludes titles with fewer than 3 Hangul characters or under 30%
+        # Hangul share (big-stat numbers / short brand names; measured in the 50-deck scan).
+        if cjk_n >= 3 and cjk_n >= 0.3 * len(chars):
+            core = txt.rstrip(" ?!.…”’")
+            # A title with a number+unit embedded (e.g. "Revenue Grows 3x") is a claim-style
+            # headline even if it ends in a noun (external review, 2026-07-10).
+            numeric_claim = bool(re.search(
+                r"[0-9][0-9,.]*\s*(%|배|억|조|만|천|pp|bp|x|X|원|건|명|개)", txt))
+            claim = ("?" in txt or "!" in txt or numeric_claim
+                     or core.endswith(("다", "까", "요", "자", "죠", "함", "임")))
+            entries.append((si, txt, claim))
+            continue
+        # English path: mostly Latin, little CJK. Same majority gate as Korean.
+        if latin_n >= 4 and latin_n >= 0.6 * len(chars) and cjk_n < 3:
+            entries.append((si, txt, _en_is_claim(txt)))
     nominal = [(si, t) for si, t, c in entries if not c]
     if len(nominal) >= 3 and len(nominal) * 2 >= len(entries):
         ex = " ".join("p%d'%s'" % (si, t[:14]) for si, t in nominal[:4])

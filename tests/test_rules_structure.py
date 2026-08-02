@@ -164,6 +164,41 @@ def test_w14_numeric_claim_titles_pass(tmp_path):
     _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert "W14" not in codes(warns), by_code(warns, "W14")
 
+def test_w14_en_nominal_titles_fire(tmp_path):
+    """English noun-phrase titles across pages: W14 fires under the full profile."""
+    p = new_prs()
+    for t in ("Market Overview", "Competitive Analysis", "Product Lineup",
+              "Expansion Strategy", "Financial Plan", "Next Steps Summary"):
+        s = add_slide(p)
+        tb(s, 1, 0.8, 9, 0.8, t, font="Wanted Sans", size=26)
+        tb(s, 1, 2.2, 10, 3, "Supporting body copy", font="Wanted Sans", size=12)
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
+    assert "W14" in codes(warns)
+
+def test_w14_en_action_titles_pass(tmp_path):
+    """English titles with a finite verb or number+unit are claims: W14 stays silent."""
+    p = new_prs()
+    for t in ("Market grows 18% on subscriptions", "Revenue reaches $12 million",
+              "Costs fall 8pp year over year", "Retention improves 2x",
+              "Margin expands after price cuts", "Pipeline adds 40% coverage"):
+        s = add_slide(p)
+        tb(s, 1, 0.8, 9, 0.8, t, font="Wanted Sans", size=26)
+        tb(s, 1, 2.2, 10, 3, "Supporting body copy", font="Wanted Sans", size=12)
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
+    assert "W14" not in codes(warns), by_code(warns, "W14")
+
+def test_profile_editorial_drops_w14_en(tmp_path):
+    """Editorial profile skips W14 for English nominal decks (same gate as Korean)."""
+    p = new_prs()
+    for t in ("Market Overview", "Competitive Analysis", "Product Lineup",
+              "Expansion Strategy", "Financial Plan", "Next Steps Summary"):
+        s = add_slide(p)
+        tb(s, 1, 0.8, 9, 0.8, t, font="Wanted Sans", size=26)
+        tb(s, 1, 2.2, 10, 3, "Supporting body copy", font="Wanted Sans", size=12)
+    path = save(p, tmp_path, "fx.pptx")
+    doc = json.loads(run_cli([path, "--json", "--profile", "editorial"]).stdout)
+    assert not any(w["code"] == "W14" for w in doc["warnings"])
+
 
 # ---------------------------------------------------------------- geometry gates
 
