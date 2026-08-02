@@ -17,6 +17,7 @@ import io
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 from collections import Counter, defaultdict
@@ -24,6 +25,18 @@ from collections import Counter, defaultdict
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORPUS = os.path.join(ROOT, "corpus")
 OUT = os.path.join(ROOT, "docs", "ACCURACY.md")
+
+
+def _version():
+    """The archforge version these numbers were measured with. Read from the source
+    rather than imported, so the generator has no import side effects, and stamped into
+    the document because a verification record that does not say what produced it cannot
+    be checked. It also means the CI drift gate fails after a version bump until the
+    table is regenerated, which is the intended forcing function at release time."""
+    path = os.path.join(ROOT, "src", "archforge", "__init__.py")
+    with io.open(path, encoding="utf-8") as f:
+        m = re.search(r'__version__ = "([^"]+)"', f.read())
+    return m.group(1) if m else "unknown"
 
 
 def _cli(args):
@@ -124,10 +137,12 @@ def main():
         "per-gate samples are tiny; the exact one-sided 95% lower bound below shows how",
         "little a small perfect score proves (1/1 -> 5%, 3/3 -> 37%).",
         "",
-        "Corpus: %d decks, %d generator families, %d clean negatives, %d slides, all"
-        % (n_decks, len(generators), n_negative, total_slides),
-        "synthetic (no field decks yet). Observed false positives across the whole",
-        "corpus: %d (%.2f per 10 slides on this corpus)." % (total_fp, fp_per_10),
+        "Measured with archforge %s. Corpus: %d decks, %d generator families, %d clean"
+        % (_version(), n_decks, len(generators), n_negative),
+        "negatives, %d slides, all synthetic (no field decks yet). Observed false"
+        % total_slides,
+        "positives across the whole corpus: %d (%.2f per 10 slides on this corpus)."
+        % (total_fp, fp_per_10),
         "",
         "| Gate | TP | FP | FN | Deck-level TN | Recall (95% LB) |",
         "|:----:|---:|---:|---:|---:|:---|",
