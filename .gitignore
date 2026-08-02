@@ -1,24 +1,29 @@
+# Python
 __pycache__/
 *.pyc
 *.egg-info/
-dist/
-build/
 .pytest_cache/
+.hypothesis/
 .venv/
-*.pptx
 
+# Build and distribution artifacts. dist_sdist* holds sdists unpacked for release
+# checks; the 0.7.0 one was tracked and pushed before this pattern existed.
+build/
+dist/
+dist_rc/
+dist_sdist*/
+
+# Decks are ignored by default; the committed fixtures are re-included below.
+*.pptx
+!examples/*.pptx
+!corpus/**/*.pptx
+
+# Local working files, not part of the published project.
 Trash Can/
 out.txt
-dist/
-build/
-*.egg-info/
-__pycache__/
-.pytest_cache/
+RELEASE_CHECKLIST.md
 
-dist_rc/
-!examples/*.pptx
-
-!corpus/**/*.pptx
+# The corpus generators are committed; the npm tree they need is not.
 corpus/node_modules/
 corpus/package-lock.json
 corpus/package.json
