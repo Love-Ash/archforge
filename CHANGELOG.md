@@ -1,5 +1,17 @@
 # Changelog
 
+Two notes for reading this file.
+
+Several entries credit a review, and some call it an external review, for the findings they
+fix. None of those was an independent third-party audit. They were adversarial review passes
+whose findings were verified against the code and reproduced as fixtures, which is what the
+0.7.1 and 0.8.1 entries say in their own words. The looser wording in the earlier entries
+predates that correction and is left as written rather than quietly edited afterwards.
+
+Two versions below never shipped. 0.2.1 and 0.3.1 have entries here but were superseded the
+same day they were written: 0.2.1 has no tag, 0.3.1 has a tag but no GitHub release, and
+neither reached PyPI. Every other version in this file is installable.
+
 ## 0.8.1 (2026-07-11)
 
 Consolidation plus the two presentation features. An external product audit of 0.8.0
