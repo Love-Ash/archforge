@@ -187,6 +187,35 @@ def test_w14_en_action_titles_pass(tmp_path):
     _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert "W14" not in codes(warns), by_code(warns, "W14")
 
+
+def test_w14_en_verb_only_action_titles_pass(tmp_path):
+    """Verb-allowlist branch alone (no digits) keeps W14 silent."""
+    p = new_prs()
+    for title in (
+        "Margin expands after price cuts",
+        "Pipeline grows after relaunch",
+        "Retention improves after redesign",
+        "Demand accelerates after launch",
+        "Costs fall on lower freight",
+        "Share gains after expansion",
+    ):
+        s = add_slide(p)
+        tb(s, 1, 0.8, 9, 0.8, title, font="Wanted Sans", size=26)
+        tb(s, 1, 2.2, 10, 3, "Supporting body copy", font="Wanted Sans", size=12)
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
+    assert "W14" not in codes(warns), by_code(warns, "W14")
+
+
+def test_w14_en_clean_structural_titles_pass(tmp_path):
+    """Cover/divider/closing structural titles must not trip W14 on a clean deck."""
+    p = new_prs()
+    for title in ("Clean title page", "Second layout", "Closing page"):
+        s = add_slide(p)
+        tb(s, 1, 0.8, 9, 0.8, title, font="Wanted Sans", size=26)
+        tb(s, 1, 2.2, 10, 3, "Readable body text at normal size.", font="Wanted Sans", size=13)
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
+    assert "W14" not in codes(warns), by_code(warns, "W14")
+
 def test_profile_editorial_drops_w14_en(tmp_path):
     """Editorial profile skips W14 for English nominal decks (same gate as Korean)."""
     p = new_prs()
