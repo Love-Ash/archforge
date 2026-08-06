@@ -1489,7 +1489,7 @@ def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
 # false positives: copulas/auxiliaries and ambiguous noun/verb homographs are omitted.
 # Measured against the issue fixtures (noun-phrase decks fire; verb/number+unit decks do not).
 _EN_CLAIM_VERBS = frozenset({
-    "grows", "grew", "rises", "rose", "falls", "fell", "jumps", "jumped",
+    "grows", "grew", "rises", "rose", "fall", "falls", "fell", "jumps", "jumped",
     "drives", "drove", "reaches", "reached", "beats", "misses", "missed",
     "expands", "expanded", "cuts", "gains", "gained", "loses", "lost",
     "improves", "improved", "declines", "declined", "surges", "surged",
@@ -1504,6 +1504,46 @@ _EN_CLAIM_VERBS = frozenset({
     "kept", "sets", "set", "breaks", "broke", "posts", "posted", "reports",
     "reported", "delivers", "delivered", "fuels", "fueled", "fuelled",
 })
+
+
+
+# Structural English titles that should not enter the W14 eligibility pool.
+# Cover/section/closing slides are noun phrases by nature; counting them would
+# fire W14 on any three-slide deck with a title page and divider.
+_EN_STRUCTURAL_TITLES = frozenset({
+    "cover", "title", "title page", "clean title page", "agenda", "introduction",
+    "overview", "appendix", "thank you", "thanks", "q&a", "q and a", "qa",
+    "closing", "closing page", "second layout", "contents", "table of contents",
+    "toc", "outline", "references", "bibliography", "the end", "end",
+    "summary", "background", "agenda overview",
+})
+
+
+def _en_title_key(title: str) -> str:
+    key = re.sub(r"\s+", " ", title.strip().lower())
+    key = re.sub(r"[^a-z0-9 &]+", "", key).strip()
+    return key
+
+
+def _en_eligible_title(title: str, chars, latin_n: int, cjk_n: int) -> bool:
+    """Whether an English title is substance enough for the W14 majority pool.
+
+    Hangul eligibility is a content share test; English needs more than "is Latin"
+    so cover/divider/closing slides do not flood the pool on clean decks.
+    """
+    if cjk_n >= 3:
+        return False
+    if latin_n < 4 or latin_n < 0.6 * len(chars):
+        return False
+    if _en_title_key(title) in _EN_STRUCTURAL_TITLES:
+        return False
+    words = re.findall(r"[A-Za-z]{2,}", title)
+    # Need either multi-word substance or enough letters that it is not a label.
+    if len(words) >= 2 and sum(len(w) for w in words) >= 10:
+        return True
+    if len(words) >= 3:
+        return True
+    return False
 
 
 def _en_is_claim(title):
@@ -1525,9 +1565,12 @@ def action_title_check(titles, warns):
     """W14: a majority of titles are descriptive noun phrases (e.g. "Market Overview,"
     "Competitive Analysis") = not action titles (the MBB idea that reading only the titles
     should carry the argument). Hangul titles use a sentence-ending heuristic; English
-    titles use a finite-verb allowlist or number+unit (see `_en_is_claim`). False positives
-    are kept narrow: fires once per deck only when 3+ eligible titles are noun phrases and
-    they make up at least half of all eligible titles. Gate: full profile (editorial skips)."""
+    titles use a finite-verb allowlist or number+unit (see `_en_is_claim`). English
+    structural titles (cover, agenda, appendix, closing, …) are not eligible, so a
+    clean three-slide deck with a title page and divider does not false-fire.
+    Prefer false negatives on ambiguous verb/noun forms. Fires once per deck only
+    when 3+ eligible titles are noun phrases and they make up at least half of
+    eligible titles. Gate: full profile (editorial skips)."""
     entries = []
     for si in sorted(titles):
         txt = " ".join(titles[si][1]).strip()
@@ -1548,8 +1591,8 @@ def action_title_check(titles, warns):
                      or core.endswith(("다", "까", "요", "자", "죠", "함", "임")))
             entries.append((si, txt, claim))
             continue
-        # English path: mostly Latin, little CJK. Same majority gate as Korean.
-        if latin_n >= 4 and latin_n >= 0.6 * len(chars) and cjk_n < 3:
+        # English path: content-eligible Latin titles only (not structural covers).
+        if _en_eligible_title(txt, chars, latin_n, cjk_n):
             entries.append((si, txt, _en_is_claim(txt)))
     nominal = [(si, t) for si, t, c in entries if not c]
     if len(nominal) >= 3 and len(nominal) * 2 >= len(entries):
