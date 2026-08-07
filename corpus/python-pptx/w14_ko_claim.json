@@ -1,0 +1,7 @@
+{
+  "expected": {},
+  "notes": "negative W14 Hangul fixture: declarative, polite, propositive and interrogative endings all count as claims. This one also passes on the pre-2026-08-07 code, so it proves nothing about the noun-collision fix; it is the regression guard against a future rewrite that enumerates endings instead of nouns, which would read these as noun phrases and fire on a deck of real claims",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

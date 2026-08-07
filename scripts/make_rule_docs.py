@@ -28,7 +28,7 @@ MEANING = {
     "W11": "AI-tell copy: buzzword clusters anywhere, stock opening cliches on the first pages.",
     "W12": "Footer baselines drift from the dominant baseline across pages: an alignment slip.",
     "W13": "Native PowerPoint shadow/glow/3D effects (2+ on a page): reads dated.",
-    "W14": "Most titles are nominal phrases rather than claims. Hangul titles use a sentence-ending heuristic; English titles count a finite verb (measured allowlist) or number+unit as a claim. Structural English titles (cover, agenda, appendix, …) are not eligible. Prefer false negatives on ambiguous verb/noun forms. Read the --ghost list top to bottom: it should tell a story.",
+    "W14": "Most titles are nominal phrases rather than claims. Hangul titles use a sentence-ending heuristic minus the nouns whose last syllable collides with one (개요, 투자, 사용자, 게임); English titles count a finite verb (measured allowlist) or number+unit as a claim. Structural titles are not eligible in either language (cover, agenda, appendix / 표지, 목차, 감사합니다). Prefer false negatives on ambiguous verb/noun forms. Read the --ghost list top to bottom: it should tell a story.",
     "W15": "The effective glyph areas of two text frames overlap beyond 45% of the smaller one: occlusion or collision. Verify on a render; drop caps and echo typography are auto-excluded.",
     "W16": "Text glyphs or picture ink extend past the canvas edge beyond tolerance. Decorative shape bleed is auto-excluded.",
     "W17": "Text straddles a picture's ink edge (25-75% inside): it will look clipped or split. Captions fully on cards are auto-excluded.",

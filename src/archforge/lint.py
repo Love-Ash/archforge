@@ -1561,16 +1561,80 @@ def _en_is_claim(title):
     return any(w.lower() in _EN_CLAIM_VERBS for w in words)
 
 
+# Cover / divider / closing slides in Korean decks. A structural slide is not part of the
+# deck's argument, so counting it inflates W14 on both sides of the ratio. Mirrors
+# _EN_STRUCTURAL_TITLES, which landed for English in #9.
+_KO_STRUCTURAL_TITLES = frozenset({
+    "표지", "목차", "차례", "부록", "별첨", "감사합니다", "감사", "질의응답", "질의 응답",
+    "마무리", "맺음말", "끝", "참고문헌", "참고 문헌", "출처", "회사소개", "회사 소개",
+    "들어가며", "시작하며", "목차 및 구성", "발표를 마칩니다", "이상입니다",
+    "경청해 주셔서 감사합니다",
+})
+
+# Korean nouns whose last syllable is also a sentence ending. The ending test cannot tell
+# 개요 (an overview) from 해요 (a predicate), so the collisions are listed rather than
+# guessed at, the way the rule already carried a note about 바다.
+#
+# The list is incomplete on purpose and safe to leave that way: -자 is a productive agent
+# suffix, so no hand-written list keeps up with it, and a word that is absent simply keeps
+# the previous reading (counted as a claim, rule stays quiet). Every residual miss
+# therefore lands on the false-negative side, which is the side W14 is supposed to err on.
+# Words that can also be predicates in a title (가요, 포함, 약함, 이자) are deliberately
+# left out: listing them would move errors to the firing side.
+_KO_NOUN_FINALS = frozenset({
+    "개요", "필요", "중요", "주요", "수요", "소요", "강요", "동요",
+    "투자자", "사용자", "소비자", "참가자", "참여자", "가입자", "이용자", "구독자",
+    "시청자", "개발자", "경영자", "창업자", "실무자", "담당자", "책임자", "관리자",
+    "신청자", "응답자", "협력자", "수혜자", "지원자", "후보자", "방문자", "구매자",
+    "판매자", "근로자", "노동자", "종사자", "대상자", "경쟁자", "설계자", "운영자",
+    "제작자", "독자", "저자", "기자", "학자", "환자",
+    "투자", "숫자", "글자", "문자", "의자", "모자", "상자", "전자", "한자",
+    "게임", "모임", "책임", "쓰임",
+    "바다", "소다",
+})
+
+# Sentence-final interrogatives written without a question mark. Recognising these moves a
+# title out of the nominal count, which lowers the firing rate, so they are safe to add.
+_KO_INTERROGATIVE_SUFFIX = ("인가", "는가", "은가", "던가", "을까")
+
+_KO_SENTENCE_ENDINGS = ("다", "까", "요", "자", "죠", "함", "임")
+_KO_NUMERIC_CLAIM = re.compile(
+    r"[0-9][0-9,.]*\s*(%|배|억|조|만|천|pp|bp|x|X|원|건|명|개)")
+
+
+def _ko_title_key(title):
+    return re.sub(r"\s+", " ", title.strip()).rstrip(" ?!.…”’")
+
+
+def _ko_is_claim(title):
+    """Hangul W14 claim signal: a question, a number+unit, a sentence-final interrogative,
+    or a sentence ending that is not the tail of a known noun.
+
+    The number+unit branch is there because a title like "매출 3배 성장" is a claim-style
+    headline even though it ends in a noun (external review, 2026-07-10)."""
+    if "?" in title or "!" in title:
+        return True
+    if _KO_NUMERIC_CLAIM.search(title):
+        return True
+    core = _ko_title_key(title)
+    if core.endswith(_KO_INTERROGATIVE_SUFFIX):
+        return True
+    if not core.endswith(_KO_SENTENCE_ENDINGS):
+        return False
+    return core.split(" ")[-1] not in _KO_NOUN_FINALS
+
+
 def action_title_check(titles, warns):
     """W14: a majority of titles are descriptive noun phrases (e.g. "Market Overview,"
     "Competitive Analysis") = not action titles (the MBB idea that reading only the titles
-    should carry the argument). Hangul titles use a sentence-ending heuristic; English
-    titles use a finite-verb allowlist or number+unit (see `_en_is_claim`). English
-    structural titles (cover, agenda, appendix, closing, …) are not eligible, so a
-    clean three-slide deck with a title page and divider does not false-fire.
-    Prefer false negatives on ambiguous verb/noun forms. Fires once per deck only
-    when 3+ eligible titles are noun phrases and they make up at least half of
-    eligible titles. Gate: full profile (editorial skips)."""
+    should carry the argument). Hangul titles use a sentence-ending heuristic minus the
+    nouns that collide with it (see `_ko_is_claim`); English titles use a finite-verb
+    allowlist or number+unit (see `_en_is_claim`). Structural titles are not eligible in
+    either language (cover, agenda, appendix, closing / 표지, 목차, 부록, 감사합니다), so a
+    clean deck with a title page and divider does not false-fire. Prefer false negatives
+    on ambiguous verb/noun forms. Fires once per deck only when 3+ eligible titles are
+    noun phrases and they make up at least half of eligible titles. Gate: full profile
+    (editorial skips)."""
     entries = []
     for si in sorted(titles):
         txt = " ".join(titles[si][1]).strip()
@@ -1582,14 +1646,9 @@ def action_title_check(titles, warns):
         # Hangul path: excludes titles with fewer than 3 Hangul characters or under 30%
         # Hangul share (big-stat numbers / short brand names; measured in the 50-deck scan).
         if cjk_n >= 3 and cjk_n >= 0.3 * len(chars):
-            core = txt.rstrip(" ?!.…”’")
-            # A title with a number+unit embedded (e.g. "Revenue Grows 3x") is a claim-style
-            # headline even if it ends in a noun (external review, 2026-07-10).
-            numeric_claim = bool(re.search(
-                r"[0-9][0-9,.]*\s*(%|배|억|조|만|천|pp|bp|x|X|원|건|명|개)", txt))
-            claim = ("?" in txt or "!" in txt or numeric_claim
-                     or core.endswith(("다", "까", "요", "자", "죠", "함", "임")))
-            entries.append((si, txt, claim))
+            if _ko_title_key(txt) in _KO_STRUCTURAL_TITLES:
+                continue
+            entries.append((si, txt, _ko_is_claim(txt)))
             continue
         # English path: content-eligible Latin titles only (not structural covers).
         if _en_eligible_title(txt, chars, latin_n, cjk_n):

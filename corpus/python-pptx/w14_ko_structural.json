@@ -1,0 +1,7 @@
+{
+  "expected": {},
+  "notes": "negative W14 Hangul fixture: cover/divider/closing titles are not part of the deck argument and must not enter the majority pool",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

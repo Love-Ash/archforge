@@ -129,7 +129,7 @@ def main():
             _tb(s, 1, 2.0, 6, 2.5, "Body block content", size=12, ea="맑은 고딕")
             _tb(s, 8, 2.0, 4, 2.5, "Side note block", size=12, ea="맑은 고딕")
     emit("w6_repeated_skeleton", w6_repeated_skeleton, {"expected": {"W6": 1, "W14": 1},
-         "notes": "the same 3-frame skeleton on 5 pages: the recycled-grid tell; English noun-phrase section titles also trip W14"})
+         "notes": "the same 3-frame skeleton on 5 pages: the recycled-grid tell; English noun-phrase section titles also trip W14 under the English path"})
 
     def w14_en_nominal(p):
         for t in ("Market Overview", "Competitive Analysis", "Product Lineup",
@@ -149,6 +149,45 @@ def main():
             _tb(s, 1, 2.2, 10, 3, "Supporting body copy", size=12, ea="맑은 고딕")
     emit("w14_en_action", w14_en_action, {"expected": {},
          "notes": "negative W14-EN fixture: finite verb or number+unit counts as a claim"})
+
+    def _ko_deck(p, titles):
+        for t in titles:
+            s = p.slides.add_slide(p.slide_layouts[6])
+            _tb(s, 1, 0.8, 9, 0.8, t, size=26, ea="맑은 고딕")
+            _tb(s, 1, 2.2, 10, 3, "본문은 읽을 수 있는 크기로 들어갑니다.",
+                size=12, ea="맑은 고딕")
+
+    def w14_ko_nominal(p):
+        # Every title here ends in a syllable that also ends a Korean sentence, so before
+        # the noun-collision list they all read as claims and the rule stayed silent.
+        _ko_deck(p, ("제품 개요", "사업 개요", "해외 투자", "핵심 사용자",
+                     "모바일 게임", "시장 현황"))
+    emit("w14_ko_nominal", w14_ko_nominal, {"expected": {"W14": 1},
+         "notes": "positive W14 Hangul fixture: noun phrases whose final syllable collides "
+                  "with a sentence ending (개요 / 투자 / 사용자 / 게임)"})
+
+    def w14_ko_claim(p):
+        # The mirror of the above: real predicates that end in the same syllables, so the
+        # collision list may not swallow them.
+        _ko_deck(p, ("매출이 전년 대비 늘었다", "성장세가 꺾였어요", "비용을 줄이자",
+                     "점유율이 3분기에 반등했다", "이것이 최선인가",
+                     "지금 진입해야 한다"))
+    emit("w14_ko_claim", w14_ko_claim, {"expected": {},
+         "notes": "negative W14 Hangul fixture: declarative, polite, propositive and "
+                  "interrogative endings all count as claims. This one also passes on the "
+                  "pre-2026-08-07 code, so it proves nothing about the noun-collision fix; "
+                  "it is the regression guard against a future rewrite that enumerates "
+                  "endings instead of nouns, which would read these as noun phrases and "
+                  "fire on a deck of real claims"})
+
+    def w14_ko_structural(p):
+        # Three structural slides and two content noun phrases. Counting the structural
+        # ones would put five nominal titles in the pool and fire; excluding them leaves
+        # two, which is under the three-title minimum.
+        _ko_deck(p, ("질의응답", "참고 문헌", "회사 소개", "시장 현황", "매출 추이"))
+    emit("w14_ko_structural", w14_ko_structural, {"expected": {},
+         "notes": "negative W14 Hangul fixture: cover/divider/closing titles are not part "
+                  "of the deck argument and must not enter the majority pool"})
 
 
 

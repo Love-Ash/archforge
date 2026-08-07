@@ -189,6 +189,35 @@ Pairs each check with the script of the text run (Unicode code point, determinis
   if it ends in a noun (0.2.0; English path mirrors this). Prefer false negatives on
   editorial headlines. Editorial/portfolio-showcase decks should use `--skip W14` or
   `--profile editorial`.
+- W14 Hangul noun collisions (2026-08-07, issue #10): the sentence-ending test reads the last
+  syllable of a title, and ordinary Korean nouns end in those same syllables, so 제품 개요 /
+  해외 투자 / 모바일 게임 were read as predicates and a deck of pure noun phrases reported
+  clean. Measured on 119 hand-labelled titles across three sets, the last of which was written
+  specifically to break the candidate fixes: the previous rule read 75 of 119 correctly
+  (63%), with 44 misreads, 38 of them silent and 6 on the firing side.
+
+  Two designs were measured before one was chosen. Enumerating the sentence endings instead
+  (a list of 해요 / 하자 / 인가 forms) scored 112 of 119 (94%) and was still rejected: on the
+  adversarial set it cleared all 9 silent misses and produced 7 firings on decks of real
+  claims, because any polite or propositive form missing from the list makes a predicate read
+  as a noun. W14's stated policy is to prefer the silent error, so a fix may not move errors
+  in that direction. The shipped design instead keeps the ending test as the default and
+  subtracts a list of known nouns, which means a word missing from the list keeps the old
+  behaviour: the list being incomplete costs recall and can never cost precision. -자 is a
+  productive agent suffix in Korean and no hand-written list will keep up with it, so this
+  property is what makes the approach defensible rather than the score. Words that can also
+  be predicates in a title (가요, 포함, 약함, 이자) are deliberately not listed.
+
+  Structural titles (표지, 목차, 부록, 감사합니다, 질의응답) are excluded from the eligibility
+  pool in the same pass, mirroring what W14-EN landed for English in #9. A cover or divider
+  is not part of the deck's argument, and counting one raises both sides of the ratio.
+  Measured result on the same 119 titles: 119 correct, 0 misreads. The noun list was tuned
+  against all three sets, so that score is not evidence of generalisation; the argument for
+  the design is the property above, not the number. Fixtures: `w14_ko_nominal` (must fire)
+  and `w14_ko_structural` (must not), both of which fail on the previous code, plus
+  `w14_ko_claim`, which passes on the previous code too and therefore proves nothing about
+  this fix. It is kept as the regression guard against a future rewrite of the
+  enumerate-the-endings kind.
 
 ## Robustness policy
 

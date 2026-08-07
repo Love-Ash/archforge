@@ -187,6 +187,43 @@ def test_w14_en_action_titles_pass(tmp_path):
     _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert "W14" not in codes(warns), by_code(warns, "W14")
 
+def test_w14_ko_noun_finals_are_not_sentence_endings(tmp_path):
+    """개요 / 투자 / 사용자 / 게임 end in syllables that also end a Korean sentence.
+    Reading them as predicates made W14 silent on a deck of pure noun phrases (#10)."""
+    p = new_prs()
+    for t in ("제품 개요", "사업 개요", "해외 투자", "핵심 사용자", "모바일 게임",
+              "시장 현황"):
+        s = add_slide(p)
+        tb(s, 1, 0.8, 9, 0.8, t, font="Wanted Sans", size=26)
+        tb(s, 1, 2.2, 10, 3, "본문 내용", font="Wanted Sans", size=12)
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
+    assert "W14" in codes(warns)
+
+def test_w14_ko_real_predicates_still_pass(tmp_path):
+    """The mirror of the above, and the guard that matters most: subtracting the noun
+    collisions may not start reading declarative, polite, propositive or interrogative
+    endings as noun phrases, because that error fires on a deck of real claims."""
+    p = new_prs()
+    for t in ("매출이 전년 대비 늘었다", "성장세가 꺾였어요", "비용을 줄이자",
+              "점유율이 3분기에 반등했다", "이것이 최선인가", "지금 진입해야 한다"):
+        s = add_slide(p)
+        tb(s, 1, 0.8, 9, 0.8, t, font="Wanted Sans", size=26)
+        tb(s, 1, 2.2, 10, 3, "본문 내용", font="Wanted Sans", size=12)
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
+    assert "W14" not in codes(warns), by_code(warns, "W14")
+
+def test_w14_ko_structural_titles_are_not_eligible(tmp_path):
+    """Cover, divider and closing slides are not the deck's argument. Counting the three
+    structural titles here would put five noun phrases in the pool and fire; excluding
+    them leaves two, under the three-title minimum."""
+    p = new_prs()
+    for t in ("질의응답", "참고 문헌", "회사 소개", "시장 현황", "매출 추이"):
+        s = add_slide(p)
+        tb(s, 1, 0.8, 9, 0.8, t, font="Wanted Sans", size=26)
+        tb(s, 1, 2.2, 10, 3, "본문 내용", font="Wanted Sans", size=12)
+    _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
+    assert "W14" not in codes(warns), by_code(warns, "W14")
+
 
 def test_w14_en_verb_only_action_titles_pass(tmp_path):
     """Verb-allowlist branch alone (no digits) keeps W14 silent."""

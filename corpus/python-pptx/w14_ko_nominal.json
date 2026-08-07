@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W14": 1
+  },
+  "notes": "positive W14 Hangul fixture: noun phrases whose final syllable collides with a sentence ending (개요 / 투자 / 사용자 / 게임)",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

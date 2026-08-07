@@ -12,6 +12,37 @@ Two versions below never shipped. 0.2.1 and 0.3.1 have entries here but were sup
 same day they were written: 0.2.1 has no tag, 0.3.1 has a tag but no GitHub release, and
 neither reached PyPI. Every other version in this file is installable.
 
+## Unreleased
+
+W14 now works on both languages it claims to cover, and the Hangul side stops mistaking
+ordinary nouns for predicates.
+
+- W14 extends to English decks (#7, #9, first outside contribution, by
+  @AshSgDe29071999): a title counts as a claim when it carries a finite verb from a
+  measured allowlist or a number with a unit, and bare noun phrases do not. The majority
+  gate and the profile behaviour are unchanged from the Hangul path. Structural titles
+  (cover, agenda, appendix, closing) are excluded from the eligibility pool, so a deck
+  with a title page and a divider does not trip the rule on its scaffolding.
+- W14's Hangul claim test no longer reads a noun as a sentence ending (#10). It decided
+  from the last syllable of a title, and ordinary Korean nouns end in those same
+  syllables, so 제품 개요 / 해외 투자 / 모바일 게임 were treated as assertions and a deck
+  whose titles were all noun phrases reported clean. Measured on 119 hand-labelled titles
+  across three sets, the last written specifically to break the candidates, the old test
+  read 75 correctly (63%). Known noun collisions are now subtracted from the ending test.
+  Structural Korean titles (표지, 목차, 부록, 감사합니다, 질의응답) are excluded from the
+  pool, matching what the English path does.
+
+  The alternative design, enumerating the sentence endings rather than the nouns, scored
+  higher (94%) and was rejected: on the adversarial set it produced seven firings on decks
+  of real claims, because a polite or propositive form missing from the list makes a
+  predicate read as a noun phrase. The shipped design can only ever fail by staying quiet,
+  which is the direction this rule is supposed to fail in. The noun list is incomplete on
+  purpose and safe to leave that way; the reasoning is in docs/CALIBRATION.md.
+- Corpus fixtures for the above: `w14_ko_nominal` (must fire) and `w14_ko_structural`
+  (must not), both of which fail on the previous code, plus `w14_ko_claim`, which passes
+  on the previous code as well and is kept as the guard against a future rewrite of the
+  rejected kind. Corpus is 31 manifests; the published results table is regenerated.
+
 ## 0.8.1 (2026-07-11)
 
 Consolidation plus the two presentation features. An external product audit of 0.8.0
