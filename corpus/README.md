@@ -28,6 +28,14 @@ python corpus/run_corpus.py     # lint every deck, compare against manifests, ex
   blank-document theme ships empty ea slots and `add shape` writes no run `a:ea`, so a
   Hangul run lands on a Latin-only face. The clean fixture sets `--prop font.ea`
   explicitly, proving the author-with-X, gate-with-archforge pipeline composes.
+- `google-slides/`: the first fixture from a design tool rather than a programmatic
+  writer. `officecli/clean_bilingual.pptx` was uploaded to Google Drive, converted to a
+  Google Slides presentation, and exported back to .pptx with nothing edited in between.
+  The source is a clean negative, so anything reported here was introduced by the round
+  trip. It reports E1, and inspecting the package shows why: Google discards the run's
+  explicit `a:ea` and exports a theme whose `minorFont` has an empty `a:ea` and a
+  Latin-only `a:latin`, which under the measured resolution model hands Hangul to a face
+  with no Hangul glyphs. Ground truth is the XML, not the linter's own output.
 - `malformed/`: inputs that must produce a controlled outcome: a truncated package is
   a usage error, vertical text must mark the report incomplete instead of guessing.
 

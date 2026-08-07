@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E1": 1
+  },
+  "notes": "Google Slides export. corpus/officecli/clean_bilingual.pptx was uploaded to Google Drive, converted to a Google Slides presentation and exported back to .pptx; nothing was edited in between. The source deck is a clean negative (0 findings), so every finding here was introduced by the round trip. Ground truth by XML inspection against docs/CALIBRATION.md, not by trusting the linter: the Hangul run carried an explicit a:ea of Malgun Gothic in the source and carries no a:ea at all after the round trip, and the exported theme ships an empty minorFont a:ea with a Latin-only a:latin of Arial. Under the measured resolution model an empty theme ea hands the run to the Latin face, and Arial has no Hangul glyphs, so PowerPoint falls back. E1 is correct here. The rendered result happens to be Malgun either way, because Malgun Gothic is also what the fallback picks, so this is a defect in intent rather than in appearance for this particular deck: the author's explicit font choice was discarded and the outcome now depends on the reader's OS.",
+  "generator": "google-slides-export",
+  "profile": "full",
+  "ground_truth": "by XML inspection of the exported package against the measured resolution model"
+}
