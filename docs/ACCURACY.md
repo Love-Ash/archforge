@@ -13,21 +13,22 @@ so this is regression verification, not independent ground truth. Second, the
 per-gate samples are tiny; the exact one-sided 95% lower bound below shows how
 little a small perfect score proves (1/1 -> 5%, 3/3 -> 37%).
 
-Measured with archforge 0.8.1. Corpus: 25 decks, 4 generator families, 6 clean
-negatives, 29 slides, all synthetic (no field decks yet). Observed false
+Measured with archforge 0.8.1. Corpus: 27 decks, 4 generator families, 7 clean
+negatives, 41 slides, all synthetic (no field decks yet). Observed false
 positives across the whole corpus: 0 (0.00 per 10 slides on this corpus).
 
 | Gate | TP | FP | FN | Deck-level TN | Recall (95% LB) |
 |:----:|---:|---:|---:|---:|:---|
-| E1 | 4 | 0 | 0 | 21 | 4/4 (>= 47%) |
-| E2 | 3 | 0 | 0 | 22 | 3/3 (>= 37%) |
-| E3 | 2 | 0 | 0 | 23 | 2/2 (>= 22%) |
-| E4 | 3 | 0 | 0 | 22 | 3/3 (>= 37%) |
-| W1 | 1 | 0 | 0 | 24 | 1/1 (>= 5%) |
-| W6 | 1 | 0 | 0 | 24 | 1/1 (>= 5%) |
-| W8 | 1 | 0 | 0 | 24 | 1/1 (>= 5%) |
-| W15 | 2 | 0 | 0 | 23 | 2/2 (>= 22%) |
-| W16 | 2 | 0 | 0 | 23 | 2/2 (>= 22%) |
+| E1 | 4 | 0 | 0 | 23 | 4/4 (>= 47%) |
+| E2 | 3 | 0 | 0 | 24 | 3/3 (>= 37%) |
+| E3 | 2 | 0 | 0 | 25 | 2/2 (>= 22%) |
+| E4 | 3 | 0 | 0 | 24 | 3/3 (>= 37%) |
+| W1 | 1 | 0 | 0 | 26 | 1/1 (>= 5%) |
+| W6 | 1 | 0 | 0 | 26 | 1/1 (>= 5%) |
+| W8 | 1 | 0 | 0 | 26 | 1/1 (>= 5%) |
+| W14 | 2 | 0 | 0 | 25 | 2/2 (>= 22%) |
+| W15 | 2 | 0 | 0 | 25 | 2/2 (>= 22%) |
+| W16 | 2 | 0 | 0 | 25 | 2/2 (>= 22%) |
 
 Gates absent from the table have no positive fixture in the corpus yet (their
 behavior is covered by the unit/property suites, not by corpus ground truth).
