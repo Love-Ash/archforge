@@ -2,11 +2,18 @@
 
 Two notes for reading this file.
 
-Several entries credit a review, and some call it an external review, for the findings they
-fix. None of those was an independent third-party audit. They were adversarial review passes
-whose findings were verified against the code and reproduced as fixtures, which is what the
-0.7.1 and 0.8.1 entries say in their own words. The looser wording in the earlier entries
-predates that correction and is left as written rather than quietly edited afterwards.
+Several entries credit a review for the findings they fix, and many call it an external
+review. Read that word literally and it is wrong. Every one of those reviews was an
+adversarial panel of AI agents that the maintainer ran against his own code, not an outside
+person or organisation, and none of them was an independent third-party audit. The counts
+that appear alongside them (22 agents, 17 agents, 6 perspectives) are agent counts, not
+reviewer counts. The same phrasing appears in roughly 120 source comments and docstrings
+across the repository and means the same thing in all of them.
+
+The findings themselves were real: each was verified against the code before it was fixed and
+most were reproduced as regression fixtures, which is why the entries cite them. The 0.7.1
+and 0.8.1 entries say this in their own words. The looser wording everywhere else predates
+that correction and is left as written rather than quietly edited afterwards.
 
 Two versions below never shipped. 0.2.1 and 0.3.1 have entries here but were superseded the
 same day they were written: 0.2.1 has no tag, 0.3.1 has a tag but no GitHub release, and

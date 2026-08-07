@@ -59,7 +59,7 @@ Additional measurement (probe 7, 2026-07-10, 0.3.1): paragraph-level default run
 
 Confirmed priority: run rPr > paragraph pPr/defRPr > lstStyle chain > theme. Side measurement:
 a file with lstStyle placed on an ordinary textbox's txBody is refused by PowerPoint on open
-(placeholder and master are fine). The 3rd-round external review confirmed this missing
+(placeholder and master are fine). The 3rd-round adversarial review confirmed this missing
 paragraph-level step through false-positive/false-negative reproduction (P0-1). The default
 template's defaultTextStyle carries +mn-lt/+mn-ea tokens, which is consistent even down to the
 fact that the effective latin of a fontless textbox resolves to Calibri, matching probe s3's
@@ -264,7 +264,7 @@ Resolved in 0.5.0 and locked in as regression fixtures:
   ink) used to judge the overlap, and pairwise judgments (W15/W17) also identify the
   counterpart shape via `related`.
 
-Resolved in 0.6.0 (external review of 0.5.0, locked in as regression fixtures):
+Resolved in 0.6.0 (adversarial review of 0.5.0, locked in as regression fixtures):
 
 - Geometry now models text-frame insets (lIns/tIns/rIns/bIns; OOXML defaults 0.1in
   left/right, 0.05in top/bottom, scaled under group transforms), explicit line breaks
@@ -285,7 +285,7 @@ Resolved in 0.6.0 (external review of 0.5.0, locked in as regression fixtures):
   compression ratio before python-pptx parses the package, and non-budget image decode
   failures now surface through W18 (`image_decode`) instead of being swallowed.
 
-Resolved in 0.6.1 (external review of 0.6.0):
+Resolved in 0.6.1 (adversarial review of 0.6.0):
 
 - E4 requires actual Hangul in the run: tracking on Hanja-only runs is legitimate
   Chinese typography, and flagging it as a universal ERROR contradicted the "other
