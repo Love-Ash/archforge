@@ -124,16 +124,18 @@ def test_geo_robustness_no_false_positives(tmp_path):
     assert not geo, geo
 
 def test_clean_deck_no_flags(tmp_path):
+    # Titles are claim-style so W14 (full-profile noun-phrase majority) stays quiet.
+    # Do not use fixture-only strings in the structural stoplist to satisfy this test.
     p = new_prs()
     s = add_slide(p)
-    tb(s, 1, 0.8, 9, 0.8, "Clean title page", font="Wanted Sans", size=30)
+    tb(s, 1, 0.8, 9, 0.8, "Revenue reaches $12 million", font="Wanted Sans", size=30)
     tb(s, 1, 2.2, 10, 3, "Readable body text at normal size.", font="Wanted Sans", size=13)
     s = add_slide(p)
-    tb(s, 1, 0.8, 6, 0.6, "Second layout", font="Wanted Sans", size=22)
+    tb(s, 1, 0.8, 6, 0.6, "Retention improves 2x", font="Wanted Sans", size=22)
     rect(s, 7.5, 1.0, 4.5, 5.0, "20242B")
     tb(s, 1, 3.5, 5.5, 2.5, "Different grid here.", font="Wanted Sans", size=13)
     s = add_slide(p)
-    tb(s, 4, 3.2, 6, 0.8, "Closing page", font="Wanted Sans", size=26)
+    tb(s, 4, 3.2, 6, 0.8, "Pipeline adds 40% coverage", font="Wanted Sans", size=26)
     errors, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     assert not errors and not warns, (codes(errors), codes(warns))
 
