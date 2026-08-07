@@ -1511,9 +1511,9 @@ _EN_CLAIM_VERBS = frozenset({
 # Cover/section/closing slides are noun phrases by nature; counting them would
 # fire W14 on any three-slide deck with a title page and divider.
 _EN_STRUCTURAL_TITLES = frozenset({
-    "cover", "title", "title page", "clean title page", "agenda", "introduction",
+    "cover", "title", "title page", "agenda", "introduction",
     "overview", "appendix", "thank you", "thanks", "q&a", "q and a", "qa",
-    "closing", "closing page", "second layout", "contents", "table of contents",
+    "closing", "contents", "table of contents",
     "toc", "outline", "references", "bibliography", "the end", "end",
     "summary", "background", "agenda overview",
 })

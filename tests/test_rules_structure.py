@@ -206,10 +206,10 @@ def test_w14_en_verb_only_action_titles_pass(tmp_path):
     assert "W14" not in codes(warns), by_code(warns, "W14")
 
 
-def test_w14_en_clean_structural_titles_pass(tmp_path):
-    """Cover/divider/closing structural titles must not trip W14 on a clean deck."""
+def test_w14_en_known_structural_titles_excluded(tmp_path):
+    """Generic structural English titles (agenda/appendix/…) are not W14-eligible."""
     p = new_prs()
-    for title in ("Clean title page", "Second layout", "Closing page"):
+    for title in ("Agenda", "Appendix", "Thank you", "Introduction", "Overview", "References"):
         s = add_slide(p)
         tb(s, 1, 0.8, 9, 0.8, title, font="Wanted Sans", size=26)
         tb(s, 1, 2.2, 10, 3, "Readable body text at normal size.", font="Wanted Sans", size=13)
