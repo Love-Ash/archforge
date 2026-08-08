@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E2": 1
+  },
+  "notes": "An em dash used as sentence punctuation, with an a:br between the two halves of the paragraph. Ground truth by construction: the dash joins two Hangul clauses with no numeric neighbour on either side, which is the blocked case rather than the exempt range case. The a:br is the axis: it is a visual break inside one paragraph, and if it is read as a paragraph boundary the clauses stop being neighbours.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction and by XML inspection, not by running the linter"
+}

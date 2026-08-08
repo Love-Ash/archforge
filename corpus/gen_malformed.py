@@ -54,7 +54,7 @@ def main():
     # docProps, and the manifest's "generator" field is what records provenance.
     from archforge.demo import _save
     _save(p, os.path.join(DST, "vertical_text.pptx"),
-          application="python-pptx")
+          application="archforge corpus")
     with open(os.path.join(DST, "vertical_text.json"), "w", encoding="utf-8") as f:
         json.dump({"generator": "python-pptx (bodyPr@vert=eaVert)",
                    "expected": {}, "expect_incomplete": True,

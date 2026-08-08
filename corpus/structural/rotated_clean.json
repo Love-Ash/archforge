@@ -1,0 +1,7 @@
+{
+  "expected": {},
+  "notes": "A clean negative. Two rotated labels whose axis-aligned bounding boxes intersect while the drawn text does not. Rotated text is out of scope by decision (the glyph box model is axis-aligned), so the correct output is silence. Ground truth by construction: with rot stripped these same two boxes overlap and W15 fires, which is what makes this a test of the exclusion rather than of an empty deck.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction and by XML inspection, not by running the linter"
+}

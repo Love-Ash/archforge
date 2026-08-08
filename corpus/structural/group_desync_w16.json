@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W16": 1
+  },
+  "notes": "A group whose off/ext and chOff/chExt disagree, holding a run whose absolute position is 12.9in on a 13.333in canvas. Ground truth by construction and by reading the XML: the child's raw x is 0.5in, the group's off x is 12.4in and its chOff x is 0.5in, so the composed x is 12.4 + (0.5 - 0.5) * (3.2/3.2) = 12.4in and the 3.2in-wide frame ends past the canvas edge. W16 must fire. If the group transform is ignored the shape reads as sitting at 0.5in, comfortably inside, and nothing is reported. That is the exact shape of the grpSpPr namespace bug fixed in 0.5.0.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction and by XML inspection, not by running the linter"
+}

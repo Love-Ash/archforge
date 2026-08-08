@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E3": 1
+  },
+  "notes": "A slidenum a:fld with sz=400, i.e. 4.0pt, below the 5.0pt hard floor. Ground truth by construction: the size is written explicitly on the field's a:rPr, so no inheritance is involved. a:fld is not an a:r, so a run walker that matches on a:r alone never sees it and an unreadable field passes.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction and by XML inspection, not by running the linter"
+}

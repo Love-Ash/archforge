@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "E1": 1
+  },
+  "notes": "Hangul in a table cell with a:latin=Arial and no a:ea. Ground truth by construction: the default Office theme's minorFont a:ea is empty, so under the measured resolution model (docs/CALIBRATION.md) the run falls through to a:latin, and Arial has no Hangul glyphs. Table text lives under a:tbl in a graphicFrame rather than in the shape's own text frame, so a walker that visits only shapes with text frames reports nothing.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction and by XML inspection, not by running the linter"
+}

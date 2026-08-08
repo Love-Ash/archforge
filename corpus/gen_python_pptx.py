@@ -52,7 +52,11 @@ def emit(name, build, manifest):
     # ship in the sdist, so the writer is stated honestly instead. No rule reads
     # docProps, and the manifest's "generator" field is what records provenance.
     from archforge.demo import _save
-    _save(p, path, application="python-pptx")
+    # docProps says "archforge corpus", not the library name. Provenance lives in the
+    # manifest's "generator" field, which is where the corpus README points and where a
+    # reader looks; putting the library name in docProps as well only ships a
+    # generated-by tell in every sdist for information already recorded.
+    _save(p, path, application="archforge corpus")
     manifest.setdefault("generator", "python-pptx")
     manifest.setdefault("profile", "full")
     manifest.setdefault("ground_truth", "by construction (defect deliberately seeded)")
@@ -193,7 +197,6 @@ def main():
     emit("w14_ko_structural", w14_ko_structural, {"expected": {},
          "notes": "negative W14 Hangul fixture: cover/divider/closing titles are not part "
                   "of the deck argument and must not enter the majority pool"})
-
 
 
 if __name__ == "__main__":

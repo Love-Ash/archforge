@@ -1019,3 +1019,46 @@ def test_abstention_payload_reaches_the_json_output(tmp_path):
     for code in ("E1", "E2", "E3", "E4", "W14"):
         assert code in affected, "%s missing from affected_rules: %s" % (code, sorted(affected))
     assert doc["capabilities"]["typography"] == "partial"
+
+
+def test_corpus_exercises_the_structural_axes():
+    """The engine advertises that it covers tables, groups, fields, line breaks and rotated
+    shapes, and those are where the defects have actually been -- a shipped bug read grpSpPr
+    in the wrong namespace, so the group transform fell back to identity and W15-W17 judged
+    moved groups against raw coordinates (CHANGELOG 0.5.0).
+
+    Measured 2026-08-08: across the 31 decks in the corpus at the time, every one of these
+    axes had zero coverage. The unit suite exercised them, but docs/ACCURACY.md is computed
+    from the corpus, so the published record was built entirely from decks walking the
+    simple path.
+
+    This asserts the axes are present in the shipped .pptx bytes rather than counting files,
+    so moving or renaming a fixture directory cannot satisfy it."""
+    import zipfile
+    corpus = os.path.join(_repo_root(), "corpus")
+    axes = {
+        "table (a:tbl)": b"<a:tbl",
+        "group (p:grpSp)": b"<p:grpSp>",
+        "field (a:fld)": b"<a:fld",
+        "line break (a:br)": b"<a:br",
+        "rotated shape": b'rot="',
+    }
+    found = {k: 0 for k in axes}
+    for root, _dirs, files in os.walk(corpus):
+        for name in sorted(files):
+            if not name.endswith(".pptx"):
+                continue
+            try:
+                zf = zipfile.ZipFile(os.path.join(root, name))
+            except zipfile.BadZipFile:
+                continue          # malformed/truncated.pptx, deliberately not a zip
+            blob = b"".join(zf.read(n) for n in zf.namelist()
+                            if n.startswith("ppt/slides/slide"))
+            for axis, needle in axes.items():
+                if needle in blob:
+                    found[axis] += 1
+    missing = sorted(a for a, n in found.items() if n == 0)
+    assert not missing, (
+        "no corpus deck exercises: %s. The unit tests cover these paths, but ACCURACY.md is "
+        "computed from the corpus, so a gap here means the published record does not reach "
+        "them." % missing)

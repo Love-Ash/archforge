@@ -36,6 +36,15 @@ python corpus/run_corpus.py     # lint every deck, compare against manifests, ex
   explicit `a:ea` and exports a theme whose `minorFont` has an empty `a:ea` and a
   Latin-only `a:latin`, which under the measured resolution model hands Hangul to a face
   with no Hangul glyphs. Ground truth is the XML, not the linter's own output.
+- `structural/`: the OOXML shapes that bypass a naive walker, one deck per axis
+  (`gen_structural.py`). Added after measuring that none of the 31 decks here contained a
+  table, a group, an `a:fld`, an `a:br` or a rotated shape, even though the engine
+  advertises all of them and they are where the defects have actually been: a shipped bug
+  read `grpSpPr` in the `a:` namespace when it lives in `p:`, so group transforms fell back
+  to identity and the geometry gates judged moved groups against raw coordinates. Each deck
+  fails to report anything if its axis is mishandled, which is what makes it a test rather
+  than a sample. `rotated_clean` is the negative: rotated text is out of scope by decision,
+  and stripping `rot` from that same deck makes W15 fire.
 - `malformed/`: inputs that must produce a controlled outcome: a truncated package is
   a usage error, vertical text must mark the report incomplete instead of guessing.
 
