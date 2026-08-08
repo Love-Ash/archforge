@@ -6,7 +6,10 @@ Re-exported from lint for backward compatibility."""
 import re
 from typing import Dict, Optional
 
-NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+try:
+    from .ooxml import NS
+except ImportError:   # standalone execution
+    from ooxml import NS
 
 # Latin-only fonts that have no Hangul glyphs, so even when assigned to Hangul text they don't
 # apply (prefix matching, so it also covers weight variants). To narrow the limitation of the

@@ -27,3 +27,6 @@ RELEASE_CHECKLIST.md
 corpus/node_modules/
 corpus/package-lock.json
 corpus/package.json
+
+# Local A/B deck baselines. The decks are work material and stay out of the repo.
+.ab/
