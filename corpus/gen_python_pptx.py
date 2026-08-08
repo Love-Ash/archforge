@@ -47,7 +47,12 @@ def emit(name, build, manifest):
     path = os.path.join(HERE, name + ".pptx")
     p = _prs()
     build(p)
-    p.save(path)
+    # docProps carries python-pptx's bundled template properties, which name a
+    # stranger and claim PowerPoint on a Mac wrote the file. Neither is true and both
+    # ship in the sdist, so the writer is stated honestly instead. No rule reads
+    # docProps, and the manifest's "generator" field is what records provenance.
+    from archforge.demo import _save
+    _save(p, path, application="python-pptx")
     manifest.setdefault("generator", "python-pptx")
     manifest.setdefault("profile", "full")
     manifest.setdefault("ground_truth", "by construction (defect deliberately seeded)")

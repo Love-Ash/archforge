@@ -48,7 +48,13 @@ def main():
     rPr.append(rPr.makeelement(qn("a:ea"), {"typeface": "맑은 고딕"}))
     bodyPr = box.text_frame._txBody.find(qn("a:bodyPr"))
     bodyPr.set("vert", "eaVert")
-    p.save(os.path.join(DST, "vertical_text.pptx"))
+    # docProps carries python-pptx's bundled template properties, which name a
+    # stranger and claim PowerPoint on a Mac wrote the file. Neither is true and both
+    # ship in the sdist, so the writer is stated honestly instead. No rule reads
+    # docProps, and the manifest's "generator" field is what records provenance.
+    from archforge.demo import _save
+    _save(p, os.path.join(DST, "vertical_text.pptx"),
+          application="python-pptx")
     with open(os.path.join(DST, "vertical_text.json"), "w", encoding="utf-8") as f:
         json.dump({"generator": "python-pptx (bodyPr@vert=eaVert)",
                    "expected": {}, "expect_incomplete": True,

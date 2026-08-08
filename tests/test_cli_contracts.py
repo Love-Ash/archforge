@@ -850,3 +850,58 @@ def test_standalone_module_execution():
         assert r.returncode == 0, (
             "standalone `python lint.py %s` failed: %s" % (" ".join(args), r.stderr[-300:]))
         assert "E1" in r.stdout
+
+
+def test_generated_decks_carry_no_library_signature():
+    """python-pptx builds every deck on a bundled template, so without intervention each
+    one inherits that template's docProps: dc:creator and cp:lastModifiedBy name the
+    library's author, the description reads "generated using python-pptx", and Application
+    claims PowerPoint on a Mac wrote it. The last is simply false.
+
+    Two reasons this is a gate and not a one-time cleanup. `archforge demo` runs on other
+    people's machines and wrote those properties onto their files, and examples/ plus the
+    corpus ship inside the sdist, so a stranger's name travelled with every release.
+
+    The parts are decompressed before matching. A pptx is a zip, so scanning the file's raw
+    bytes finds nothing even when core.xml says "Steve Canny" in full: the first version of
+    this test did exactly that and passed every negative control, including one where the
+    fixture had been restored to its unscrubbed state.
+
+    A freshly built deck is checked alongside the committed fixtures, because scrubbing the
+    fixtures while the shipped code path stays leaky would look identical from the repo."""
+    import tempfile
+    import zipfile
+    import archforge.demo as _demo
+    SIGNATURES = ("Steve Canny", "generated using python-pptx", "Macintosh")
+    PARTS = ("docProps/core.xml", "docProps/app.xml", "docProps/custom.xml")
+
+    def signatures_in(path):
+        try:
+            zf = zipfile.ZipFile(path)
+        except zipfile.BadZipFile:      # corpus/malformed/truncated.pptx is not a zip
+            return []
+        found = []
+        for part in PARTS:
+            if part in zf.namelist():
+                text = zf.read(part).decode("utf-8", "ignore")
+                found += [s for s in SIGNATURES if s in text]
+        return found
+
+    root = _repo_root()
+    targets = []
+    for sub in ("examples", os.path.join("corpus", "python-pptx"),
+                os.path.join("corpus", "malformed"),
+                os.path.join("corpus", "powerpoint-native")):
+        d = os.path.join(root, sub)
+        if os.path.isdir(d):
+            targets += [os.path.join(d, f) for f in sorted(os.listdir(d))
+                        if f.endswith(".pptx")]
+    assert len(targets) >= 20, "expected the fixture set, found %d" % len(targets)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        live = os.path.join(tmp, "live.pptx")
+        _demo.build_broken(live, lang="en")
+        targets.append(live)
+        offenders = ["%s -> %s" % (os.path.basename(p), sorted(set(hits)))
+                     for p in targets for hits in [signatures_in(p)] if hits]
+        assert not offenders, "library signature in shipped decks: %s" % offenders

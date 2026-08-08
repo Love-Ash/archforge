@@ -67,6 +67,57 @@ def _prs():
     return p
 
 
+def _save(p, path, application="archforge"):
+    """Saves the deck and states who made it.
+
+    python-pptx builds on a bundled default template, so every deck it writes inherits that
+    template's properties: dc:creator and cp:lastModifiedBy say "Steve Canny", the
+    description says "generated using python-pptx", Application says "Microsoft Macintosh
+    PowerPoint", and created is 2013-01-27. `archforge demo` is the first thing a new user
+    runs, so without this it drops two decks on their machine carrying a stranger's name and
+    a claim that PowerPoint on a Mac wrote them.
+
+    The replacement is the tool's own name rather than the maintainer's. This runs on other
+    people's machines; stamping a personal identity on their files would be worse than the
+    leak it fixes. Application is left honest too: archforge really did generate this.
+
+    core.xml goes through python-pptx's own API. app.xml has no accessor, so it is rewritten
+    in the saved package -- the whole zip is copied rather than edited in place, because
+    zipfile cannot replace a member.
+
+    `application` is a parameter because the corpus generators reuse this and should say
+    what actually wrote the fixture. Naming the real writer is the point: the value being
+    replaced is a false one, since python-pptx claims PowerPoint wrote the file.
+    """
+    import datetime
+    import re
+    import shutil
+    import zipfile
+
+    cp = p.core_properties
+    cp.author = application
+    cp.last_modified_by = application
+    cp.comments = ""                    # the "generated using python-pptx" line
+    now = datetime.datetime.now().replace(microsecond=0)
+    cp.created = now
+    cp.modified = now
+    cp.revision = 1
+    p.save(path)
+
+    tmp = str(path) + ".docprops"
+    with zipfile.ZipFile(path) as zin, \
+            zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "docProps/app.xml":
+                text = data.decode("utf-8")
+                text = re.sub(r"<Application>[^<]*</Application>",
+                              "<Application>%s</Application>" % application, text)
+                data = text.encode("utf-8")
+            zout.writestr(item, data)
+    shutil.move(tmp, path)
+
+
 def _slide(p):
     return p.slides.add_slide(p.slide_layouts[6])
 
@@ -116,7 +167,7 @@ def build_broken(path, lang="ko"):
     _tb(s, 1.0, 2.4, 5.0, 1.0, t["kpi1"], size=24, ea="맑은 고딕")                   # W15 pair
     _tb(s, 1.2, 2.5, 5.0, 1.0, t["kpi2"], size=24, ea="맑은 고딕")
     _tb(s, 12.0, 4.5, 3.0, 0.6, t["w16"], size=18, ea="맑은 고딕")                   # W16
-    p.save(path)
+    _save(p, path)
     return path
 
 
@@ -143,7 +194,7 @@ def build_fixed(path, lang="ko"):
     _tb(s, 1.0, 2.4, 5.0, 1.0, t["kpi1"], size=24, ea="맑은 고딕")
     _tb(s, 6.8, 2.4, 5.0, 1.0, t["kpi2"], size=24, ea="맑은 고딕")
     _tb(s, 9.2, 4.5, 3.4, 0.6, t["w16"], size=18, ea="맑은 고딕")
-    p.save(path)
+    _save(p, path)
     return path
 
 
@@ -175,5 +226,5 @@ def build_warnings(path):
                                   {"blurRad": "40000", "dist": "20000"})
             eff.append(sh)
             spPr.append(eff)
-    p.save(path)
+    _save(p, path)
     return path
