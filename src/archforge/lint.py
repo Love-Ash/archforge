@@ -159,6 +159,86 @@ except ImportError:   # standalone execution
                     _lst_sz_pt,
                     StyleResolver, SizeResolver)
 try:
+    from .detectors_text import (BUZZWORDS,
+                     STALE_OPENINGS,
+                     copy_cliche_check,
+                     _EN_CLAIM_VERBS,
+                     _EN_STRUCTURAL_TITLES,
+                     _en_title_key,
+                     _en_eligible_title,
+                     _en_is_claim,
+                     _KO_STRUCTURAL_TITLES,
+                     _KO_NOUN_FINALS,
+                     _KO_INTERROGATIVE_SUFFIX,
+                     _KO_SENTENCE_ENDINGS,
+                     _KO_NUMERIC_CLAIM,
+                     _ko_title_key,
+                     _ko_is_claim,
+                     action_title_check)
+except ImportError:   # standalone execution
+    from detectors_text import (BUZZWORDS,
+                    STALE_OPENINGS,
+                    copy_cliche_check,
+                    _EN_CLAIM_VERBS,
+                    _EN_STRUCTURAL_TITLES,
+                    _en_title_key,
+                    _en_eligible_title,
+                    _en_is_claim,
+                    _KO_STRUCTURAL_TITLES,
+                    _KO_NOUN_FINALS,
+                    _KO_INTERROGATIVE_SUFFIX,
+                    _KO_SENTENCE_ENDINGS,
+                    _KO_NUMERIC_CLAIM,
+                    _ko_title_key,
+                    _ko_is_claim,
+                    action_title_check)
+try:
+    from .detectors_visual import (_EFFECT_TAGS,
+                     _3D_TAGS,
+                     accent_vbars_check,
+                     _fill_tokens,
+                     footer_top,
+                     footer_check,
+                     effects_count,
+                     effects_check_deck,
+                     _diagram_clone_marks,
+                     slide_layout_sig,
+                     contrast_check)
+except ImportError:   # standalone execution
+    from detectors_visual import (_EFFECT_TAGS,
+                    _3D_TAGS,
+                    accent_vbars_check,
+                    _fill_tokens,
+                    footer_top,
+                    footer_check,
+                    effects_count,
+                    effects_check_deck,
+                    _diagram_clone_marks,
+                    slide_layout_sig,
+                    contrast_check)
+try:
+    from .detectors_geometry import (_FldRun,
+                     GlyphBox,
+                     _glyph_w,
+                     _empty_para_pt,
+                     _text_glyph_boxes,
+                     text_overlap_check,
+                     _pic_boxes,
+                     overflow_check,
+                     _occluder_boxes,
+                     text_image_straddle_check)
+except ImportError:   # standalone execution
+    from detectors_geometry import (_FldRun,
+                    GlyphBox,
+                    _glyph_w,
+                    _empty_para_pt,
+                    _text_glyph_boxes,
+                    text_overlap_check,
+                    _pic_boxes,
+                    overflow_check,
+                    _occluder_boxes,
+                    text_image_straddle_check)
+try:
     from .ooxml import EMU_PER_IN, NS, NS_P
     from .colors import (_shape_fill_hex, _shape_line_hex, _is_accent,
                          _theme_colors_from_blob, theme_colors_by_master,
@@ -207,41 +287,6 @@ except ImportError:
                         _dash_neighbor, dash_violations)
 
 
-class _FldRun:
-    """Adapter for a:fld (auto fields such as slide number, date). Since CT_TextField also has
-    an rPr+t structure per the schema, PowerPoint renders it with the same rules as a normal
-    run, but python-pptx's para.runs only returns a:r, so field text was a blind spot for
-    E1/E3/E4 (carried over from the fourth review, 0.5.0). Exposes only the minimal interface
-    the checking code uses: ._r for run_fonts/run_track, .font.size for size."""
-    __slots__ = ("_r", "text")
-
-    class _Pt:
-        __slots__ = ("pt",)
-
-        def __init__(self, pt):
-            self.pt = pt
-
-    def __init__(self, fld):
-        self._r = fld
-        t = fld.find(NS + "t")
-        self.text = (t.text or "") if t is not None else ""
-
-    @property
-    def font(self):
-        return self   # only the .size access is used
-
-    @property
-    def size(self):
-        try:
-            v = self._r.find(NS + "rPr").get("sz")
-        except Exception:
-            return None
-        if not v:
-            return None
-        try:
-            return self._Pt(int(v) / 100.0)
-        except (TypeError, ValueError):
-            return None
 
 
 
@@ -274,68 +319,8 @@ class _FldRun:
 
 
 
-def accent_vbars_check(slide, si, sw, sh, warns):
-    """W9: an AI-generated-deck tell where accent-colored vertical bars are repeated as list
-    markers, using color to build item structure (measured in real decks). Reflects the
-    2026-07-02 adversarial audit: colors are read via the sp.line/sp.fill accessors to cover
-    namespaces and connectors, vertical bars explicitly include zero-width connectors (w~0),
-    and adjacent text to the right confirms it is really a list marker."""
-    bars, texts = [], []
-    for sp in iter_shapes(slide.shapes):
-        try:
-            L, T, Wd, Ht = sp.left, sp.top, sp.width, sp.height
-        except Exception:
-            continue
-        if None in (L, T, Wd, Ht):
-            continue
-        x, y, w, h = L / EMU_PER_IN, T / EMU_PER_IN, Wd / EMU_PER_IN, Ht / EMU_PER_IN
-        if getattr(sp, "has_text_frame", False) and sp.text_frame.text.strip():
-            texts.append((x, y, w, h))
-        hexc = _shape_line_hex(sp) or _shape_fill_hex(sp)
-        if not _is_accent(hexc):
-            continue
-        if 0.2 <= h <= 1.0 and (w < 0.05 or h > 3 * w):   # vertical bar (including
-                                                           # zero-width connectors)
-            bars.append((x, y, w, h, hexc))
-    if len(bars) < 3:
-        return
-    hues = {b[4] for b in bars}
-    if len(hues) != 1:                       # multiple colors is legitimate data encoding
-                                              # (a legend)
-        return
-    xs = [b[0] for b in bars]
-    if max(xs) - min(xs) > 0.15:             # vertically aligned stack only (horizontal
-                                              # spread = chart/divider, excluded)
-        return
-    rt = 0
-    for bx, by, bw, bh, _hx in bars:
-        for tx, ty, tw, th in texts:
-            if tx > bx and (tx - (bx + bw)) < 0.6 and not (ty > by + bh or ty + th < by):
-                rt += 1
-                break
-    if rt >= len(bars) - 1:
-        warns.append(Finding(si, "W9", "w9", (len(bars),),
-                         "x=%.2fin hue=%s" % (min(xs), next(iter(hues)))))
 
 
-def _fill_tokens(slide, sw, sh):
-    """Turns the slide's solid-fill shapes into a multiset of (color, 24-grid position/size)
-    tokens. Full-bleed backgrounds are excluded."""
-    t = Counter()
-    for sp in iter_shapes(slide.shapes):
-        try:
-            L, T, Wd, Ht = sp.left, sp.top, sp.width, sp.height
-        except Exception:
-            continue
-        if None in (L, T, Wd, Ht) or not Wd or not Ht:
-            continue
-        if Wd > 0.9 * sw and Ht > 0.9 * sh:
-            continue
-        fh = _shape_fill_hex(sp)
-        if fh is None:
-            continue
-        t[(fh, round(L / sw * 24), round(T / sh * 24), round(Wd / sw * 24), round(Ht / sh * 24))] += 1
-    return t
 
 
 
@@ -362,743 +347,67 @@ def _fill_tokens(slide, sw, sh):
 
 # AI-tell copy: only obvious cliches (a narrow dictionary = suppresses false positives).
 # General words that could be legitimate in context are not included.
-BUZZWORDS = (
-    "시너지", "패러다임", "게임체인저", "게임 체인저", "혁신을 가속", "가치를 극대화",
-    "미래를 선도", "새로운 지평", "무한한 가능성", "홀리스틱", "엔드투엔드", "엔드 투 엔드",
-    "초격차", "글로벌 리더로 도약", "위대한 여정",
-    "synergy", "paradigm shift", "game-changer", "game changer", "cutting-edge",
-    "state-of-the-art", "seamless", "revolutionize", "leverage synerg", "holistic",
-    "unlock the potential", "empower",
-)
-STALE_OPENINGS = (
-    "오늘날", "급변하는", "4차 산업혁명 시대", "바야흐로", "현대 사회에서",
-    "디지털 전환의 시대", "디지털 전환의 물결", "알아보겠습니다", "살펴보겠습니다",
-    "in today's", "in the rapidly changing", "in this presentation",
-)
 
 
-def copy_cliche_check(page_texts, warns):
-    """W11: AI-tell copy. Buzzwords are checked on every page, cliche openings only in the
-    intro (p1-3)."""
-    for si in sorted(page_texts):
-        blob = " ".join(page_texts[si])
-        low = blob.lower()
-        hits = sorted({b for b in BUZZWORDS if b.lower() in low})
-        if hits:
-            warns.append(Finding(si, "W11", "w11_buzz", (len(hits),), ", ".join(hits[:5])))
-        if si <= 3:
-            op = sorted({o for o in STALE_OPENINGS if o.lower() in low})
-            if op:
-                warns.append(Finding(si, "W11", "w11_open", (), ", ".join(op[:5])))
 
 
-def footer_top(slide, sw, sh):
-    """The top (in) of the bottommost text in the slide's bottom band (y>0.88H). None if there
-    is no footer."""
-    best = None
-    for sp in iter_shapes(slide.shapes):
-        if not getattr(sp, "has_text_frame", False):
-            continue
-        try:
-            if not sp.text_frame.text.strip():
-                continue
-            t = sp.top
-        except Exception:
-            continue
-        if t is None or t <= 0.88 * sh:
-            continue
-        ti = t / EMU_PER_IN
-        if best is None or ti > best:
-            best = ti
-    return best
 
 
-def footer_check(foot_tops, warns):
-    """W12: footer baseline misalignment across pages. In a 50-deck measurement (2026-07-02),
-    the absolute-deviation approach mistook cover-page credits and bottom captions for footers,
-    producing false positives in 17 decks. Instead this excludes the cover page (p1), treats
-    the dominant baseline (mode of the 0.05in quantization buckets, 3+ pages) as the house
-    footer, and flags only pages that deviate "slightly" (0.03-0.25in) from it. Anything off
-    by more than 0.25in is assumed to be a different element such as a caption or divider and
-    is ignored (its existence is not even checked)."""
-    tops = [(si, t) for si, t in foot_tops.items() if t is not None and si > 1]
-    if len(tops) < 4:
-        return
-    q = Counter(round(t / 0.05) for _si, t in tops)
-    qv, cnt = q.most_common(1)[0]
-    if cnt < 3:
-        return
-    # House baseline = the median of the actual values in the dominant bucket (using the
-    # bucket center instead would make a majority of 7.08 values sit exactly 0.02 away from
-    # 7.10, a floating-point boundary false positive confirmed by rescanning the 50 decks)
-    bvals = sorted(t for _si, t in tops if round(t / 0.05) == qv)
-    base = bvals[len(bvals) // 2]
-    off = [(si, t) for si, t in tops if 0.03 < abs(t - base) <= 0.25]
-    if off:
-        ex = " ".join("p%d=%.2f" % (si, t) for si, t in off[:4])
-        warns.append(Finding(0, "W12", "w12", (base, len(off)), ex))
 
 
-_EFFECT_TAGS = tuple(NS + t for t in ("outerShdw", "innerShdw", "glow", "reflection"))
-_3D_TAGS = tuple(NS + t for t in ("sp3d", "scene3d"))
 
 
-def effects_count(slide):
-    """The count and kinds of the slide's effective PPT effects (shadow, glow, 3D). Some
-    generators leave a childless empty effectLst purely to block inheritance, so this only
-    counts elements that actually have effect children (prevents an empty-element false
-    positive)."""
-    n = 0
-    kinds = set()
-    for sp in iter_shapes(slide.shapes):
-        spPr = getattr(sp._element, "spPr", None)
-        if spPr is None:
-            continue
-        eff = spPr.find(NS + "effectLst")
-        if eff is not None:
-            for ch in eff:
-                if ch.tag in _EFFECT_TAGS:
-                    n += 1
-                    kinds.add(ch.tag.split("}")[1])
-        for tag in _3D_TAGS:
-            if spPr.find(tag) is not None:
-                n += 1
-                kinds.add(tag.split("}")[1])
-    return n, kinds
 
 
-def effects_check_deck(per_page, warns):
-    """W13: aggregated once per deck (firing repeatedly per page is noise: measured on the
-    50-deck corpus). Could be an intentional neon/glow style, so this is a WARN and the
-    judgment is left to human eyes."""
-    hits = [(si, n, kinds) for si, (n, kinds) in per_page.items() if n >= 2]
-    if not hits:
-        return
-    total = sum(n for _si, n, _k in hits)
-    kinds = sorted(set().union(*[k for _si, _n, k in hits]))
-    pages = ",".join("p%d" % si for si, _n, _k in hits[:6])
-    warns.append(Finding(0, "W13", "w13", (total, len(hits)),
-                         "%s | %s" % (pages, ",".join(kinds))))
 
 
 # W15 text overlap: the most common defect axis in generated decks (elements pile up with
 # every revision round), but the frame bbox is drawn generously by convention and can't be
 # used, so this approximates the effective glyph width instead.
-_W_CJK, _W_LAT, _W_SP = 0.96, 0.52, 0.28   # character-width/font-size ratio approximation
                                            # (conservative: suppresses false positives)
 
 # Effective glyph bbox (in) per paragraph. Turned a magic index tuple into named fields
 # (external review, 2026-07-10).
 # sp (owning shape) is for the loc payload of W15-W17 findings (0.5.0); the coordinates are
 # already the group's absolute coordinates.
-GlyphBox = namedtuple("GlyphBox", "x0 y0 x1 y1 rep max_pt frame_id sp cell para field")
-GlyphBox.__new__.__defaults__ = (None, None, None, False)
 
 
-def _glyph_w(s, size_pt):
-    w = 0.0
-    for ch in s:
-        if ch == " ":
-            w += _W_SP
-        elif is_cjk(ch) or ord(ch) > 0x2E80:
-            w += _W_CJK
-        else:
-            w += _W_LAT
-    return w * size_pt / 72.0
 
 
-def _empty_para_pt(para, default_pt):
-    """The effective size of an empty paragraph (a spacer): prioritizes endParaRPr/defRPr sz
-    (fixes a phantom-height issue where a 4pt spacer was counted as 12pt, measured in
-    adversarial verification)."""
-    try:
-        if para.font.size is not None:
-            return para.font.size.pt
-    except Exception:
-        pass
-    try:
-        epr = para._p.find(NS + "endParaRPr")
-        if epr is not None and epr.get("sz"):
-            return int(epr.get("sz")) / 100.0
-    except Exception:
-        pass
-    return default_pt
 
 
-def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
-    """Approximates the effective glyph bbox (in) per paragraph. Returns
-    [(x0,y0,x1,y1,representative text,max_pt,frame_id)].
-    Width is summed from each run's actual size; line height reflects the actual
-    line_spacing value (1.2 if absent) combined with autofit lnSpcReduction. x is placed
-    using per-paragraph alignment (the frame's first explicit value if unset, otherwise
-    left), which reduces misplacement in frames with mixed alignment. wrap=none
-    (word_wrap=False, the python-pptx add_textbox default) extends past the frame in a
-    single line, so no wrap folding is applied and the actual width is used as-is. A rotated
-    frame is skipped since estimation would be invalid. Groups are converted to absolute
-    coordinates via iter_shapes_geo.
-    Calibrated against real-deck render comparisons plus reproduced adversarial-verification
-    measurements.
-    Script layer (0.2.1): vertical writing (bodyPr@vert) and frames containing RTL or
-    complex-shaping scripts are skipped, since glyph-width approximation is meaningless for
-    them, and if a skipped Counter is passed it tallies these and surfaces them via W18.
-    0.3.1 (third external review, P0): if given a styler (StyleResolver), a run with no
-    explicit size is resolved through the same inheritance chain as E3 (fixes an
-    inconsistency where two different effective-style models existed in a single document).
-    Native tables compute each cell's rectangle by accumulating column widths and row
-    heights, so cell text is included too.
-    Known limitations: a placeholder that inherits alignment from layout lstStyle falls back
-    to left alignment, and skipping rotated frames is excluded from the W18 tally since it is
-    standard decorative practice."""
-    import math
-    out = []
-
-    def emit_frame(tframe, fx, fy, fw, fh, fid, owner_sp, cell=None, sx=1.0, sy=1.0):
-        try:
-            bodyPr = tframe._txBody.find(NS + "bodyPr")
-            vert = bodyPr.get("vert") if bodyPr is not None else None
-            if vert not in (None, "horz"):
-                if skipped is not None:
-                    skipped["vertical_text"] += 1
-                return
-        except Exception:
-            bodyPr = None
-        # Text-frame insets (0.6.0, external review): glyphs start inside the frame, not
-        # at its edge. OOXML defaults are lIns/rIns 91440 EMU (0.1in) and tIns/bIns 45720
-        # (0.05in), the same order of magnitude as W16's 0.15in tolerance, so ignoring
-        # them shifted every glyph box left/up and overstated usable width. Insets live
-        # in shape-local units, so group scale (sx/sy) applies.
-        li, ri_, ti, bi = 91440, 91440, 45720, 45720
-        try:
-            if bodyPr is not None:
-                li = int(bodyPr.get("lIns", li))
-                ri_ = int(bodyPr.get("rIns", ri_))
-                ti = int(bodyPr.get("tIns", ti))
-                bi = int(bodyPr.get("bIns", bi))
-        except Exception:
-            pass
-        fx += sx * li / EMU_PER_IN
-        fy += sy * ti / EMU_PER_IN
-        fw = max(fw - sx * (li + ri_) / EMU_PER_IN, 0.0)
-        fh = max(fh - sy * (ti + bi) / EMU_PER_IN, 0.0)
-        try:
-            # All a:t descendants, not para.runs: field text (a:fld) participates in
-            # geometry, so it must participate in the complex-script screen too. A
-            # field-only Arabic frame used to bypass this check and get measured with
-            # the Latin/CJK width model without any W18 (0.6.1, external review).
-            frame_text = "".join(t.text or "" for t in tframe._txBody.iter(NS + "t"))
-            if _geometry_unsupported(frame_text):
-                if skipped is not None:
-                    skipped["complex_script"] += 1
-                return
-        except Exception:
-            pass
-        fw2 = max(fw, 0.05)
-        scale, lnred = frame_autofit(tframe)
-        wrap = tframe.word_wrap is not False   # None (no attribute) = OOXML default
-                                               # square = wrap
-        frame_align = None
-        for para in tframe.paragraphs:
-            if para.alignment is not None:
-                frame_align = para.alignment
-                break
-        paras = []   # (line_w, pmx, ptxt, factor, n, align, p_idx, field_only)
-        for p_idx, para in enumerate(tframe.paragraphs):
-            pmx, ptxt = 0.0, ""
-            saw_field, saw_run_text = False, False
-            segs = [0.0]   # widths of a:br-separated visual lines
-            # Document-order walk over a:r / a:fld / a:br (0.6.0, external review): fld
-            # text occupies real width and an explicit line break starts a new visual
-            # line. Before this, a br-split sentence was measured as one overlong line
-            # (width overstated, height understated). Falls back to para.runs on any
-            # structural surprise.
-            items = []
-            try:
-                runs_l = list(para.runs)
-                r_seen = 0
-                for child in para._p:
-                    tag = child.tag
-                    if tag == NS + "r":
-                        if r_seen < len(runs_l):
-                            items.append(runs_l[r_seen])
-                            r_seen += 1
-                    elif tag == NS + "br":
-                        items.append(None)
-                    elif tag == NS + "fld":
-                        items.append(_FldRun(child))
-                if r_seen != len(runs_l):
-                    items = list(runs_l)
-            except Exception:
-                items = list(para.runs)
-            for r in items:
-                if r is None:   # a:br: next visual line
-                    segs.append(0.0)
-                    ptxt += " "
-                    continue
-                t = r.text
-                if not t:
-                    continue
-                if isinstance(r, _FldRun):
-                    saw_field = True
-                else:
-                    saw_run_text = True
-                if r.font.size is not None:
-                    sz = r.font.size.pt
-                elif para.font.size is not None:
-                    sz = para.font.size.pt
-                else:
-                    sz = None
-                    if styler is not None:
-                        try:
-                            sz = styler.resolve(tframe, owner_sp, slide, getattr(para, "level", 0))
-                        except Exception:
-                            sz = None
-                    if sz is None:
-                        sz = default_pt
-                sz *= scale
-                segs[-1] += _glyph_w(t, sz)
-                ptxt += t
-                if sz > pmx:
-                    pmx = sz
-            if not ptxt.strip():
-                paras.append((0.0, _empty_para_pt(para, default_pt) * scale, "", 1.2, 1,
-                              None, p_idx, False))
-                continue
-            ls = para.line_spacing
-            if ls is None:
-                factor = 1.2
-            elif isinstance(ls, float):
-                factor = ls
-            else:
-                try:
-                    factor = ls.pt / pmx if pmx else 1.2
-                except Exception:
-                    factor = 1.2
-            if wrap:
-                n = sum(max(1, math.ceil(w / (fw2 * 1.04))) for w in segs)
-            else:
-                n = len(segs)
-            line_w = max(segs)
-            al = para.alignment if para.alignment is not None else frame_align
-            paras.append((line_w, pmx, ptxt, factor, n, al, p_idx,
-                          saw_field and not saw_run_text))
-        gh_total = sum(n * pmx * max(f, 0.95) * (1.0 - lnred) / 72.0
-                       for (pw, pmx, ptxt, f, n, al, _pi, _fo) in paras)
-        if gh_total <= 0:
-            return
-        va = str(tframe.vertical_anchor) if tframe.vertical_anchor is not None else ""
-        if "MIDDLE" in va:
-            cy = fy + max(0.0, (fh - gh_total) / 2)
-        elif "BOTTOM" in va:
-            cy = fy + max(0.0, fh - gh_total)
-        else:
-            cy = fy
-        for (pw, pmx, ptxt, factor, n, al, p_idx, field_only) in paras:
-            ph = n * pmx * max(factor, 0.95) * (1.0 - lnred) / 72.0
-            if ptxt.strip():
-                gw = pw if not wrap else min(pw, fw2)
-                a = str(al) if al is not None else ""
-                if "CENTER" in a:
-                    x0 = fx + (fw2 - gw) / 2
-                elif "RIGHT" in a:
-                    x0 = fx + fw2 - gw
-                else:
-                    x0 = fx
-                out.append(GlyphBox(x0, cy, x0 + gw, cy + ph, ptxt[:24], pmx, fid,
-                                    owner_sp, cell, p_idx, field_only))
-            cy += ph
-
-    for sp, _z, xf in iter_shapes_geo(slide.shapes):
-        if getattr(sp, "has_table", False):
-            # Native table cells (third external review, P0: tables in auto-generated decks
-            # were a geometry blind spot).
-            # Cell rectangle = table origin + accumulated column widths/row heights (xf
-            # scaling applied to EMU).
-            geo = _geo_rect(sp, xf)
-            if geo is None or geo[4]:
-                continue
-            tx, ty = geo[0], geo[1]
-            ax = xf[0]
-            ay = xf[2]
-            try:
-                tbl = sp.table
-                col_w = [(c.width or 0) for c in tbl.columns]
-                row_h = [(r.height or 0) for r in tbl.rows]
-            except Exception:
-                continue
-            cy_off = 0
-            for ri, row in enumerate(tbl.rows):
-                cx_off = 0
-                for ci, cell in enumerate(row.cells):
-                    cw = col_w[ci] if ci < len(col_w) else 0
-                    rh = row_h[ri] if ri < len(row_h) else 0
-                    try:
-                        # Merged regions (0.6.0, external review): continuation cells are
-                        # covered by their origin; the origin's rectangle spans the merged
-                        # column widths and row heights instead of a single grid cell.
-                        if cell.is_spanned:
-                            cx_off += cw
-                            continue
-                        span_w = sum(col_w[ci:ci + max(1, cell.span_width)]) or cw
-                        span_h = sum(row_h[ri:ri + max(1, cell.span_height)]) or rh
-                    except Exception:
-                        span_w, span_h = cw, rh
-                    try:
-                        ctf = cell.text_frame
-                    except Exception:
-                        cx_off += cw
-                        continue
-                    emit_frame(ctf,
-                               tx + ax * cx_off / EMU_PER_IN,
-                               ty + ay * cy_off / EMU_PER_IN,
-                               ax * span_w / EMU_PER_IN,
-                               ay * span_h / EMU_PER_IN,
-                               id(cell._tc), sp, cell=(ri, ci), sx=ax, sy=ay)
-                    cx_off += cw
-                cy_off += row_h[ri] if ri < len(row_h) else 0
-            continue
-        if not getattr(sp, "has_text_frame", False):
-            continue
-        geo = _geo_rect(sp, xf)
-        if geo is None:
-            continue
-        fx, fy, fw, fh, rotated = geo
-        if rotated:
-            continue
-        emit_frame(sp.text_frame, fx, fy, fw, fh, id(sp), sp, sx=xf[0], sy=xf[2])
-    return out
 
 
-def text_overlap_check(slide, si, warns, boxes: Optional[List[GlyphBox]] = None):
-    """W15: the effective glyph regions of two different text frames overlap meaningfully
-    (occlusion/collision). This is approximation-based, hence WARN. Fires only when the
-    intersection area exceeds 45% of the smaller box, at most 2 findings per page.
-    The 45% threshold is measured against render comparisons: cases in the 30-35% range are
-    all false positives (estimated as a title under a big number, or bleed-over between two
-    columns), while 60%+ are all real overlaps (e.g. a chart overrunning an exhibit label, a
-    caption chip sitting on a legend).
-    Intentional layering is excluded: an echo of identical text (an afterimage typography
-    effect), and 1-2 character oversized glyphs (drop caps, chapter numerals like I/II).
-    If boxes is given, it is used as-is without recomputation (a once-per-slide computation
-    cache)."""
-    if boxes is None:
-        boxes = _text_glyph_boxes(slide)
-    hits = []
-    for i in range(len(boxes)):
-        for j in range(i + 1, len(boxes)):
-            a, b = boxes[i], boxes[j]
-            if a.frame_id == b.frame_id:      # paragraphs of the same frame are stacked,
-                                               # so excluded
-                continue
-            if a.rep.strip() == b.rep.strip():
-                continue
-            if any(len(x.rep.strip()) <= 2 and x.max_pt >= 28 for x in (a, b)):
-                continue
-            ix = min(a.x1, b.x1) - max(a.x0, b.x0)
-            iy = min(a.y1, b.y1) - max(a.y0, b.y0)
-            if ix <= 0.02 or iy <= 0.02:
-                continue
-            area = ix * iy
-            amin = min((a.x1 - a.x0) * (a.y1 - a.y0), (b.x1 - b.x0) * (b.y1 - b.y0))
-            if amin > 0 and area > 0.45 * amin:
-                hits.append((area / amin, a, b))
-    # Sort key is frac only: GlyphBox's sp field isn't comparable, so a full tuple comparison
-    # would fail (0.5.0)
-    for frac, a, b in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
-        # loc: not the frame's raw bbox, but the effective glyph bbox (absolute, in) actually
-        # used to judge the overlap, as-is.
-        # related carries the counterpart frame so an agent can pinpoint which pair to move
-        # (0.5.0).
-        loc = shape_loc(a.sp, bbox=[a.x0, a.y0, a.x1 - a.x0, a.y1 - a.y0], cell=a.cell,
-                        paragraph=a.para, field=a.field) or {}
-        rel = shape_loc(b.sp, bbox=[b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0], cell=b.cell,
-                        paragraph=b.para, field=b.field)
-        if rel:
-            loc["related"] = rel
-        warns.append(Finding(si, "W15", "w15", (frac * 100,), "%r ~ %r" % (a.rep, b.rep),
-                             data={"confidence": "estimate",
-                                   "evidence_source": "xml_geometry",
-                                   "render_confirmed": False},
-                             loc=loc or None))
 
 
-def _pic_boxes(slide, sw_in, sh_in, skipped=None):
-    """The effective ink bbox (in) and z-order of non-background pictures. Returns
-    [(x0,y0,x1,y1,z)].
-    Full-bleed or mesh backgrounds covering 70%+ of the slide are excluded. A transparent PNG
-    (e.g. a matplotlib chart) has a frame bbox much larger than its ink, which is a source of
-    false positives, so it is trimmed to the alpha-opaque bbox.
-    Performance budget (0.4.0, third review): for images over 25MP, alpha trimming is skipped,
-    the frame bbox is used as-is, and this is disclosed via the skipped counter (prevents
-    decode blowup on large batches).
-    Reflects adversarial-verification measurements (2026-07-03): P mode + tRNS is converted
-    to RGBA before trimming, srcRect crop is mapped by narrowing to the visible source
-    window, flipH/flipV mirrors within that window, a rotated picture uses the axis-aligned
-    expanded bbox but skips ink trimming since it would be invalid, and group children are
-    converted to absolute coordinates."""
-    out = []
-    for sp, z, xf in iter_shapes_geo(slide.shapes):
-        if getattr(sp, "shape_type", None) != MSO_SHAPE_TYPE.PICTURE:
-            continue
-        geo = _geo_rect(sp, xf)
-        if geo is None:
-            continue
-        x, y, w, h, rotated = geo
-        if w * h >= 0.7 * sw_in * sh_in:
-            continue
-        if not rotated:
-            try:
-                from PIL import Image
-                import io as _io
-                im = Image.open(_io.BytesIO(sp.image.blob))
-                if im.width * im.height > 25_000_000:
-                    if skipped is not None:
-                        skipped["image_decode_budget"] += 1
-                    raise RuntimeError("image decode budget")   # the except below keeps the
-                                                                 # frame bbox
-                if im.mode == "P" and "transparency" in im.info:
-                    im = im.convert("RGBA")
-                if "A" in im.getbands():
-                    bb = im.getchannel("A").point(lambda a: 255 if a > 16 else 0).getbbox()
-                    if bb is None:
-                        continue   # fully transparent = no ink
-                    iw, ih = im.size
-                    wl, wt = iw * float(sp.crop_left or 0), ih * float(sp.crop_top or 0)
-                    wr = iw * (1.0 - float(sp.crop_right or 0))
-                    wb = ih * (1.0 - float(sp.crop_bottom or 0))
-                    l, t, r, b = bb
-                    l, r = max(l, wl), min(r, wr)
-                    t, b = max(t, wt), min(b, wb)
-                    if l >= r or t >= b:
-                        continue   # no ink within the crop window
-                    try:
-                        x2 = sp._element.spPr.find(NS + "xfrm")
-                        if x2 is not None and x2.get("flipH") == "1":
-                            l, r = wl + (wr - r), wl + (wr - l)
-                        if x2 is not None and x2.get("flipV") == "1":
-                            t, b = wt + (wb - b), wt + (wb - t)
-                    except Exception:
-                        pass
-                    ww, wh = (wr - wl) or 1.0, (wb - wt) or 1.0
-                    x, y, w, h = (x + w * (l - wl) / ww, y + h * (t - wt) / wh,
-                                  w * (r - l) / ww, h * (b - t) / wh)
-            except Exception as ex:
-                # The frame bbox is kept as the fallback either way, but a real decode
-                # failure is no longer silent (0.6.0, external review: "nothing dies
-                # silently" only held for the budget path). The budget path already
-                # tallied itself above.
-                if skipped is not None and str(ex) != "image decode budget":
-                    skipped["image_decode"] += 1
-        out.append((x, y, x + w, y + h, z, sp))
-    return out
 
 
-def overflow_check(slide, si, sw_in, sh_in, warns,
-                   boxes: Optional[List[GlyphBox]] = None, pics: Optional[list] = None):
-    """W16: off-canvas overflow. Using the frame bbox as the criterion was previously
-    rejected because of the large false-positive rate from the generous-frame convention, but
-    W15's effective glyph bbox resolved that objection (2026-07-03): text fires only when the
-    actual character area breaches the boundary. For non-text, only pictures (ink bbox,
-    trimmed) are checked: bleed where a decorative shape (e.g. a glow circle) spills off a
-    corner is standard technique and not a defect (checking shapes was rejected after
-    corpus render measurements)."""
-    TOL_T, TOL_S = 0.15, 0.12
-    if boxes is None:
-        boxes = _text_glyph_boxes(slide)
-    if pics is None:
-        pics = _pic_boxes(slide, sw_in, sh_in)
-    hits = []
-    for gb in boxes:
-        over = max(-gb.x0, -gb.y0, gb.x1 - sw_in, gb.y1 - sh_in)
-        if over > TOL_T:
-            hits.append((over, M("w16_text") % gb.rep, "t|%r" % gb.rep,
-                         shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0],
-                                   cell=gb.cell, paragraph=gb.para, field=gb.field)))
-    for (px0, py0, px1, py1, _z, psp) in pics:
-        over = max(-px0, -py0, px1 - sw_in, py1 - sh_in)
-        if over > TOL_S:
-            hits.append((over, M("w16_pic") % (px1 - px0, py1 - py0),
-                         "p|%.1fx%.1f" % (px1 - px0, py1 - py0),
-                         shape_loc(psp, bbox=[px0, py0, px1 - px0, py1 - py0])))
-    # Sort key is over only: a loc dict isn't comparable, so a full tuple comparison would
-    # fail (0.5.0)
-    for over, what, fpk, loc in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
-        # fp_key: detail (what) is a locale-dependent string, so it's excluded from the
-        # baseline fingerprint (fourth review)
-        warns.append(Finding(si, "W16", "w16", (over,), what, fp_key=fpk, loc=loc,
-                             data={"kind": "text" if fpk.startswith("t|") else "picture",
-                                   "confidence": "estimate",
-                                   "evidence_source": "xml_geometry",
-                                   "render_confirmed": False}))
 
 
-def _occluder_boxes(slide, sw_in, sh_in):
-    """The bbox and z of solid-fill shapes (cards, panels) sitting on top of a picture. Used
-    to suppress a legitimate layout, a caption card over a photo, that was falsely caught by
-    W17 (measured in adversarial verification)."""
-    out = []
-    for sp, z, xf in iter_shapes_geo(slide.shapes):
-        if getattr(sp, "shape_type", None) == MSO_SHAPE_TYPE.PICTURE:
-            continue
-        if getattr(sp, "has_text_frame", False) and sp.text_frame.text.strip():
-            continue
-        try:
-            if sp.fill.type is None or "SOLID" not in str(sp.fill.type):
-                continue
-        except Exception:
-            continue
-        geo = _geo_rect(sp, xf)
-        if geo is None:
-            continue
-        x, y, w, h, _rot = geo
-        if w * h >= 0.9 * sw_in * sh_in:
-            continue
-        out.append((x, y, x + w, y + h, z))
-    return out
 
 
-def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
-                              boxes: Optional[List[GlyphBox]] = None, pics: Optional[list] = None):
-    """W17: text straddles the ink boundary of a non-background picture (only 25-75% of the
-    glyph is inside the image) = half on, half off, so it looks cropped or the background
-    looks split. Fully on top (an overlay caption) is the contrast-gate's (W7's) jurisdiction,
-    and fully off is irrelevant. Pictures under 1 square inch (icon/logo scale) are ignored.
-    If a solid card sits in z-order between the photo and the text and backs 90%+ of the text
-    area, this is excluded as a caption on a card rather than a straddle.
-    At most 2 findings per page."""
-    if pics is None:
-        pics = _pic_boxes(slide, sw_in, sh_in)
-    if not pics:
-        return
-    occl = _occluder_boxes(slide, sw_in, sh_in)
-    if boxes is None:
-        boxes = _text_glyph_boxes(slide)
-    hits = []
-    for gb in boxes:
-        rep = gb.rep
-        if len(rep.strip()) < 3:
-            continue
-        ta = (gb.x1 - gb.x0) * (gb.y1 - gb.y0)
-        if ta <= 0:
-            continue
-        for (px0, py0, px1, py1, pz, psp) in pics:
-            if (px1 - px0) * (py1 - py0) < 1.0:
-                continue
-            ix = min(gb.x1, px1) - max(gb.x0, px0)
-            iy = min(gb.y1, py1) - max(gb.y0, py0)
-            if ix <= 0 or iy <= 0:
-                continue
-            frac = (ix * iy) / ta
-            if not (0.25 <= frac <= 0.75):
-                continue
-            carded = False
-            for (ox0, oy0, ox1, oy1, oz) in occl:
-                if oz <= pz:
-                    continue
-                cx = min(gb.x1, ox1) - max(gb.x0, ox0)
-                cy2 = min(gb.y1, oy1) - max(gb.y0, oy0)
-                if cx > 0 and cy2 > 0 and cx * cy2 >= 0.9 * ta:
-                    carded = True
-                    break
-            if not carded:
-                hits.append((frac, gb, (px0, py0, px1, py1, psp)))
-    # Sort key is frac only (sp field isn't comparable, 0.5.0)
-    for frac, gb, pic in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
-        loc = shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0],
-                        cell=gb.cell, paragraph=gb.para, field=gb.field) or {}
-        rel = shape_loc(pic[4], bbox=[pic[0], pic[1], pic[2] - pic[0], pic[3] - pic[1]])
-        if rel:
-            loc["related"] = rel
-        warns.append(Finding(si, "W17", "w17", (frac * 100,), "%r" % gb.rep, loc=loc or None,
-                             data={"confidence": "estimate",
-                                   "evidence_source": "xml_geometry",
-                                   "render_confirmed": False}))
 
 
 # English finite-verb forms that mark a claim-style title. Prefer false negatives over
 # false positives: copulas/auxiliaries and ambiguous noun/verb homographs are omitted.
 # Measured against the issue fixtures (noun-phrase decks fire; verb/number+unit decks do not).
-_EN_CLAIM_VERBS = frozenset({
-    "grows", "grew", "rises", "rose", "fall", "falls", "fell", "jumps", "jumped",
-    "drives", "drove", "reaches", "reached", "beats", "misses", "missed",
-    "expands", "expanded", "cuts", "gains", "gained", "loses", "lost",
-    "improves", "improved", "declines", "declined", "surges", "surged",
-    "drops", "dropped", "hits", "tops", "topped", "leads", "led", "lags",
-    "lagged", "remains", "remained", "continues", "continued", "accelerates",
-    "accelerated", "slows", "slowed", "climbs", "climbed", "slides", "slid",
-    "boosts", "boosted", "lifts", "lifted", "shrinks", "shrank", "narrows",
-    "narrowed", "widens", "widened", "outpaces", "outpaced", "outperforms",
-    "outperformed", "underperforms", "underperformed", "adds", "added",
-    "opens", "opened", "closes", "closed", "launches", "launched", "ships",
-    "shipped", "wins", "won", "fails", "failed", "holds", "held", "keeps",
-    "kept", "sets", "set", "breaks", "broke", "posts", "posted", "reports",
-    "reported", "delivers", "delivered", "fuels", "fueled", "fuelled",
-})
 
 
 
 # Structural English titles that should not enter the W14 eligibility pool.
 # Cover/section/closing slides are noun phrases by nature; counting them would
 # fire W14 on any three-slide deck with a title page and divider.
-_EN_STRUCTURAL_TITLES = frozenset({
-    "cover", "title", "title page", "agenda", "introduction",
-    "overview", "appendix", "thank you", "thanks", "q&a", "q and a", "qa",
-    "closing", "contents", "table of contents",
-    "toc", "outline", "references", "bibliography", "the end", "end",
-    "summary", "background", "agenda overview",
-})
 
 
-def _en_title_key(title: str) -> str:
-    key = re.sub(r"\s+", " ", title.strip().lower())
-    key = re.sub(r"[^a-z0-9 &]+", "", key).strip()
-    return key
 
 
-def _en_eligible_title(title: str, chars, latin_n: int, cjk_n: int) -> bool:
-    """Whether an English title is substance enough for the W14 majority pool.
-
-    Hangul eligibility is a content share test; English needs more than "is Latin"
-    so cover/divider/closing slides do not flood the pool on clean decks.
-    """
-    if cjk_n >= 3:
-        return False
-    if latin_n < 4 or latin_n < 0.6 * len(chars):
-        return False
-    if _en_title_key(title) in _EN_STRUCTURAL_TITLES:
-        return False
-    words = re.findall(r"[A-Za-z]{2,}", title)
-    # Need either multi-word substance or enough letters that it is not a label.
-    if len(words) >= 2 and sum(len(w) for w in words) >= 10:
-        return True
-    if len(words) >= 3:
-        return True
-    return False
 
 
-def _en_is_claim(title):
-    """English W14 claim signal: finite verb from a measured allowlist, or number+unit.
-    Bare noun phrases return False. Prefer false negatives on editorial headlines."""
-    if "?" in title or "!" in title:
-        return True
-    # number + unit (%, pp/bp, x multiplier, currency); keeps the Korean contract's spirit
-    if re.search(
-        r"(?:[$€£]\s*[0-9]|[0-9][0-9,.]*\s*(?:%|pp|bp|[xX]|million|billion|thousand|percent))",
-        title,
-    ):
-        return True
-    words = re.findall(r"[A-Za-z]+", title)
-    return any(w.lower() in _EN_CLAIM_VERBS for w in words)
 
 
 # Cover / divider / closing slides in Korean decks. A structural slide is not part of the
 # deck's argument, so counting it inflates W14 on both sides of the ratio. Mirrors
 # _EN_STRUCTURAL_TITLES, which landed for English in #9.
-_KO_STRUCTURAL_TITLES = frozenset({
-    "표지", "목차", "차례", "부록", "별첨", "감사합니다", "감사", "질의응답", "질의 응답",
-    "마무리", "맺음말", "끝", "참고문헌", "참고 문헌", "출처", "회사소개", "회사 소개",
-    "들어가며", "시작하며", "목차 및 구성", "발표를 마칩니다", "이상입니다",
-    "경청해 주셔서 감사합니다",
-})
 
 # Korean nouns whose last syllable is also a sentence ending. The ending test cannot tell
 # 개요 (an overview) from 해요 (a predicate), so the collisions are listed rather than
@@ -1110,125 +419,20 @@ _KO_STRUCTURAL_TITLES = frozenset({
 # therefore lands on the false-negative side, which is the side W14 is supposed to err on.
 # Words that can also be predicates in a title (가요, 포함, 약함, 이자) are deliberately
 # left out: listing them would move errors to the firing side.
-_KO_NOUN_FINALS = frozenset({
-    "개요", "필요", "중요", "주요", "수요", "소요", "강요", "동요",
-    "투자자", "사용자", "소비자", "참가자", "참여자", "가입자", "이용자", "구독자",
-    "시청자", "개발자", "경영자", "창업자", "실무자", "담당자", "책임자", "관리자",
-    "신청자", "응답자", "협력자", "수혜자", "지원자", "후보자", "방문자", "구매자",
-    "판매자", "근로자", "노동자", "종사자", "대상자", "경쟁자", "설계자", "운영자",
-    "제작자", "독자", "저자", "기자", "학자", "환자",
-    "투자", "숫자", "글자", "문자", "의자", "모자", "상자", "전자", "한자",
-    "게임", "모임", "책임", "쓰임",
-    "바다", "소다",
-})
 
 # Sentence-final interrogatives written without a question mark. Recognising these moves a
 # title out of the nominal count, which lowers the firing rate, so they are safe to add.
-_KO_INTERROGATIVE_SUFFIX = ("인가", "는가", "은가", "던가", "을까")
-
-_KO_SENTENCE_ENDINGS = ("다", "까", "요", "자", "죠", "함", "임")
-_KO_NUMERIC_CLAIM = re.compile(
-    r"[0-9][0-9,.]*\s*(%|배|억|조|만|천|pp|bp|x|X|원|건|명|개)")
 
 
-def _ko_title_key(title):
-    return re.sub(r"\s+", " ", title.strip()).rstrip(" ?!.…”’")
 
 
-def _ko_is_claim(title):
-    """Hangul W14 claim signal: a question, a number+unit, a sentence-final interrogative,
-    or a sentence ending that is not the tail of a known noun.
-
-    The number+unit branch is there because a title like "매출 3배 성장" is a claim-style
-    headline even though it ends in a noun (external review, 2026-07-10)."""
-    if "?" in title or "!" in title:
-        return True
-    if _KO_NUMERIC_CLAIM.search(title):
-        return True
-    core = _ko_title_key(title)
-    if core.endswith(_KO_INTERROGATIVE_SUFFIX):
-        return True
-    if not core.endswith(_KO_SENTENCE_ENDINGS):
-        return False
-    return core.split(" ")[-1] not in _KO_NOUN_FINALS
 
 
-def action_title_check(titles, warns):
-    """W14: a majority of titles are descriptive noun phrases (e.g. "Market Overview,"
-    "Competitive Analysis") = not action titles (the MBB idea that reading only the titles
-    should carry the argument). Hangul titles use a sentence-ending heuristic minus the
-    nouns that collide with it (see `_ko_is_claim`); English titles use a finite-verb
-    allowlist or number+unit (see `_en_is_claim`). Structural titles are not eligible in
-    either language (cover, agenda, appendix, closing / 표지, 목차, 부록, 감사합니다), so a
-    clean deck with a title page and divider does not false-fire. Prefer false negatives
-    on ambiguous verb/noun forms. Fires once per deck only when 3+ eligible titles are
-    noun phrases and they make up at least half of eligible titles. Gate: full profile
-    (editorial skips)."""
-    entries = []
-    for si in sorted(titles):
-        txt = " ".join(titles[si][1]).strip()
-        chars = [c for c in txt if not c.isspace()]
-        if len(chars) < 4:
-            continue
-        cjk_n = sum(1 for c in chars if is_cjk(c))
-        latin_n = sum(1 for c in chars if ("A" <= c <= "Z") or ("a" <= c <= "z"))
-        # Hangul path: excludes titles with fewer than 3 Hangul characters or under 30%
-        # Hangul share (big-stat numbers / short brand names; measured in the 50-deck scan).
-        if cjk_n >= 3 and cjk_n >= 0.3 * len(chars):
-            if _ko_title_key(txt) in _KO_STRUCTURAL_TITLES:
-                continue
-            entries.append((si, txt, _ko_is_claim(txt)))
-            continue
-        # English path: content-eligible Latin titles only (not structural covers).
-        if _en_eligible_title(txt, chars, latin_n, cjk_n):
-            entries.append((si, txt, _en_is_claim(txt)))
-    nominal = [(si, t) for si, t, c in entries if not c]
-    if len(nominal) >= 3 and len(nominal) * 2 >= len(entries):
-        ex = " ".join("p%d'%s'" % (si, t[:14]) for si, t in nominal[:4])
-        warns.append(Finding(0, "W14", "w14", (len(nominal), len(entries)), ex))
-    return entries
 
 
-def _diagram_clone_marks(inter):
-    """Counts "decorative texture clones" (small dots, joints, etc., 1x1 or smaller on the
-    24-grid) in the multiset of fill shapes shared between two pages.
-    Card-shaped (mid-size block) and table (full-width band) elements are W6's jurisdiction
-    and are not counted here, avoiding a false positive on three-column comparison cards
-    (reflecting the adversarial audit)."""
-    marks = area = 0
-    for (fh, gx, gy, gw, gh), c in inter.items():
-        if gw <= 1 and gh <= 1:
-            marks += c
-        if gw >= 1 and gh >= 1:
-            area += gw * gh * c
-    if marks >= 8 and area / (24.0 * 24.0) >= 0.06:
-        return marks
-    return 0
 
 
-def slide_layout_sig(slide, sw, sh, gw=6, gh=4):
-    """Turns slide element placement into a gw x gh grid occupancy vector. Full-bleed
-    backgrounds are excluded.
-    Weights: text=1, shape=0.5, image=2. Used to compare "what is where" (the skeleton)."""
-    sig = [0.0] * (gw * gh)
-    n = 0
-    for sp in iter_shapes(slide.shapes):
-        try:
-            L, T, Wd, Ht = sp.left, sp.top, sp.width, sp.height
-        except Exception:
-            continue
-        if None in (L, T, Wd, Ht) or not Wd or not Ht:
-            continue
-        if Wd > 0.9 * sw and Ht > 0.9 * sh:      # excludes full-bleed backgrounds/images
-            continue
-        cx = (L + Wd / 2) / sw; cy = (T + Ht / 2) / sh
-        if not (0 <= cx <= 1.0 and 0 <= cy <= 1.0):
-            continue
-        gc = min(gw - 1, max(0, int(cx * gw))); gr = min(gh - 1, max(0, int(cy * gh)))
-        wgt = 2.0 if _is_pic(sp) else (1.0 if getattr(sp, "has_text_frame", False) else 0.5)
-        sig[gr * gw + gc] += wgt
-        n += 1
-    return sig, n
+
 
 
 
@@ -1245,83 +449,6 @@ def slide_layout_sig(slide, sw, sh, gw=6, gh=4):
 
 
 
-def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors=None,
-                   skipped=None):
-    """Detects low-contrast text over an image (approximated from the rendered PNG). Only
-    text frames overlapping a picture, once per slide.
-    Returns: "no_pics" (nothing to check) / "no_png" (there is a picture but no conventional
-    render = incomplete) / "ok" (checked).
-    Coordinates are absolute, including the group transform (third review P1: fixes pictures
-    and text inside a group being misaligned when using raw coordinates)."""
-    from PIL import Image
-    pics = []
-    for sp, _z, xf in iter_shapes_geo(slide.shapes):
-        if _is_pic(sp):
-            geo = _geo_rect(sp, xf)
-            if geo is not None:
-                x, y, w, h, _rot = geo
-                pics.append((x * EMU_PER_IN, y * EMU_PER_IN, w * EMU_PER_IN, h * EMU_PER_IN))
-    if not pics:
-        return "no_pics"
-    cand = glob.glob(os.path.join(render_dir, "p%02d.png" % si))
-    if not cand:
-        return "no_png"
-    try:
-        im = Image.open(cand[0]).convert("RGB"); px = im.load(); PW, PH = im.size
-    except Exception:
-        return "no_png"
-    for sp, _z, xf in iter_shapes_geo(slide.shapes):
-        if not getattr(sp, "has_text_frame", False):
-            continue
-        geo = _geo_rect(sp, xf)
-        if geo is None:
-            continue
-        gx, gy, gw_, gh_, _rot = geo
-        L, T, Wd, Ht = gx * EMU_PER_IN, gy * EMU_PER_IN, gw_ * EMU_PER_IN, gh_ * EMU_PER_IN
-        over = any(not (L + Wd <= p0 or L >= p0 + pw or T + Ht <= q0 or T >= q0 + ph)
-                   for p0, q0, pw, ph in pics)
-        if not over:
-            continue
-        rgbs = [_resolve_run_rgb(r, para, sp.text_frame, sp, slide, styler, thm_colors)
-                for para in sp.text_frame.paragraphs for r in para.runs if r.text.strip()]
-        if any(c is _COLOR_UNKNOWN for c in rgbs):
-            # An explicit color we cannot decode: judging with an inherited color instead
-            # produced false positives (0.6.1). Abstain on this frame and surface it.
-            if skipped is not None:
-                skipped["w7_color_unknown"] += 1
-            continue
-        rgbs = [c for c in rgbs if c]
-        if not rgbs:
-            continue
-        txt_rgb = rgbs[0]
-        x0 = max(0, int(L / sw * PW)); y0 = max(0, int(T / sh * PH))
-        x1 = min(PW, int((L + Wd) / sw * PW)); y1 = min(PH, int((T + Ht) / sh * PH))
-        if x1 <= x0 or y1 <= y0:
-            continue
-        sx = max(1, (x1 - x0) // 24); sy = max(1, (y1 - y0) // 24)
-        lumas = sorted(_luma(px[x, y]) for x in range(x0, x1, sx) for y in range(y0, y1, sy))
-        if not lumas:
-            continue
-        L_txt = _luma(txt_rgb)
-        # Background luma is taken from the quantile at the opposite extreme of the text
-        # color: this measures worst-case local contrast (WCAG is based on the worst case)
-        # and avoids mean contamination from mixed-in text ink (dark 15th percentile for light
-        # text, light 85th percentile for dark text).
-        if L_txt >= 0.5:
-            L_bg = lumas[int(len(lumas) * 0.15)]
-        else:
-            L_bg = lumas[min(len(lumas) - 1, int(len(lumas) * 0.85))]
-        hi = max(L_bg, L_txt); lo = min(L_bg, L_txt)
-        ratio = (hi + 0.05) / (lo + 0.05)
-        if ratio < 2.5:
-            warns.append(Finding(si, "W7", "w7", (ratio,),
-                                 "text=%r" % sp.text_frame.text[:20],
-                                 data={"confidence": "measured",
-                                       "evidence_source": "render",
-                                       "render_confirmed": True},
-                                 loc=shape_loc(sp, bbox=[gx, gy, gw_, gh_])))
-            return "ok"
-    return "ok"   # found and checked the render PNG for this page (regardless of whether
                   # W7 actually fired)
 
 
