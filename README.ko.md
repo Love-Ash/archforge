@@ -96,7 +96,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Love-Ash/archforge@v0.8.1
+      - uses: Love-Ash/archforge@v0.9.0
         with:
           files: |
             decks/
@@ -113,7 +113,7 @@ pre-commit:
 ```yaml
 repos:
   - repo: https://github.com/Love-Ash/archforge
-    rev: v0.8.1
+    rev: v0.9.0
     hooks:
       - id: archforge
         # args: [--profile, full]
@@ -169,7 +169,8 @@ PowerPoint for Windows입니다.
 전체 모델·캘리브레이션 방법·렌더러 매트릭스·범위:
 **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)**,
 [docs/CALIBRATION.md](docs/CALIBRATION.md). 1.0까지 로드맵:
-[docs/ROADMAP.md](docs/ROADMAP.md).
+[docs/ROADMAP.md](docs/ROADMAP.md). 무엇이 고정이고 무엇이 바뀔 수 있는지:
+[docs/DEPRECATION.md](docs/DEPRECATION.md).
 
 ## 에이전트 연동
 

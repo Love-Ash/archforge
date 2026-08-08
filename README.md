@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Love-Ash/archforge@v0.8.1
+      - uses: Love-Ash/archforge@v0.9.0
         with:
           files: |
             decks/
@@ -119,7 +119,7 @@ pre-commit:
 ```yaml
 repos:
   - repo: https://github.com/Love-Ash/archforge
-    rev: v0.8.1
+    rev: v0.9.0
     hooks:
       - id: archforge
         # args: [--profile, full]
@@ -178,7 +178,8 @@ never falsely flagged; the target renderer is PowerPoint for Windows.
 Full model, calibration method, renderer-coverage matrix, and scope:
 **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)** and
 [docs/CALIBRATION.md](docs/CALIBRATION.md). Roadmap to 1.0:
-[docs/ROADMAP.md](docs/ROADMAP.md).
+[docs/ROADMAP.md](docs/ROADMAP.md). What is stable and what may move:
+[docs/DEPRECATION.md](docs/DEPRECATION.md).
 
 ## Agent integration
 

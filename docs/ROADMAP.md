@@ -21,7 +21,7 @@ without visible progress so an issue never sits reserved indefinitely (see
 | 0.6.x | Contract hardening (done) | Action/scan/policy/geometry contracts consistent; NaN, trust boundary, incompleteness all closed |
 | 0.7.0 | Contracts done (#6); architecture started (#5) | Shipped: structured `Finding.data`, JSON schema 2.0 (`findings[]`, `capabilities`, `abstentions`), baseline v3 identity, and the `scripts.py` parsing-layer extraction. Verdict-preserving (16-deck A/B and corpus identical). Continuing under #5: the physical split of the interleaved OOXML/resolution/detector body into one document model + one resolver, done as its own verified effort rather than a big-bang. |
 | 0.8.0 | Verification and structure | Shipped: typed `Finding.data` at detection sites, formal JSON Schemas (schemas/) validated in tests, the regression-corpus record published as docs/ACCURACY.md (per-gate counts with exact binomial lower bounds) behind a CI drift gate, corpus grown to 19 manifests, baseline artifact identity + `baseline inspect`, and two more #5 kernel extractions (fonts.py, dashes.py). Still open for 0.8.x+: third-party generator exports (Google Slides / Canva / LibreOffice), multi-master corporate templates, JP-CN native review, HTML reporter (#4), renderer matrix expansion |
-| 0.9.0 | Release candidate | JSON + baseline schemas frozen; deprecation policy; public API surface pinned; 2-4 week RC soak; zero open P0 |
+| 0.9.0 | Release candidate | Shipped: the #5 physical decomposition (`lint.py` 3,412 -> 908 lines across six modules plus `cli.py`), the star-import surface declared with an explicit `__all__` instead of inherited from whatever lacked an underscore, [docs/DEPRECATION.md](DEPRECATION.md), and repairs to three checks that had been passing while blind. Schemas were already frozen and validated in 0.8.0. The 2-4 week soak starts here rather than gating it. Open at ship: #11 (abstention `affected_rules` understates the guard's reach; a machine-contract defect, not a verdict one, so not a P0). |
 | 1.0.0 | Stable contracts | 3+ external contributors; outside false-positive fixtures; used in 2+ generators' pipelines; docs/code auto-consistency checks; RC soak clean |
 
 ## Where 0.6.x already landed vs the 10-point bar
@@ -47,6 +47,12 @@ The review's per-area "10-point" conditions, and where each stands now:
 | Recognition | tech writeups, public benchmark, adoption | writeups drafted; corpus public; adoption is the open frontier |
 
 ## The honest gap
+
+Measured against the 1.0 row on 2026-08-08, at the 0.9.0 ship: external contributors 1 of 3
+(the W14 English work, #7/#9); outside false-positive fixtures 0, since the Google Slides deck
+in the corpus is a round trip the maintainer ran rather than a report from a user; known
+pipeline adoption 0. The docs/code consistency checks are in CI. So three of five are open,
+and none of the three is closed by writing code.
 
 1.0 is blocked less by code than by (a) unifying how the codebase reads a pptx (0.7),
 (b) independently verifiable accuracy (corpus growth beyond author-written fixtures),

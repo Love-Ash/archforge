@@ -19,10 +19,17 @@ Two versions below never shipped. 0.2.1 and 0.3.1 have entries here but were sup
 same day they were written: 0.2.1 has no tag, 0.3.1 has a tag but no GitHub release, and
 neither reached PyPI. Every other version in this file is installable.
 
-## Unreleased
+## 0.9.0 (2026-08-08)
 
-`lint.py` stopped being the whole program, W14 works on both languages it claims to cover,
-and several checks that had been passing without checking anything were repaired.
+The release candidate. `lint.py` stopped being the whole program, W14 works on both
+languages it claims to cover, and several checks that had been passing without checking
+anything were repaired.
+
+This is the RC because the surfaces are now stated rather than inherited: the star-import
+surface is declared, the JSON and baseline schemas are frozen and validated in tests, and
+[docs/DEPRECATION.md](docs/DEPRECATION.md) says what may move and with how much warning.
+1.0 is not this; per [the roadmap](docs/ROADMAP.md) it waits on an RC soak and evidence of
+outside use, and three of its five stated conditions are not met today.
 
 ### Architecture (#5)
 
