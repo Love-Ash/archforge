@@ -81,14 +81,12 @@ def apply_fixes(in_path: str, out_path: str, rules: Optional[Set[str]] = None,
     detectors walk (tables and groups included) and mirrors each detector's firing
     condition before touching anything."""
     from pptx import Presentation
-    # collect_frames now comes from the geometry layer, so only the theme readers still
-    # need the deferred import against lint (#5: they move next).
     try:
         from .geometry import collect_frames
-        from .lint import theme_ea_by_master, theme_fonts_by_master
+        from .resolution import theme_ea_by_master, theme_fonts_by_master
     except ImportError:   # pragma: no cover
         from geometry import collect_frames
-        from lint import theme_ea_by_master, theme_fonts_by_master
+        from resolution import theme_ea_by_master, theme_fonts_by_master
 
     rules = set(rules or FIXABLE)
     prs = Presentation(in_path)
