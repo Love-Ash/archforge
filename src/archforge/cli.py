@@ -970,7 +970,7 @@ def explain_main(argv=None):
     a = ap.parse_args(argv)
     code = a.code.strip().upper()
     if code not in ALL_CODES:
-        print(M("err_skip_unknown") % code, file=sys.stderr)
+        print(M("err_unknown_code") % code, file=sys.stderr)
         return 2
     profiles = sorted(p for p, excl in PROFILES.items() if code not in excl)
     doc = {"code": code, "severity": severity(code), "category": category(code),

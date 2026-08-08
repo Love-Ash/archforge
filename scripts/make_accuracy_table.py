@@ -24,6 +24,9 @@ from collections import Counter, defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORPUS = os.path.join(ROOT, "corpus")
+
+# Shared floor with corpus/run_corpus.py: high enough that a vanished corpus cannot pass.
+EXPECTED_MANIFESTS = 30
 OUT = os.path.join(ROOT, "docs", "ACCURACY.md")
 
 
@@ -81,7 +84,17 @@ def main():
     per_deck = []
     n_negative = 0
     total_slides = 0
-    for mpath in sorted(glob.glob(os.path.join(CORPUS, "*", "*.json"))):
+    # Same one-level glob as corpus/run_corpus.py, and the same failure shape: if the
+    # fixtures move a directory deeper this finds nothing and quietly writes a table of
+    # zeroes. CI would then diff that against the committed one and fail, which is
+    # protection by accident -- so the count is checked here too, where the cause is
+    # readable.
+    manifests = sorted(glob.glob(os.path.join(CORPUS, "*", "*.json")))
+    if len(manifests) < EXPECTED_MANIFESTS:
+        raise SystemExit("found %d manifests, expected at least %d. The corpus is not "
+                         "being seen -- check the layout under %s."
+                         % (len(manifests), EXPECTED_MANIFESTS, CORPUS))
+    for mpath in manifests:
         with io.open(mpath, encoding="utf-8") as f:
             m = json.load(f)
         if m.get("expect_exit2"):

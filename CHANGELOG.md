@@ -21,6 +21,62 @@ neither reached PyPI. Every other version in this file is installable.
 
 ## Unreleased
 
+`lint.py` stopped being the whole program, W14 works on both languages it claims to cover,
+and several checks that had been passing without checking anything were repaired.
+
+### Architecture (#5)
+
+- `lint.py` went from 3,412 lines to 908 across five extractions: the colour layer and the
+  OOXML primitives, geometry, style resolution, the detectors, and finally the command
+  line into `cli.py`. Every name is still reachable from `archforge.lint`, so existing
+  imports keep working. `ooxml.py` exists so the DrawingML namespace has one definition in
+  the tree instead of the two it had grown, and `fixes.py` no longer defers an import to
+  dodge a cycle.
+- The CLI split reverses the dependency direction of the earlier seams, so `lint.py`
+  forwards the moved names through a PEP 562 module `__getattr__` rather than importing
+  `cli` at module level, which would close a cycle. `archforge.lint:main`,
+  `python -m archforge`, `python -m archforge.lint` and `import archforge.lint as jl` all
+  behave as before.
+- `lint.py` declares `__all__`. It never had one, so `from archforge.lint import *` meant
+  "every global without a leading underscore" and handed out `re`, `math`, `argparse` and
+  the typing aliases. It also silently dropped `main` and the subcommands when they moved
+  behind the module `__getattr__`, which star import does not consult. The subcommands are
+  back in the surface; the import spillover is not, and is documented as unsupported.
+- The canonical document model, which is the rest of #5, has not started.
+
+### Checks that were not checking
+
+- The skip-reason registry test had been passing while blind since the detector split. It
+  read one file, and five reason emitters had moved to other modules, so an unregistered
+  key planted in `detectors_geometry.py` passed it. It now walks the package's AST, refuses
+  forms it cannot read rather than skipping them, and asserts in both directions so a scan
+  that goes blind fails instead of going quiet.
+- `corpus/run_corpus.py` exited 0 on an empty corpus. Moving the fixture folders one
+  directory deeper made the glob match nothing and CI's corpus step still reported success.
+  Both it and the accuracy-table generator now require a minimum manifest count.
+- CI gained a blank-line check. The extraction tool joined moved spans with one blank line
+  where PEP 8 wants two, 52 sites landed across six modules, and the repo had no style gate
+  to notice. The check needs Ruff's `--preview` flag; without it the selection matches
+  nothing and passes.
+
+### Fixed
+
+- `archforge demo` no longer stamps python-pptx's bundled template identity onto the decks
+  it writes. Those decks carried the library author's name, a description reading
+  "generated using python-pptx", and an `Application` value claiming PowerPoint on a Mac
+  wrote them. The same properties shipped inside `examples/` and the corpus in every sdist.
+- `python lint.py rules` and `python lint.py explain` failed with a relative-import error.
+  Every module in the package carries a standalone fallback, and for these two subcommands
+  it was a claim the code contradicted.
+- `archforge explain ZZZ` reported the error for `--skip`, a flag `explain` does not accept.
+- `--help` listed three of seven subcommands. `fix`, `explain`, `rules` and `baseline` all
+  worked and appeared nowhere, including the auto-remediation path.
+- Comments that the extractions left behind now sit with the code they describe. An AST
+  span starts at `def`, so four commits running the code moved and its explanation stayed.
+  One inline comment had been split across two files mid-sentence.
+
+### Rules
+
 W14 now works on both languages it claims to cover, and the Hangul side stops mistaking
 ordinary nouns for predicates.
 
@@ -48,7 +104,12 @@ ordinary nouns for predicates.
 - Corpus fixtures for the above: `w14_ko_nominal` (must fire) and `w14_ko_structural`
   (must not), both of which fail on the previous code, plus `w14_ko_claim`, which passes
   on the previous code as well and is kept as the guard against a future rewrite of the
-  rejected kind. Corpus is 31 manifests; the published results table is regenerated.
+  rejected kind. The published results table is regenerated.
+- A Google Slides round trip joins the corpus (#8): a deck exported from Slides and
+  re-imported, which is a writer nobody controls. It exposed a real difference -- the
+  export discards the run-level `a:ea` and leaves the theme's minorFont ea empty beside
+  a Latin-only `a:latin`, which is exactly the shape E1 exists to catch. Corpus is 32
+  manifests across six writers.
 
 ## 0.8.1 (2026-07-11)
 

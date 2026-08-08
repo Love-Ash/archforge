@@ -905,3 +905,37 @@ def test_generated_decks_carry_no_library_signature():
         offenders = ["%s -> %s" % (os.path.basename(p), sorted(set(hits)))
                      for p in targets for hits in [signatures_in(p)] if hits]
         assert not offenders, "library signature in shipped decks: %s" % offenders
+
+
+def test_help_advertises_every_subcommand():
+    """Subcommands are dispatched by hand, not by an argparse subparser, so argparse cannot
+    enumerate them and prog_desc is the only place they appear in --help. It listed three of
+    seven: fix, explain, rules and baseline all worked and were invisible, including the
+    auto-remediation path a user is most likely to want after a failing run.
+
+    Anchored on the dispatch table rather than a literal list, so adding a subcommand
+    without advertising it fails here."""
+    import archforge.cli as _cli
+    with open(_cli.__file__, encoding="utf-8") as _f:
+        src = _f.read()
+    dispatched = set(re.findall(r'^def (\w+)_main\(', src, re.M))
+    dispatched.discard("scan")          # keep every *_main; none are internal today
+    assert len(dispatched) >= 6, "dispatch table not found: %s" % sorted(dispatched)
+    for lang in ("ko", "en"):
+        r = run_cli(["--help"], lang=lang)
+        assert r.returncode == 0
+        missing = [name for name in sorted(dispatched)
+                   if name not in r.stdout]
+        assert not missing, "%s --help does not mention: %s" % (lang, missing)
+
+
+def test_explain_rejects_unknown_code_without_blaming_skip():
+    """`archforge explain ZZZ` used to print the --skip error, a flag explain does not
+    accept, because explain_main reused err_skip_unknown. The message now belongs to the
+    subcommand and points at `archforge rules`."""
+    for lang in ("ko", "en"):
+        r = run_cli(["explain", "ZZZ"], lang=lang)
+        assert r.returncode == 2
+        assert "--skip" not in r.stderr, "explain still blames --skip: %s" % r.stderr
+        assert "rules" in r.stderr, "no pointer to the rule list: %s" % r.stderr
+    assert run_cli(["explain", "E1"]).returncode == 0

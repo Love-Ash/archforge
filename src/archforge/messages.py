@@ -170,6 +170,12 @@ MESSAGES = {
         "ko": "archforge: --skip 에 존재하지 않는 코드가 있습니다(오타 확인): %s",
         "en": "archforge: --skip contains unknown rule codes (check for typos): %s",
     },
+    # explain used to borrow err_skip_unknown, so a typo'd code was reported as a problem
+    # with --skip, a flag the subcommand does not even accept.
+    "err_unknown_code": {
+        "ko": "archforge: 존재하지 않는 규칙 코드입니다(오타 확인): %s. 전체 목록은 archforge rules",
+        "en": "archforge: unknown rule code (check for typos): %s. See archforge rules for the full list",
+    },
     "err_skip_w18": {
         "ko": "archforge: W18은 검사 불완전성 신호라 --skip 으로 억제할 수 없습니다",
         "en": "archforge: W18 signals incomplete checking and cannot be suppressed with --skip",
@@ -183,9 +189,19 @@ MESSAGES = {
         "en": "archforge: note: a file named 'skill' exists here, but the subcommand runs. To lint that file use `archforge ./skill`",
     },
     # ---- CLI help
+    # Subcommands are dispatched by hand rather than by an argparse subparser, so argparse
+    # cannot list them and this string is the only place they are advertised. It named
+    # three of seven; fix, explain, rules and baseline all worked but appeared nowhere in
+    # --help, including the auto-remediation path.
     "prog_desc": {
-        "ko": "빌드된 .pptx를 배포 전에 기계로 검사하는 한글 특화 품질 린터 (서브커맨드: scan = 다중 파일/디렉터리, demo = 첫 실행 투어, skill = 에이전트 스킬팩)",
-        "en": "Preflight quality linter for built .pptx files, deep CJK font coverage (subcommands: scan = many files/dirs, demo = first-run tour, skill = agent skill pack)",
+        "ko": "빌드된 .pptx를 배포 전에 기계로 검사하는 한글 특화 품질 린터\n"
+              "서브커맨드: scan = 다중 파일/디렉터리, fix = 안전한 결함 자동 수정, "
+              "demo = 첫 실행 투어, rules = 규칙 목록, explain = 규칙 하나 설명, "
+              "baseline = 기존 위반 수용 파일 관리, skill = 에이전트 스킬팩",
+        "en": "Preflight quality linter for built .pptx files, deep CJK font coverage\n"
+              "subcommands: scan = many files/dirs, fix = auto-correct the safe defects, "
+              "demo = first-run tour, rules = list the rules, explain = describe one rule, "
+              "baseline = manage the accepted-violation file, skill = agent skill pack",
     },
     "help_hard_min": {"ko": "E3 판독 불가 하한(pt, 기본 5.0)", "en": "E3 unreadable hard floor in pt (default 5.0)"},
     "help_body_min": {"ko": "W1 본문급 권장 하한(pt, 기본 9.0)", "en": "W1 body-class recommended floor in pt (default 9.0)"},

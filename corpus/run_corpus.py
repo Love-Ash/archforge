@@ -30,6 +30,10 @@ from collections import Counter
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "..", "src")
 
+# A floor, not the exact count, so adding a fixture never means editing this line. It only
+# has to be high enough that a corpus which has gone missing cannot slip under it.
+EXPECTED_MANIFESTS = 30
+
 
 def _cli(args):
     env = dict(os.environ)
@@ -41,6 +45,16 @@ def _cli(args):
 
 def main():
     manifests = sorted(glob.glob(os.path.join(HERE, "*", "*.json")))
+    # An empty corpus used to be indistinguishable from a passing one: the loop below simply
+    # did not run and this exited 0, so CI's "Public corpus expectations" step reported
+    # success over nothing. One directory level is all it takes -- moving the fixture
+    # folders under corpus/fixtures/ makes this glob match zero files. Measured: with the
+    # folders moved aside it printed "0 manifests, 0 failures" and exited 0.
+    if len(manifests) < EXPECTED_MANIFESTS:
+        print("FAIL     found %d manifests, expected at least %d. The corpus is not being "
+              "seen -- check the layout under %s rather than lowering this number."
+              % (len(manifests), EXPECTED_MANIFESTS, HERE))
+        return 1
     bad = 0
     for mpath in manifests:
         with io.open(mpath, encoding="utf-8") as f:
