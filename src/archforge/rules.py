@@ -75,3 +75,63 @@ def severity(code: str) -> str:
 
 def category(code: str) -> str:
     return RULES.get(code, ("", "unknown"))[1]
+
+
+# Skip reason -> (rules that may not have run, the capability it degrades). Schema 2.0's
+# abstentions[] payload is built from this, so a CI consumer deciding "was E2 actually
+# checked on this deck" reads it.
+#
+# It lives here rather than in the CLI because the engine writes the keys and the CLI only
+# renders them; the registry belongs with the rule metadata that both of them import.
+#
+# The lists are a "may not have run" superset, deliberately. A guard wraps several calls and
+# which rules survive depends on where inside the block the failure landed, so listing the
+# guard's whole reach is the safe direction: over-reporting what might be missing costs a
+# consumer some caution, while under-reporting tells them a rule ran when it did not. #11
+# was the second kind.
+#
+# Corrected by measurement (#11): each guard was broken in turn and the findings that
+# disappeared across 25 corpus and example decks were recorded. That is a lower bound, since
+# a rule that never fires on the deck set cannot be seen going missing, so these values are
+# the union of that measurement, the codes emitted lexically inside each guarded block, and
+# what was already registered. Four grew -- frames, frame, para and run -- and all four
+# reach W14, which nobody had noticed: titles are collected from the same frame walk, so a
+# frame failure takes the action-title gate with it.
+#
+# Known narrowness, not addressed here: one reason carries one capability, but frames
+# failing degrades both typography and structure. Widening that changes the schema-2
+# capabilities map, which is frozen for 0.9.x.
+_REASON_RULES = {
+    "vertical_text": (["W15", "W16", "W17"], "geometry"),
+    "complex_script": (["W15", "W16", "W17"], "geometry"),
+    "glyph_boxes": (["W15", "W16", "W17"], "geometry"),
+    "pic_boxes": (["W16", "W17"], "geometry"),
+    "w15": (["W15"], "geometry"),
+    "w16_w17": (["W16", "W17"], "geometry"),
+    "image_decode": (["W16", "W17"], "geometry"),
+    "image_decode_budget": (["W16", "W17"], "geometry"),
+    "frames": (["E1", "E2", "E3", "E4", "W1", "W5", "W8", "W14"], "typography"),
+    "frame": (["E1", "E2", "E3", "E4", "W1", "W5", "W8", "W14"], "typography"),
+    "para": (["E1", "E2", "E3", "E4", "W1", "W8", "W14"], "typography"),
+    "para_size": (["E3"], "typography"),
+    "run": (["E1", "E2", "E3", "E4", "W1", "W5", "W8", "W14"], "typography"),
+    "w7": (["W7"], "render"),
+    "w7_no_render": (["W7"], "render"),
+    "w7_color_unknown": (["W7"], "render"),
+    "render_dir_missing": (["W7"], "render"),
+    "w9": (["W9"], "structure"),
+    "w6_sig": (["W6"], "structure"),
+    "w6": (["W6"], "structure"),
+    "w6_capped": (["W6"], "structure"),
+    "w10_tokens": (["W10"], "structure"),
+    "w10": (["W10"], "structure"),
+    "w10_capped": (["W10"], "structure"),
+    "w11_w14": (["W11", "W12", "W13", "W14"], "structure"),
+    "w12_w13": (["W12", "W13"], "structure"),
+    "theme_parse": (["E1"], "typography"),
+}
+
+# Every skip-reason key a detector can emit must be registered above, so a structural
+# abstention never lands as ([], "meta") with structure still reported "complete"
+# (0.7.1, external review P0). test_reason_registry_covers_all_keys enforces this.
+KNOWN_REASON_KEYS = frozenset(_REASON_RULES)

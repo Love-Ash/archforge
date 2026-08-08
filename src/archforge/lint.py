@@ -101,11 +101,13 @@ from pptx import Presentation
 try:
     from .messages import M, set_lang, get_lang
     from .findings import Finding, shape_loc
-    from .rules import RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE, severity
+    from .rules import (RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE, severity,
+                        KNOWN_REASON_KEYS)
 except ImportError:   # fallback for standalone file execution (python lint.py)
     from messages import M, set_lang, get_lang
     from findings import Finding, shape_loc
-    from rules import RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE, severity
+    from rules import (RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE, severity,
+                       KNOWN_REASON_KEYS)
 
 try:
     from .geometry import (_pct_attr,
@@ -839,8 +841,6 @@ _CLI_NAMES = frozenset({
     "skill_main",
     "_timeout_reexec",
     "main",
-    "_REASON_RULES",
-    "KNOWN_REASON_KEYS",
     "_capabilities_and_abstentions",
     "_check_out_dir",
     "_html_thumbs",

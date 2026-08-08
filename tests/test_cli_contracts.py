@@ -939,3 +939,83 @@ def test_explain_rejects_unknown_code_without_blaming_skip():
         assert "--skip" not in r.stderr, "explain still blames --skip: %s" % r.stderr
         assert "rules" in r.stderr, "no pointer to the rule list: %s" % r.stderr
     assert run_cli(["explain", "E1"]).returncode == 0
+
+
+def test_abstention_payload_names_every_rule_the_guard_blocks():
+    """#11: `affected_rules` told a consumer that fewer rules were skipped than really were.
+    The `run` guard reaches seven codes and the table claimed four; `frames` cascades to the
+    same set and omitted E2. A CI job keying on "was E2 checked on this deck" got the wrong
+    answer on exactly the decks where the guard had fired.
+
+    The table cannot be derived lexically, because most guards emit nothing inside their own
+    block: they build data and their failure cascades to whatever consumes it. So this
+    asserts the two things that ARE derivable, and the registry has to be a superset of both.
+
+    It is deliberately a superset rather than an equality. Breaking one call inside a guard
+    kills less than the guard failing at its first statement, so the honest payload is the
+    guard's whole reach. Over-reporting what might be missing is the safe direction for an
+    incompleteness signal; under-reporting is the bug this closes."""
+    import ast
+    import archforge.rules as _rules
+    COUNTERS = ("skipped", "deck_skipped")
+    codes = set(jl.ALL_CODES) - {"W18"}
+    with open(jl.__file__, encoding="utf-8") as _f:
+        tree = ast.parse(_f.read())
+
+    def reasons_of(handler):
+        out = set()
+        for node in ast.walk(handler):
+            if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) \
+                    and isinstance(node.value, ast.Name) and node.value.id in COUNTERS:
+                out.add(node.slice.value)
+        return out
+
+    checked = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Try):
+            continue
+        keys = set()
+        for handler in node.handlers:
+            keys |= reasons_of(handler)
+        if not keys:
+            continue
+        body = ast.Module(body=node.body, type_ignores=[])
+        emitted = {c for c in codes
+                   if any(isinstance(x, ast.Constant) and x.value == c
+                          for x in ast.walk(body))}
+        if not emitted:
+            continue        # a setup guard; its reach is cascade, measured out of band
+        for key in keys:
+            registered = set(_rules._REASON_RULES.get(key, ([], "meta"))[0])
+            missing = sorted(emitted - registered, key=lambda c: (c[0] != "E", int(c[1:])))
+            assert not missing, (
+                "the %r guard at lint.py:%d emits %s but the registry does not list %s, so "
+                "an abstention would claim those rules ran"
+                % (key, node.lineno, sorted(emitted), missing))
+            checked += 1
+    assert checked >= 4, "only %d guards had derivable reach; the scan found nothing" % checked
+
+
+def test_abstention_payload_reaches_the_json_output(tmp_path):
+    """The registry is only worth correcting if the corrected values actually reach the
+    report. Forces a guard to fail on a real deck and reads affected_rules back out of the
+    schema-2 output rather than out of the table."""
+    import subprocess
+    deck = os.path.join(_repo_root(), "examples", "broken.pptx")
+    script = (
+        "import sys, json;"
+        "sys.path.insert(0, %r);"
+        "import archforge.lint as L;"
+        "L.collect_frames = lambda *a, **k: (_ for _ in ()).throw(RuntimeError('forced'));"
+        "import archforge.cli as C;"
+        "sys.argv = ['archforge', %r, '--profile', 'full', '--json', '--schema', '2'];"
+        "C.main()" % (os.path.join(_repo_root(), "src"), deck))
+    r = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
+                       encoding="utf-8", stdin=subprocess.DEVNULL)
+    doc = json.loads(r.stdout)
+    abst = [a for a in doc.get("abstentions", []) if a["reason"] == "frames"]
+    assert abst, "forcing collect_frames to raise produced no 'frames' abstention: %s" % doc.get("abstentions")
+    affected = set(abst[0]["affected_rules"])
+    for code in ("E1", "E2", "E3", "E4", "W14"):
+        assert code in affected, "%s missing from affected_rules: %s" % (code, sorted(affected))
+    assert doc["capabilities"]["typography"] == "partial"

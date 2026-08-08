@@ -28,14 +28,14 @@ import argparse
 try:
     from .messages import M, set_lang, get_lang
     from .rules import (ALL_CODES, PROFILES, DEFAULT_PROFILE, severity,
-                        TITLES, category)
+                        TITLES, category, _REASON_RULES, KNOWN_REASON_KEYS)
     from . import config as _config
     from . import reporters as _reporters
     from .lint import collect_wireframe, lint
 except ImportError:   # fallback for standalone file execution (python cli.py)
     from messages import M, set_lang, get_lang
     from rules import (ALL_CODES, PROFILES, DEFAULT_PROFILE, severity,
-                       TITLES, category)
+                       TITLES, category, _REASON_RULES, KNOWN_REASON_KEYS)
     import config as _config
     import reporters as _reporters
     from lint import collect_wireframe, lint
@@ -235,45 +235,6 @@ def main():
         print(line)
 
     sys.exit(1 if res["fail"] else 0)
-
-
-# Maps a W18 skip-reason key (machine string, stable) to the rules it prevented and the
-# capability it degrades (0.7 schema 2.0). Reasons not listed default to no affected rules
-# and the "meta" capability. Keys mirror the Counter keys written at each guard.
-_REASON_RULES = {
-    "vertical_text": (["W15", "W16", "W17"], "geometry"),
-    "complex_script": (["W15", "W16", "W17"], "geometry"),
-    "glyph_boxes": (["W15", "W16", "W17"], "geometry"),
-    "pic_boxes": (["W16", "W17"], "geometry"),
-    "w15": (["W15"], "geometry"),
-    "w16_w17": (["W16", "W17"], "geometry"),
-    "image_decode": (["W16", "W17"], "geometry"),
-    "image_decode_budget": (["W16", "W17"], "geometry"),
-    "frames": (["E1", "E3", "E4", "W1", "W5", "W8"], "typography"),
-    "frame": (["E1", "E3", "E4", "W1", "W5", "W8"], "typography"),
-    "para": (["E1", "E2", "E3", "E4"], "typography"),
-    "para_size": (["E3"], "typography"),
-    "run": (["E1", "E2", "E3", "E4"], "typography"),
-    "w7": (["W7"], "render"),
-    "w7_no_render": (["W7"], "render"),
-    "w7_color_unknown": (["W7"], "render"),
-    "render_dir_missing": (["W7"], "render"),
-    "w9": (["W9"], "structure"),
-    "w6_sig": (["W6"], "structure"),
-    "w6": (["W6"], "structure"),
-    "w6_capped": (["W6"], "structure"),
-    "w10_tokens": (["W10"], "structure"),
-    "w10": (["W10"], "structure"),
-    "w10_capped": (["W10"], "structure"),
-    "w11_w14": (["W11", "W12", "W13", "W14"], "structure"),
-    "w12_w13": (["W12", "W13"], "structure"),
-    "theme_parse": (["E1"], "typography"),
-}
-
-# Every skip-reason key a detector can emit must be registered above, so a structural
-# abstention never lands as ([], "meta") with structure still reported "complete"
-# (0.7.1, external review P0). test_reason_registry_covers_all_keys enforces this.
-KNOWN_REASON_KEYS = frozenset(_REASON_RULES)
 
 
 def _capabilities_and_abstentions(warns, render_requested):
