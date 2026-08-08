@@ -301,3 +301,4 @@ def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors
                                  loc=shape_loc(sp, bbox=[gx, gy, gw_, gh_])))
             return "ok"
     return "ok"   # found and checked the render PNG for this page (regardless of whether
+                  # W7 actually fired)

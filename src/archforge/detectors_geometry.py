@@ -75,10 +75,18 @@ class _FldRun:
         except (TypeError, ValueError):
             return None
 
+# Effective glyph bbox (in) per paragraph. Turned a magic index tuple into named fields
+# (external review, 2026-07-10).
+# sp (owning shape) is for the loc payload of W15-W17 findings (0.5.0); the coordinates are
+# already the group's absolute coordinates.
 GlyphBox = namedtuple("GlyphBox", "x0 y0 x1 y1 rep max_pt frame_id sp cell para field")
 GlyphBox.__new__.__defaults__ = (None, None, None, False)
 
+# W15 text overlap: the most common defect axis in generated decks (elements pile up with
+# every revision round), but the frame bbox is drawn generously by convention and can't be
+# used, so this approximates the effective glyph width instead.
 _W_CJK, _W_LAT, _W_SP = 0.96, 0.52, 0.28   # character-width/font-size ratio approximation
+                                           # (conservative: suppresses false positives)
 
 
 def _glyph_w(s, size_pt):

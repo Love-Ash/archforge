@@ -20,6 +20,8 @@ except ImportError:   # standalone execution
     from findings import Finding
     from scripts import is_cjk
 
+# AI-tell copy: only obvious cliches (a narrow dictionary = suppresses false positives).
+# General words that could be legitimate in context are not included.
 BUZZWORDS = (
     "시너지", "패러다임", "게임체인저", "게임 체인저", "혁신을 가속", "가치를 극대화",
     "미래를 선도", "새로운 지평", "무한한 가능성", "홀리스틱", "엔드투엔드", "엔드 투 엔드",
@@ -49,6 +51,9 @@ def copy_cliche_check(page_texts, warns):
             if op:
                 warns.append(Finding(si, "W11", "w11_open", (), ", ".join(op[:5])))
 
+# English finite-verb forms that mark a claim-style title. Prefer false negatives over
+# false positives: copulas/auxiliaries and ambiguous noun/verb homographs are omitted.
+# Measured against the issue fixtures (noun-phrase decks fire; verb/number+unit decks do not).
 _EN_CLAIM_VERBS = frozenset({
     "grows", "grew", "rises", "rose", "fall", "falls", "fell", "jumps", "jumped",
     "drives", "drove", "reaches", "reached", "beats", "misses", "missed",
@@ -66,6 +71,9 @@ _EN_CLAIM_VERBS = frozenset({
     "reported", "delivers", "delivered", "fuels", "fueled", "fuelled",
 })
 
+# Structural English titles that should not enter the W14 eligibility pool.
+# Cover/section/closing slides are noun phrases by nature; counting them would
+# fire W14 on any three-slide deck with a title page and divider.
 _EN_STRUCTURAL_TITLES = frozenset({
     "cover", "title", "title page", "agenda", "introduction",
     "overview", "appendix", "thank you", "thanks", "q&a", "q and a", "qa",
@@ -113,6 +121,9 @@ def _en_is_claim(title):
     words = re.findall(r"[A-Za-z]+", title)
     return any(w.lower() in _EN_CLAIM_VERBS for w in words)
 
+# Cover / divider / closing slides in Korean decks. A structural slide is not part of the
+# deck's argument, so counting it inflates W14 on both sides of the ratio. Mirrors
+# _EN_STRUCTURAL_TITLES, which landed for English in #9.
 _KO_STRUCTURAL_TITLES = frozenset({
     "표지", "목차", "차례", "부록", "별첨", "감사합니다", "감사", "질의응답", "질의 응답",
     "마무리", "맺음말", "끝", "참고문헌", "참고 문헌", "출처", "회사소개", "회사 소개",
@@ -120,6 +131,16 @@ _KO_STRUCTURAL_TITLES = frozenset({
     "경청해 주셔서 감사합니다",
 })
 
+# Korean nouns whose last syllable is also a sentence ending. The ending test cannot tell
+# 개요 (an overview) from 해요 (a predicate), so the collisions are listed rather than
+# guessed at, the way the rule already carried a note about 바다.
+#
+# The list is incomplete on purpose and safe to leave that way: -자 is a productive agent
+# suffix, so no hand-written list keeps up with it, and a word that is absent simply keeps
+# the previous reading (counted as a claim, rule stays quiet). Every residual miss
+# therefore lands on the false-negative side, which is the side W14 is supposed to err on.
+# Words that can also be predicates in a title (가요, 포함, 약함, 이자) are deliberately
+# left out: listing them would move errors to the firing side.
 _KO_NOUN_FINALS = frozenset({
     "개요", "필요", "중요", "주요", "수요", "소요", "강요", "동요",
     "투자자", "사용자", "소비자", "참가자", "참여자", "가입자", "이용자", "구독자",
@@ -132,6 +153,8 @@ _KO_NOUN_FINALS = frozenset({
     "바다", "소다",
 })
 
+# Sentence-final interrogatives written without a question mark. Recognising these moves a
+# title out of the nominal count, which lowers the firing rate, so they are safe to add.
 _KO_INTERROGATIVE_SUFFIX = ("인가", "는가", "은가", "던가", "을까")
 
 _KO_SENTENCE_ENDINGS = ("다", "까", "요", "자", "죠", "함", "임")

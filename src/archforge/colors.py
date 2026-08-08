@@ -19,10 +19,13 @@ try:
 except ImportError:   # standalone execution
     from ooxml import NS
 
-# Sentinel for "this run's colour could not be resolved". Distinct from None, which means
-# "resolved to no explicit colour": an unknown must stop resolution rather than be treated
-# as a default (0.6.1).
+# Sentinel: an explicit color exists but the decoder cannot resolve it (hslClr, scrgbClr,
+# sysClr, prstClr, tint/shade transforms...). Falling through to inherited colors produced
+# W7 false positives, e.g. an explicit white hslClr run judged with an inherited black
+# (0.6.1, external review): an unknown explicit color must stop resolution, not be skipped.
+# Distinct from None, which means "resolved to no explicit color".
 _COLOR_UNKNOWN = object()
+
 
 def _shape_fill_hex(sp):
     """Solid fill hex (6-digit uppercase) or None. Because this uses the python-pptx accessor,

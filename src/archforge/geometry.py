@@ -144,6 +144,12 @@ def _is_pic(sp):
     except Exception:
         return False
 
+# Absolute-coordinate traversal for W15-W17 geometry consumers. A group child's raw left/top
+# is in the group's chOff coordinate space, which drifts from slide coordinates in a pptx
+# where the group has been moved or resized (off!=chOff desync, standard behavior when
+# dragging in PowerPoint) (measured in adversarial verification, 2026-07-03). Composes the
+# off/ext vs chOff/chExt affine and yields (shape, z-order, absolute xfrm function
+# coefficients). xf=(ax,bx,ay,by): abs = a*raw + b (EMU).
 def iter_shapes_geo(shapes, xf=(1.0, 0.0, 1.0, 0.0), _z=None):
     if _z is None:
         _z = [0]
