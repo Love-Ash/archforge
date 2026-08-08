@@ -36,7 +36,8 @@ def main():
     m = re.search(r"^## ([0-9][^ ]*) \(", _read("CHANGELOG.md"), re.M)
     checks.append(("CHANGELOG.md latest heading", m.group(1) if m else None))
 
-    for rel in ("README.md", "README.ko.md"):
+    for rel in ("README.md", "README.ko.md",
+                "docs/recipes/github-actions.md"):
         body = _read(rel)
         for label, pat in (("Action tag", r"Love-Ash/archforge@v([0-9][^\s\"']*)"),
                            ("pre-commit rev", r"rev: v([0-9][^\s\"']*)")):

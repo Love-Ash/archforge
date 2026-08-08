@@ -6,7 +6,10 @@
 
 Catches silent font fallback, unreadable sizes, colliding frames,
 off-canvas text, and AI-tell punctuation in built `.pptx` files,
-before a human ever sees a render.
+before a human ever sees a render. Font-fallback and letter-tracking
+detection (E1/E4) is CJK-specific by design -- deepest for Hangul --
+and does not fire on Latin-only decks; every other gate is
+script-independent.
 
 [![pypi](https://img.shields.io/pypi/v/archforge)](https://pypi.org/project/archforge/)
 ![python](https://img.shields.io/badge/python-3.9%2B-3776AB)

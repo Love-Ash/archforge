@@ -12,6 +12,7 @@ archforge deck.pptx --e2-no-exemptions  # E2 numeric-range/minus exemptions off 
 archforge deck.pptx --strict            # union of the three flags above
 archforge deck.pptx --ghost         # per-page title list (horizontal-logic review)
 archforge deck.pptx --render pages/ # add on-image contrast check (W7) from p01.png-style renders
+#   (how to produce the PNGs: docs/recipes/rendering.md)
 archforge deck.pptx --skip W14,W6   # suppress specific WARNs (recorded in JSON)
 archforge deck.pptx --lang en       # report language (default: ARCHFORGE_LANG, then OS locale)
 archforge deck.pptx --no-config     # ignore config files (linting untrusted decks)

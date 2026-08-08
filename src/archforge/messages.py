@@ -432,8 +432,8 @@ MESSAGES = {
         "en": "directory to write the demo decks to (default ./archforge-demo)",
     },
     "demo_built": {
-        "ko": "archforge: 데모 덱 생성 완료 -> %s (broken.pptx = 결함 6종, fixed.pptx = 교정본)",
-        "en": "archforge: demo decks written -> %s (broken.pptx = seeded defects, fixed.pptx = the corrected version)",
+        "ko": "archforge: 데모 덱 생성 완료 -> %s (broken.pptx = 결함 6종, fixed.pptx = 교정본, 검사는 --profile full 기준)",
+        "en": "archforge: demo decks written -> %s (broken.pptx = seeded defects, fixed.pptx = the corrected version; linted with --profile full)",
     },
     "demo_next": {
         "ko": "다음: 직접 돌려보세요. archforge %s --profile full --json (기계 생성 덱 검사는 full 프로파일)",
