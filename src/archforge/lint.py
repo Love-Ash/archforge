@@ -85,11 +85,11 @@ back to left alignment.
 This module is the engine: it walks a deck and returns findings. The command line that
 wraps it (flags, subcommands, exit codes, report files) lives in cli.py.
 
-The functional dependency runs one way, cli -> lint: nothing here calls the CLI. The import
-graph is not one-way, though, and saying so would be false. The module __getattr__ at the
-bottom imports cli to forward the old names, so `import archforge` traverses
-lint -> cli -> lint. PEP 562 defers that edge past module execution; it does not remove it,
-and a static import checker will report the cycle.
+The engine API runs one way, cli -> lint: no function in this module calls the CLI. The
+adapters at the bottom of the file do, and the import graph is not one-way. The module
+__getattr__ imports cli to forward the old names and the __main__ guard imports it to run,
+so `import archforge` traverses lint -> cli -> lint. PEP 562 defers that edge past module
+execution; it does not remove it, and a static import checker will report the cycle.
 """
 import os
 import sys
@@ -872,6 +872,32 @@ def __getattr__(name):
 
 def __dir__():
     return sorted(set(globals()) | _CLI_NAMES)
+
+
+# Modules that are bound here only because this file imports them. They were never API, but
+# without an explicit __all__ a star import handed them out along with everything else.
+_STAR_SPILLOVER = frozenset({"os", "sys", "glob", "Counter", "Presentation"})
+
+# The star-import surface, declared instead of inherited.
+#
+# `from archforge.lint import *` used to mean "every global without a leading underscore",
+# which quietly included re, math, argparse, colorsys, namedtuple, the typing aliases and
+# MSO_SHAPE_TYPE. Removing those imports in 0.8 therefore shrank a surface nobody had ever
+# decided on. Worse, a module __getattr__ is invisible to star import, so the same release
+# dropped `main` and the subcommands from it while `import archforge.lint; jl.main` kept
+# working -- the deck_system shim survived only because it names `main` explicitly.
+#
+# So the list is stated. The CLI names are added back because they were genuinely part of
+# the surface. The import spillover is not reinstated: Python really did hand those names
+# out, so this is a deliberate narrowing rather than a claim they never escaped, but they
+# were never documented or supported and nothing consumes them. Underscore-private CLI
+# helpers stay out too; they remain reachable as attributes for the tests that need them.
+# _STAR_SPILLOVER is a denylist, which would rot on its own, so a test derives the set it
+# means (module-level imports from outside the package) and requires the literal to match.
+__all__ = sorted(
+    ({n for n in globals() if not n.startswith("_")} - _STAR_SPILLOVER)
+    | {n for n in _CLI_NAMES if not n.startswith("_")}
+)
 
 
 if __name__ == "__main__":   # `python -m archforge.lint`, used by the test harness

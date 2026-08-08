@@ -40,6 +40,7 @@ def _shape_fill_hex(sp):
         pass
     return None
 
+
 def _shape_line_hex(sp):
     """Line/outline color hex or None. Also covers the line color of connectors (cxnSp)
     (measured: real-deck connector vertical bars were caught passing through this path)."""
@@ -50,6 +51,7 @@ def _shape_line_hex(sp):
     except Exception:
         pass
     return None
+
 
 def _is_accent(hexc):
     """Judges a semantic accent color: HSV saturation >= 0.55 and lightness 0.18-0.78.
@@ -66,6 +68,7 @@ def _is_accent(hexc):
     sv = 0.0 if mx == 0 else (mx - mn) / mx
     _, l, _ = colorsys.rgb_to_hls(r, g, b)
     return sv >= 0.55 and 0.18 <= l <= 0.78
+
 
 def _theme_colors_from_blob(blob: bytes) -> Optional[Dict[str, str]]:
     """Maps theme clrScheme color names -> RRGGBB (sysClr uses lastClr). Used to resolve
@@ -96,6 +99,7 @@ def _theme_colors_from_blob(blob: bytes) -> Optional[Dict[str, str]]:
     except Exception:
         return None
 
+
 def theme_colors_by_master(prs) -> Dict[str, Optional[Dict[str, str]]]:
     """A map of theme colors per slide master. Key = master partname string."""
     out = {}
@@ -111,6 +115,7 @@ def theme_colors_by_master(prs) -> Dict[str, Optional[Dict[str, str]]]:
         pass
     return out
 
+
 def _cosv(a, b):
     da = sum(x * x for x in a) ** 0.5; db = sum(x * x for x in b) ** 0.5
     if da == 0 or db == 0:
@@ -119,11 +124,13 @@ def _cosv(a, b):
     # breaching the w6_sim=1.0 ceiling
     return min(1.0, sum(x * y for x, y in zip(a, b)) / (da * db))
 
+
 def _luma(rgb):
     def lin(c):
         c = c / 255.0
         return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
     return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2])
+
 
 def _run_rgb(run):
     try:
@@ -134,6 +141,7 @@ def _run_rgb(run):
     except Exception:
         pass
     return None
+
 
 def _resolve_run_rgb(run, para, tframe, sp, slide, styler=None, thm_colors=None):
     """Resolves text color: run rPr direct RGB -> paragraph defRPr -> lstStyle inheritance

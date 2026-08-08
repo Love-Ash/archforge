@@ -20,6 +20,7 @@ try:
 except ImportError:   # standalone execution
     from ooxml import NS, NS_P
 
+
 def _theme_fonts_from_blob(blob: bytes) -> Optional[Dict[str, str]]:
     """The 4 major/minor font slots from the theme XML: {"mn-ea","mn-lt","mj-ea","mj-lt"}.
     Because this uses XML parsing, it is unaffected by quote serialization or attribute order
@@ -43,6 +44,7 @@ def _theme_fonts_from_blob(blob: bytes) -> Optional[Dict[str, str]]:
     except Exception:
         return None
 
+
 def theme_fonts_by_master(prs) -> Dict[str, Optional[Dict[str, str]]]:
     """A map of theme font slots per slide master. Key = master partname string, value = None
     on parse failure. Fixes an issue where, in a multi-master deck, grabbing the first theme
@@ -62,11 +64,13 @@ def theme_fonts_by_master(prs) -> Dict[str, Optional[Dict[str, str]]]:
         pass
     return out
 
+
 def theme_ea_by_master(prs) -> Dict[str, Optional[str]]:
     """Backward compatibility: a map with only the minorFont a:ea per master (value None =
     parse failure, "" = empty slot)."""
     return {k: (v.get("mn-ea", "") if v is not None else None)
             for k, v in theme_fonts_by_master(prs).items()}
+
 
 def theme_ea_font(prs) -> Optional[str]:
     """Backward-compatible entry point: the theme a:ea of the first master (relationship-based
@@ -78,6 +82,7 @@ def theme_ea_font(prs) -> Optional[str]:
         if v is not None:
             return v
     return None
+
 
 def _sz_from_defrpr(d) -> Optional[float]:
     """Converts defRPr@sz (1/100pt integer) to pt. None if absent or garbage."""
@@ -91,6 +96,7 @@ def _sz_from_defrpr(d) -> Optional[float]:
     except ValueError:
         return None
 
+
 def _lst_defrpr(lst_el, lvl: int):
     """The defRPr element for the given level from an lstStyle-type container (a:lvlXpPr
     children)."""
@@ -102,9 +108,11 @@ def _lst_defrpr(lst_el, lvl: int):
         return None
     return p.find(NS + "defRPr")
 
+
 def _lst_sz_pt(lst_el, lvl: int) -> Optional[float]:
     """Backward-compatible shim: the defRPr sz (pt) at the given level in lstStyle."""
     return _sz_from_defrpr(_lst_defrpr(lst_el, lvl))
+
 
 class StyleResolver:
     """When a run or paragraph has no explicit attribute, resolves the effective style via the

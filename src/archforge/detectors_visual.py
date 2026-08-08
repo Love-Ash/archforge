@@ -41,6 +41,7 @@ _EFFECT_TAGS = tuple(NS + t for t in ("outerShdw", "innerShdw", "glow", "reflect
 
 _3D_TAGS = tuple(NS + t for t in ("sp3d", "scene3d"))
 
+
 def accent_vbars_check(slide, si, sw, sh, warns):
     """W9: an AI-generated-deck tell where accent-colored vertical bars are repeated as list
     markers, using color to build item structure (measured in real decks). Reflects the
@@ -84,6 +85,7 @@ def accent_vbars_check(slide, si, sw, sh, warns):
         warns.append(Finding(si, "W9", "w9", (len(bars),),
                          "x=%.2fin hue=%s" % (min(xs), next(iter(hues)))))
 
+
 def _fill_tokens(slide, sw, sh):
     """Turns the slide's solid-fill shapes into a multiset of (color, 24-grid position/size)
     tokens. Full-bleed backgrounds are excluded."""
@@ -102,6 +104,7 @@ def _fill_tokens(slide, sw, sh):
             continue
         t[(fh, round(L / sw * 24), round(T / sh * 24), round(Wd / sw * 24), round(Ht / sh * 24))] += 1
     return t
+
 
 def footer_top(slide, sw, sh):
     """The top (in) of the bottommost text in the slide's bottom band (y>0.88H). None if there
@@ -122,6 +125,7 @@ def footer_top(slide, sw, sh):
         if best is None or ti > best:
             best = ti
     return best
+
 
 def footer_check(foot_tops, warns):
     """W12: footer baseline misalignment across pages. In a 50-deck measurement (2026-07-02),
@@ -148,6 +152,7 @@ def footer_check(foot_tops, warns):
         ex = " ".join("p%d=%.2f" % (si, t) for si, t in off[:4])
         warns.append(Finding(0, "W12", "w12", (base, len(off)), ex))
 
+
 def effects_count(slide):
     """The count and kinds of the slide's effective PPT effects (shadow, glow, 3D). Some
     generators leave a childless empty effectLst purely to block inheritance, so this only
@@ -171,6 +176,7 @@ def effects_count(slide):
                 kinds.add(tag.split("}")[1])
     return n, kinds
 
+
 def effects_check_deck(per_page, warns):
     """W13: aggregated once per deck (firing repeatedly per page is noise: measured on the
     50-deck corpus). Could be an intentional neon/glow style, so this is a WARN and the
@@ -183,6 +189,7 @@ def effects_check_deck(per_page, warns):
     pages = ",".join("p%d" % si for si, _n, _k in hits[:6])
     warns.append(Finding(0, "W13", "w13", (total, len(hits)),
                          "%s | %s" % (pages, ",".join(kinds))))
+
 
 def _diagram_clone_marks(inter):
     """Counts "decorative texture clones" (small dots, joints, etc., 1x1 or smaller on the
@@ -199,6 +206,7 @@ def _diagram_clone_marks(inter):
     if marks >= 8 and area / (24.0 * 24.0) >= 0.06:
         return marks
     return 0
+
 
 def slide_layout_sig(slide, sw, sh, gw=6, gh=4):
     """Turns slide element placement into a gw x gh grid occupancy vector. Full-bleed
@@ -223,6 +231,7 @@ def slide_layout_sig(slide, sw, sh, gw=6, gh=4):
         sig[gr * gw + gc] += wgt
         n += 1
     return sig, n
+
 
 def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors=None,
                    skipped=None):

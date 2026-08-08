@@ -19,6 +19,7 @@ try:
 except ImportError:   # standalone execution
     from ooxml import EMU_PER_IN, NS
 
+
 def _pct_attr(v, default):
     """OOXML percentage union type: both '62500' (1/1000 %) and '62.5%' (string form) are
     valid (ST_TextFontScalePercentOrPercentString). int() alone dies with ValueError on the
@@ -30,6 +31,7 @@ def _pct_attr(v, default):
     if v.endswith("%"):
         return float(v[:-1]) / 100.0
     return int(v) / 100000.0
+
 
 def frame_autofit(tf):
     """The (fontScale, lnSpcReduction) ratio pair. (1.0, 0.0) if there is no normAutofit.
@@ -46,10 +48,12 @@ def frame_autofit(tf):
                     _pct_attr(na.get("lnSpcReduction"), 0.0))
     return 1.0, 0.0
 
+
 def frame_font_scale(tf):
     """The text frame's autofit fontScale (ratio). Kept for backward compatibility with
     existing consumers such as E3."""
     return frame_autofit(tf)[0]
+
 
 def _group_xf(sp, xf):
     """Composes the group shape's off/ext vs chOff/chExt affine with the parent xf.
@@ -84,6 +88,7 @@ def _group_xf(sp, xf):
         # placed instead of the whole page's geometry aborting into W18 over one odd
         # group. The trade-off is documented in docs/EXCEPTION_AUDIT.md.
         return xf
+
 
 def collect_frames(shapes, xf=(1.0, 0.0, 1.0, 0.0)):
     """A list of (text_frame, width_emu, owner_shape, cell_rc, xf). Recurses into groups and
@@ -126,6 +131,7 @@ def collect_frames(shapes, xf=(1.0, 0.0, 1.0, 0.0)):
             out.append((sp.text_frame, sp.width or 0, sp, None, xf))
     return out
 
+
 def iter_shapes(shapes):
     """Flattens all shapes into a single traversal, recursing into groups."""
     for sp in shapes:
@@ -138,11 +144,13 @@ def iter_shapes(shapes):
             pass
         yield sp
 
+
 def _is_pic(sp):
     try:
         return sp.shape_type == MSO_SHAPE_TYPE.PICTURE
     except Exception:
         return False
+
 
 # Absolute-coordinate traversal for W15-W17 geometry consumers. A group child's raw left/top
 # is in the group's chOff coordinate space, which drifts from slide coordinates in a pptx
@@ -167,6 +175,7 @@ def iter_shapes_geo(shapes, xf=(1.0, 0.0, 1.0, 0.0), _z=None):
         z = _z[0]
         _z[0] += 1
         yield sp, z, xf
+
 
 def _geo_rect(sp, xf):
     """The absolute bbox (in) with xf applied. A rotated shape is expanded to an axis-aligned

@@ -40,6 +40,15 @@ jobs:
           python scripts/check_rule_docs.py
           python scripts/make_rule_docs.py
           git diff --exit-code docs/rules
+      - name: Blank-line layout (the #5 extractions drifted, nothing was watching)
+        # Narrow on purpose. The extraction tool joined moved spans with one blank line
+        # where PEP 8 wants two, and 52 sites landed across six modules with no style gate
+        # in the repo to notice. These three rules are all that failure needs. They sit
+        # behind Ruff's preview flag, so plain `ruff check --select E3` silently selects
+        # nothing and passes: the flag is load-bearing, not decoration.
+        run: |
+          python -m pip install ruff
+          python -m ruff check --select E302,E303,E305 --preview src/archforge/
 
   package:
     # 배포 회귀 게이트: wheel에 스킬팩이 실제로 동봉되고, 설치본에서 skill 서브커맨드와

@@ -39,6 +39,7 @@ except ImportError:   # pragma: no cover
     Image = None
 import io as _io
 
+
 class _FldRun:
     """Adapter for a:fld (auto fields such as slide number, date). Since CT_TextField also has
     an rPr+t structure per the schema, PowerPoint renders it with the same rules as a normal
@@ -75,6 +76,7 @@ class _FldRun:
         except (TypeError, ValueError):
             return None
 
+
 # Effective glyph bbox (in) per paragraph. Turned a magic index tuple into named fields
 # (external review, 2026-07-10).
 # sp (owning shape) is for the loc payload of W15-W17 findings (0.5.0); the coordinates are
@@ -100,6 +102,7 @@ def _glyph_w(s, size_pt):
             w += _W_LAT
     return w * size_pt / 72.0
 
+
 def _empty_para_pt(para, default_pt):
     """The effective size of an empty paragraph (a spacer): prioritizes endParaRPr/defRPr sz
     (fixes a phantom-height issue where a 4pt spacer was counted as 12pt, measured in
@@ -116,6 +119,7 @@ def _empty_para_pt(para, default_pt):
     except Exception:
         pass
     return default_pt
+
 
 def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
     """Approximates the effective glyph bbox (in) per paragraph. Returns
@@ -359,6 +363,7 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
         emit_frame(sp.text_frame, fx, fy, fw, fh, id(sp), sp, sx=xf[0], sy=xf[2])
     return out
 
+
 def text_overlap_check(slide, si, warns, boxes: Optional[List[GlyphBox]] = None):
     """W15: the effective glyph regions of two different text frames overlap meaningfully
     (occlusion/collision). This is approximation-based, hence WARN. Fires only when the
@@ -410,6 +415,7 @@ def text_overlap_check(slide, si, warns, boxes: Optional[List[GlyphBox]] = None)
                                    "evidence_source": "xml_geometry",
                                    "render_confirmed": False},
                              loc=loc or None))
+
 
 def _pic_boxes(slide, sw_in, sh_in, skipped=None):
     """The effective ink bbox (in) and z-order of non-background pictures. Returns
@@ -481,6 +487,7 @@ def _pic_boxes(slide, sw_in, sh_in, skipped=None):
         out.append((x, y, x + w, y + h, z, sp))
     return out
 
+
 def overflow_check(slide, si, sw_in, sh_in, warns,
                    boxes: Optional[List[GlyphBox]] = None, pics: Optional[list] = None):
     """W16: off-canvas overflow. Using the frame bbox as the criterion was previously
@@ -519,6 +526,7 @@ def overflow_check(slide, si, sw_in, sh_in, warns,
                                    "evidence_source": "xml_geometry",
                                    "render_confirmed": False}))
 
+
 def _occluder_boxes(slide, sw_in, sh_in):
     """The bbox and z of solid-fill shapes (cards, panels) sitting on top of a picture. Used
     to suppress a legitimate layout, a caption card over a photo, that was falsely caught by
@@ -542,6 +550,7 @@ def _occluder_boxes(slide, sw_in, sh_in):
             continue
         out.append((x, y, x + w, y + h, z))
     return out
+
 
 def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
                               boxes: Optional[List[GlyphBox]] = None, pics: Optional[list] = None):

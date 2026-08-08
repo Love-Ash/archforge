@@ -629,21 +629,62 @@ def test_reason_registry_covers_all_keys():
     contract, no emitter without a registry entry. The backward direction is what makes the
     test notice its own blindness: if the scan stops finding emitters, the registered keys
     go unmatched and this fails loudly instead of going quiet. It also catches a registry
-    entry left behind after its emitter is deleted. No magic count to keep updated."""
-    import os
-    import re
-    pkg = os.path.dirname(jl.__file__)
-    used, seen_in = set(), {}
-    for name in sorted(os.listdir(pkg)):
-        if not name.endswith(".py"):
-            continue
-        with open(os.path.join(pkg, name), encoding="utf-8") as _f:
-            src = _f.read()
-        keys = set(re.findall(r'(?:skipped|deck_skipped)\[\"([a-z0-9_]+)\"\]', src))
-        keys |= set(re.findall(r'skipped\.get\(\"([a-z0-9_]+)\"', src))
-        if keys:
-            seen_in[name] = sorted(keys)
-        used |= keys
+    entry left behind after its emitter is deleted. No magic count to keep updated.
+
+    The scan reads the AST, not a regex. The first repair here used a regex and inherited a
+    quieter version of the same fault: it matched only double-quoted keys, so a planted
+    skipped['single_quoted'] += 1 passed. Neither direction can catch a form the scanner
+    cannot see at all, so the scanner refuses anything it does not understand -- a computed
+    key, or a mutation through update/setdefault -- rather than skipping it silently.
+
+    Only writes count. skipped.get(...) is a read, and treating it as an emission would let
+    a registry entry look alive after its last writer is gone."""
+    import ast
+    import pathlib
+    pkg = pathlib.Path(jl.__file__).parent
+    COUNTERS = ("skipped", "deck_skipped")
+    used, seen_in, opaque = set(), {}, []
+
+    def target_key(node):
+        """('literal', key) | ('dynamic', None) for a subscript write on a counter."""
+        if not isinstance(node, ast.Subscript):
+            return None
+        if not (isinstance(node.value, ast.Name) and node.value.id in COUNTERS):
+            return None
+        if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+            return ("literal", node.slice.value)
+        return ("dynamic", None)
+
+    for path in sorted(pkg.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        here = set()
+        for node in ast.walk(tree):
+            targets = []
+            if isinstance(node, ast.AugAssign):
+                targets = [node.target]
+            elif isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+                    and isinstance(node.func.value, ast.Name) \
+                    and node.func.value.id in COUNTERS \
+                    and node.func.attr in ("update", "setdefault", "__setitem__"):
+                opaque.append("%s:%d %s.%s(...)" % (path.name, node.lineno,
+                                                    node.func.value.id, node.func.attr))
+            for tgt in targets:
+                got = target_key(tgt)
+                if got is None:
+                    continue
+                if got[0] == "dynamic":
+                    opaque.append("%s:%d computed key" % (path.name, node.lineno))
+                else:
+                    here.add(got[1])
+        if here:
+            seen_in[path.name] = sorted(here)
+        used |= here
+
+    assert not opaque, (
+        "the reason scan cannot read these writes, so it cannot vouch for the registry: %s"
+        % opaque)
     missing = sorted(k for k in used if k not in jl.KNOWN_REASON_KEYS)
     assert not missing, "unregistered skip reasons: %s" % missing
     unemitted = sorted(k for k in jl.KNOWN_REASON_KEYS if k not in used)
@@ -714,3 +755,98 @@ def test_fix_subcommand(tmp_path):
     # non-fixable rule -> controlled usage error
     r = run_cli(["fix", deck, "-o", out, "--rules", "W15"])
     assert r.returncode == 2
+
+
+def test_cli_forwarding_list_matches_cli_module():
+    """0.8 (#5): lint.py forwards the CLI names through a module __getattr__, and the list
+    it forwards is a hand-written literal. Nothing made it track cli.py, so a symbol added
+    there would simply not be reachable at the historical import path and no test would
+    say so.
+
+    Both directions are asserted. A name defined in cli.py but missing from _CLI_NAMES is
+    an unreachable addition; a name in _CLI_NAMES that cli.py no longer defines makes
+    getattr raise from inside __getattr__ instead of returning a clean AttributeError."""
+    import ast
+    import archforge.cli as _cli
+    with open(_cli.__file__, encoding="utf-8") as _f:
+        tree = ast.parse(_f.read())
+    defined = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            defined.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for tgt in node.targets:
+                parts = tgt.elts if isinstance(tgt, (ast.Tuple, ast.List)) else [tgt]
+                defined.update(p.id for p in parts if isinstance(p, ast.Name))
+    assert defined == set(jl._CLI_NAMES), (
+        "cli.py defines but lint.py does not forward: %s | forwarded but not defined: %s"
+        % (sorted(defined - set(jl._CLI_NAMES)), sorted(set(jl._CLI_NAMES) - defined)))
+
+
+def test_star_import_surface_is_declared():
+    """0.8 (#5): `from archforge.lint import *` is what the deck_system shim consumes.
+
+    It used to mean "every global without a leading underscore", so it silently handed out
+    re/math/argparse/typing, and just as silently dropped `main` and the subcommands when
+    they moved behind a module __getattr__ (star import does not consult it). __all__ now
+    states the surface. This pins the three properties that matter: the CLI names are in
+    it, imported modules are not, and every listed name actually resolves."""
+    ns = {}
+    exec("from archforge.lint import *", ns)      # noqa: S102 - the contract under test
+    ns.pop("__builtins__", None)
+    for name in ("main", "scan_main", "skill_main", "UsageError", "KNOWN_REASON_KEYS"):
+        assert name in ns, "%s dropped out of the star-import surface" % name
+    for name in ("os", "sys", "glob"):
+        assert name not in ns, "%s is an import, not API" % name
+    assert not [n for n in ns if n.startswith("_")], "private names leaked into *"
+    unresolvable = [n for n in jl.__all__ if not hasattr(jl, n)]
+    assert not unresolvable, "__all__ lists names that do not resolve: %s" % unresolvable
+
+    # _STAR_SPILLOVER is written out in lint.py, which on its own is a denylist: a stdlib
+    # import added later would walk into __all__ unnoticed, which is the fault this whole
+    # change exists to fix. Derive the set the rule actually means -- module-level imports
+    # from outside the package -- and require the literal to equal it. The kernel
+    # re-exports are relative imports and stay in the surface deliberately.
+    import ast
+    import pathlib
+    pkg_dir = pathlib.Path(jl.__file__).parent
+    siblings = {p.stem for p in pkg_dir.glob("*.py")}
+    tree = ast.parse(pathlib.Path(jl.__file__).read_text(encoding="utf-8"))
+    stmts = []
+    for node in tree.body:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            stmts.append(node)
+        elif isinstance(node, ast.Try):     # the relative-import fallback shape
+            for sub in list(node.body) + [x for h in node.handlers for x in h.body]:
+                if isinstance(sub, (ast.Import, ast.ImportFrom)):
+                    stmts.append(sub)
+    external = set()
+    for node in stmts:
+        if isinstance(node, ast.Import):
+            external.update((a.asname or a.name).split(".")[0] for a in node.names)
+        elif not (node.level > 0 or (node.module or "").split(".")[0] in siblings):
+            external.update(a.asname or a.name for a in node.names)
+    assert external == set(jl._STAR_SPILLOVER), (
+        "_STAR_SPILLOVER must list exactly the module-level imports from outside the "
+        "package. missing: %s | listed but not an external import: %s"
+        % (sorted(external - set(jl._STAR_SPILLOVER)),
+           sorted(set(jl._STAR_SPILLOVER) - external)))
+
+
+def test_standalone_module_execution():
+    """Every module in this package carries a try/except ImportError fallback so it can be
+    run as a loose file, which is a maintained claim, not decoration. It was false for two
+    subcommands: `python src/archforge/lint.py rules` died on an unconditional
+    `from .rules import TITLES, category` inside rules_main, and explain_main had the same
+    line. Both now come from the module-level block that already imports rules.
+
+    Run as a subprocess, because the failure only appears when there is no package context
+    and an in-process import cannot reproduce that."""
+    import subprocess
+    lint_py = jl.__file__
+    for args in (["rules"], ["explain", "E1"]):
+        r = subprocess.run([sys.executable, lint_py] + args, capture_output=True,
+                           text=True, encoding="utf-8", stdin=subprocess.DEVNULL)
+        assert r.returncode == 0, (
+            "standalone `python lint.py %s` failed: %s" % (" ".join(args), r.stderr[-300:]))
+        assert "E1" in r.stdout

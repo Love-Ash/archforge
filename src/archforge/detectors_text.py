@@ -37,6 +37,7 @@ STALE_OPENINGS = (
     "in today's", "in the rapidly changing", "in this presentation",
 )
 
+
 def copy_cliche_check(page_texts, warns):
     """W11: AI-tell copy. Buzzwords are checked on every page, cliche openings only in the
     intro (p1-3)."""
@@ -50,6 +51,7 @@ def copy_cliche_check(page_texts, warns):
             op = sorted({o for o in STALE_OPENINGS if o.lower() in low})
             if op:
                 warns.append(Finding(si, "W11", "w11_open", (), ", ".join(op[:5])))
+
 
 # English finite-verb forms that mark a claim-style title. Prefer false negatives over
 # false positives: copulas/auxiliaries and ambiguous noun/verb homographs are omitted.
@@ -82,10 +84,12 @@ _EN_STRUCTURAL_TITLES = frozenset({
     "summary", "background", "agenda overview",
 })
 
+
 def _en_title_key(title: str) -> str:
     key = re.sub(r"\s+", " ", title.strip().lower())
     key = re.sub(r"[^a-z0-9 &]+", "", key).strip()
     return key
+
 
 def _en_eligible_title(title: str, chars, latin_n: int, cjk_n: int) -> bool:
     """Whether an English title is substance enough for the W14 majority pool.
@@ -107,6 +111,7 @@ def _en_eligible_title(title: str, chars, latin_n: int, cjk_n: int) -> bool:
         return True
     return False
 
+
 def _en_is_claim(title):
     """English W14 claim signal: finite verb from a measured allowlist, or number+unit.
     Bare noun phrases return False. Prefer false negatives on editorial headlines."""
@@ -120,6 +125,7 @@ def _en_is_claim(title):
         return True
     words = re.findall(r"[A-Za-z]+", title)
     return any(w.lower() in _EN_CLAIM_VERBS for w in words)
+
 
 # Cover / divider / closing slides in Korean decks. A structural slide is not part of the
 # deck's argument, so counting it inflates W14 on both sides of the ratio. Mirrors
@@ -162,8 +168,10 @@ _KO_SENTENCE_ENDINGS = ("다", "까", "요", "자", "죠", "함", "임")
 _KO_NUMERIC_CLAIM = re.compile(
     r"[0-9][0-9,.]*\s*(%|배|억|조|만|천|pp|bp|x|X|원|건|명|개)")
 
+
 def _ko_title_key(title):
     return re.sub(r"\s+", " ", title.strip()).rstrip(" ?!.…”’")
+
 
 def _ko_is_claim(title):
     """Hangul W14 claim signal: a question, a number+unit, a sentence-final interrogative,
@@ -181,6 +189,7 @@ def _ko_is_claim(title):
     if not core.endswith(_KO_SENTENCE_ENDINGS):
         return False
     return core.split(" ")[-1] not in _KO_NOUN_FINALS
+
 
 def action_title_check(titles, warns):
     """W14: a majority of titles are descriptive noun phrases (e.g. "Market Overview,"

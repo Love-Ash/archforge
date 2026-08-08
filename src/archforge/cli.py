@@ -27,13 +27,15 @@ import argparse
 
 try:
     from .messages import M, set_lang, get_lang
-    from .rules import ALL_CODES, PROFILES, DEFAULT_PROFILE, severity
+    from .rules import (ALL_CODES, PROFILES, DEFAULT_PROFILE, severity,
+                        TITLES, category)
     from . import config as _config
     from . import reporters as _reporters
     from .lint import collect_wireframe, lint
 except ImportError:   # fallback for standalone file execution (python cli.py)
     from messages import M, set_lang, get_lang
-    from rules import ALL_CODES, PROFILES, DEFAULT_PROFILE, severity
+    from rules import (ALL_CODES, PROFILES, DEFAULT_PROFILE, severity,
+                       TITLES, category)
     import config as _config
     import reporters as _reporters
     from lint import collect_wireframe, lint
@@ -856,7 +858,6 @@ def rules_main(argv=None):
     ap.add_argument("--json", action="store_true", help=M("help_json"))
     ap.add_argument("--lang", default=None, choices=("ko", "en"), help=M("help_lang"))
     a = ap.parse_args(argv)
-    from .rules import TITLES, category
     rows = []
     for code in sorted(ALL_CODES, key=lambda c: (c[0] != "E", int(c[1:]))):
         profiles = sorted(p for p, excl in PROFILES.items() if code not in excl)
@@ -967,7 +968,6 @@ def explain_main(argv=None):
     ap.add_argument("--json", action="store_true", help=M("help_json"))
     ap.add_argument("--lang", default=None, choices=("ko", "en"), help=M("help_lang"))
     a = ap.parse_args(argv)
-    from .rules import TITLES, category
     code = a.code.strip().upper()
     if code not in ALL_CODES:
         print(M("err_skip_unknown") % code, file=sys.stderr)
@@ -1023,3 +1023,7 @@ def demo_main(argv=None):
             rc = 1   # the corrected version must always be clean (a contract pinned by tests)
     print(M("demo_next") % broken)
     return rc
+
+
+if __name__ == "__main__":   # `python -m archforge.cli`, and the standalone path the
+    main()                   # ImportError fallback above claims
