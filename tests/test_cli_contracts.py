@@ -618,14 +618,39 @@ def test_schema_2_abstentions(tmp_path):
 def test_reason_registry_covers_all_keys():
     """0.7.1 P0: every skip-reason key a detector can write must be registered, so a
     structural abstention never lands with no affected rules while structure reads
-    'complete'. Scans the source for the Counter keys the guards use."""
+    'complete'. Scans the source for the Counter keys the guards use.
+
+    Scans the whole package. It used to open jl.__file__ alone, and the 0.8 decomposition
+    moved five emitters into detectors_geometry and detectors_visual, so the scan went blind
+    to them while still reporting pass: an unregistered key planted in detectors_geometry
+    was measured passing this test. A gate that quietly stops gating is worse than none.
+
+    The assertion is deliberately bidirectional. The forward direction is the original
+    contract, no emitter without a registry entry. The backward direction is what makes the
+    test notice its own blindness: if the scan stops finding emitters, the registered keys
+    go unmatched and this fails loudly instead of going quiet. It also catches a registry
+    entry left behind after its emitter is deleted. No magic count to keep updated."""
+    import os
     import re
-    with open(jl.__file__, encoding="utf-8") as _f:
-        src = _f.read()
-    used = set(re.findall(r'(?:skipped|deck_skipped)\[\"([a-z0-9_]+)\"\]', src))
-    used |= set(re.findall(r'skipped\.get\(\"([a-z0-9_]+)\"', src))
+    pkg = os.path.dirname(jl.__file__)
+    used, seen_in = set(), {}
+    for name in sorted(os.listdir(pkg)):
+        if not name.endswith(".py"):
+            continue
+        with open(os.path.join(pkg, name), encoding="utf-8") as _f:
+            src = _f.read()
+        keys = set(re.findall(r'(?:skipped|deck_skipped)\[\"([a-z0-9_]+)\"\]', src))
+        keys |= set(re.findall(r'skipped\.get\(\"([a-z0-9_]+)\"', src))
+        if keys:
+            seen_in[name] = sorted(keys)
+        used |= keys
     missing = sorted(k for k in used if k not in jl.KNOWN_REASON_KEYS)
     assert not missing, "unregistered skip reasons: %s" % missing
+    unemitted = sorted(k for k in jl.KNOWN_REASON_KEYS if k not in used)
+    assert not unemitted, (
+        "registered reasons that no source emits: %s. Either the emitter was removed and "
+        "the registry entry is dead, or the scan has gone blind to the module holding it "
+        "(scanned: %s)" % (unemitted, sorted(seen_in)))
 
 
 def test_html_report(tmp_path):
