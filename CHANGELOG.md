@@ -19,6 +19,47 @@ Two versions below never shipped. 0.2.1 and 0.3.1 have entries here but were sup
 same day they were written: 0.2.1 has no tag, 0.3.1 has a tag but no GitHub release, and
 neither reached PyPI. Every other version in this file is installable.
 
+## Unreleased
+
+The abstention contract stopped under-reporting, and the corpus reaches the OOXML shapes
+the engine has always claimed to handle.
+
+### Fixed
+
+- The schema-2 abstention payload now names every rule a guard failure blocked (#11). The
+  `run` guard reaches E1-E4/W1/W5/W8 and the registry claimed four codes; `frames` cascades
+  to the same set and omitted E2. The corrected values were measured by breaking each guard
+  in turn across 25 decks, then unioned with the codes emitted inside each guarded block.
+  All four widened entries also gain W14, which neither the issue nor the review had
+  spotted: titles are collected from the same frame walk, so a frame failure takes the
+  action-title gate with it. The registry moved to `rules.py`, next to the rule metadata,
+  because living in the CLI is how it drifted.
+- A guard that blocks rules in more than one capability now degrades every one of them
+  (#12). `frames` blocking W14 used to leave `capabilities.structure` reading `complete`
+  while the action-title gate had not run. The capability set is derived from the affected
+  rules instead of being a second hand-written field, so it can no longer disagree with
+  them. The wire format is untouched: same four keys, same value enum, values corrected.
+
+### Corpus
+
+- A `structural/` family: one deck per OOXML shape that bypasses a naive walker (a group
+  with desynced off/chOff, Hangul in a table cell, a 4pt a:fld, an em dash split by a:br,
+  and a rotated-text negative that verifiably tests the exclusion rather than an empty
+  deck). Measured before adding them: none of the 31 existing decks contained any of these
+  shapes, so docs/ACCURACY.md was computed entirely from decks walking the simple path,
+  even though the group-transform axis had already produced a shipped bug once. A test
+  keeps every axis present in the shipped slide bytes. Corpus is 37 manifests.
+- `corpus/run_corpus.py` and the accuracy-table generator exit 1 when they find fewer than
+  30 manifests, instead of passing vacuously over an empty glob.
+
+### Architecture (#5)
+
+- The document-order walk over a:r / a:fld / a:br lives once, in `inline.py`, consumed by
+  both the E1-E4 loop and the W15-W17 glyph-box builder. It existed twice, written
+  independently with identical fallbacks, and paragraph text is the one thing the
+  typography and geometry sides must agree on. First unification slice of the document
+  model; verdict-preserving across all three acceptance layers.
+
 ## 0.9.0 (2026-08-08)
 
 The release candidate. `lint.py` stopped being the whole program, W14 works on both

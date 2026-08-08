@@ -1019,6 +1019,17 @@ def test_abstention_payload_reaches_the_json_output(tmp_path):
     for code in ("E1", "E2", "E3", "E4", "W14"):
         assert code in affected, "%s missing from affected_rules: %s" % (code, sorted(affected))
     assert doc["capabilities"]["typography"] == "partial"
+    # #12: W14 is a structure-capability rule and it is in the frames guard's reach, so a
+    # frames failure must degrade structure too. The capability set is derived from the
+    # affected rules now, which is what makes this impossible to under-report by hand; this
+    # assertion pins the derivation actually reaching the wire.
+    assert doc["capabilities"]["structure"] == "partial", (
+        "frames blocks W14, but structure still claims complete: %s" % doc["capabilities"])
+    # The wire format itself is frozen: same four keys, same value enum.
+    assert set(doc["capabilities"]) >= {"typography", "geometry", "structure",
+                                        "render_contrast"}
+    assert all(v in ("complete", "partial", "not_requested")
+               for v in doc["capabilities"].values())
 
 
 def test_corpus_exercises_the_structural_axes():

@@ -98,37 +98,64 @@ def category(code: str) -> str:
 # reach W14, which nobody had noticed: titles are collected from the same frame walk, so a
 # frame failure takes the action-title gate with it.
 #
-# Known narrowness, not addressed here: one reason carries one capability, but frames
-# failing degrades both typography and structure. Widening that changes the schema-2
-# capabilities map, which is frozen for 0.9.x.
+# The capability side is DERIVED from the affected rules, not written twice. It used to be
+# a second hand-maintained field, and it drifted the same way the rule lists did (#12): a
+# frames failure blocks W14, W14 reports under the structure capability, and the report
+# still said structure was complete because the hand-written field only knew "typography".
+# A value computed from the rule list cannot disagree with it.
+#
+# The rule -> capability assignment below is not new policy; it is the assignment the old
+# hand-written field already implied, stated once. The report's capability keys are frozen
+# at four (schema 2.0: typography / geometry / structure / render_contrast), and there is
+# no style capability, so the style-category rules keep the homes they have always
+# reported under: E2 rides the typography machinery (its abstention reasons are the
+# para/run guards), and W9/W11/W13/W14 have always been counted under structure.
+_CAPABILITY_OF_RULE = {
+    "E1": "typography", "E3": "typography", "E4": "typography",
+    "W1": "typography", "W5": "typography", "W8": "typography",
+    "E2": "typography",
+    "W15": "geometry", "W16": "geometry", "W17": "geometry",
+    "W6": "structure", "W10": "structure", "W12": "structure",
+    "W9": "structure", "W11": "structure", "W13": "structure", "W14": "structure",
+    "W7": "render",
+}
+
+_REASON_AFFECTED = {
+    "vertical_text": ["W15", "W16", "W17"],
+    "complex_script": ["W15", "W16", "W17"],
+    "glyph_boxes": ["W15", "W16", "W17"],
+    "pic_boxes": ["W16", "W17"],
+    "w15": ["W15"],
+    "w16_w17": ["W16", "W17"],
+    "image_decode": ["W16", "W17"],
+    "image_decode_budget": ["W16", "W17"],
+    "frames": ["E1", "E2", "E3", "E4", "W1", "W5", "W8", "W14"],
+    "frame": ["E1", "E2", "E3", "E4", "W1", "W5", "W8", "W14"],
+    "para": ["E1", "E2", "E3", "E4", "W1", "W8", "W14"],
+    "para_size": ["E3"],
+    "run": ["E1", "E2", "E3", "E4", "W1", "W5", "W8", "W14"],
+    "w7": ["W7"],
+    "w7_no_render": ["W7"],
+    "w7_color_unknown": ["W7"],
+    "render_dir_missing": ["W7"],
+    "w9": ["W9"],
+    "w6_sig": ["W6"],
+    "w6": ["W6"],
+    "w6_capped": ["W6"],
+    "w10_tokens": ["W10"],
+    "w10": ["W10"],
+    "w10_capped": ["W10"],
+    "w11_w14": ["W11", "W12", "W13", "W14"],
+    "w12_w13": ["W12", "W13"],
+    "theme_parse": ["E1"],
+}
+
+# key -> (affected rules, capabilities degraded), the second element computed from the
+# first. Kept in the same (rules, capabilities) tuple shape the consumers already unpack;
+# the capabilities element is a tuple because one guard can degrade more than one.
 _REASON_RULES = {
-    "vertical_text": (["W15", "W16", "W17"], "geometry"),
-    "complex_script": (["W15", "W16", "W17"], "geometry"),
-    "glyph_boxes": (["W15", "W16", "W17"], "geometry"),
-    "pic_boxes": (["W16", "W17"], "geometry"),
-    "w15": (["W15"], "geometry"),
-    "w16_w17": (["W16", "W17"], "geometry"),
-    "image_decode": (["W16", "W17"], "geometry"),
-    "image_decode_budget": (["W16", "W17"], "geometry"),
-    "frames": (["E1", "E2", "E3", "E4", "W1", "W5", "W8", "W14"], "typography"),
-    "frame": (["E1", "E2", "E3", "E4", "W1", "W5", "W8", "W14"], "typography"),
-    "para": (["E1", "E2", "E3", "E4", "W1", "W8", "W14"], "typography"),
-    "para_size": (["E3"], "typography"),
-    "run": (["E1", "E2", "E3", "E4", "W1", "W5", "W8", "W14"], "typography"),
-    "w7": (["W7"], "render"),
-    "w7_no_render": (["W7"], "render"),
-    "w7_color_unknown": (["W7"], "render"),
-    "render_dir_missing": (["W7"], "render"),
-    "w9": (["W9"], "structure"),
-    "w6_sig": (["W6"], "structure"),
-    "w6": (["W6"], "structure"),
-    "w6_capped": (["W6"], "structure"),
-    "w10_tokens": (["W10"], "structure"),
-    "w10": (["W10"], "structure"),
-    "w10_capped": (["W10"], "structure"),
-    "w11_w14": (["W11", "W12", "W13", "W14"], "structure"),
-    "w12_w13": (["W12", "W13"], "structure"),
-    "theme_parse": (["E1"], "typography"),
+    key: (rules, tuple(sorted({_CAPABILITY_OF_RULE[c] for c in rules})))
+    for key, rules in _REASON_AFFECTED.items()
 }
 
 # Every skip-reason key a detector can emit must be registered above, so a structural

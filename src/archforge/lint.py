@@ -206,6 +206,7 @@ except ImportError:   # standalone execution
                     slide_layout_sig,
                     contrast_check)
 try:
+    from .inline import iter_inline_items
     from .detectors_geometry import (_FldRun,
                      GlyphBox,
                      _glyph_w,
@@ -217,6 +218,7 @@ try:
                      _occluder_boxes,
                      text_image_straddle_check)
 except ImportError:   # standalone execution
+    from inline import iter_inline_items
     from detectors_geometry import (_FldRun,
                     GlyphBox,
                     _glyph_w,
@@ -513,31 +515,13 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
                 continue
             for pi, para in enumerate(paragraphs):
                 try:
-                    runs = list(para.runs)
                     # In-document-order items (run_like, index into para.runs or None,
-                    # is_fld):
-                    # a:fld (an auto field) is rendered with the same rPr as a normal run, so
-                    # it must pass the same gates, and a:br is treated as a single line-break
-                    # character in E2 context/offsets (carried over from the fourth review,
-                    # 0.5.0). If the a:r count doesn't match, falls back to the previous runs
-                    # path.
-                    items = []
-                    try:
-                        r_seen = 0
-                        for child in para._p:
-                            tag = child.tag
-                            if tag == NS + "r":
-                                if r_seen < len(runs):
-                                    items.append((runs[r_seen], r_seen, False))
-                                    r_seen += 1
-                            elif tag == NS + "br":
-                                items.append((None, None, False))
-                            elif tag == NS + "fld":
-                                items.append((_FldRun(child), None, True))
-                        if r_seen != len(runs):
-                            items = [(r, i, False) for i, r in enumerate(runs)]
-                    except Exception:
-                        items = [(r, i, False) for i, r in enumerate(runs)]
+                    # is_fld): a:fld is rendered with the same rPr as a normal run so it
+                    # passes the same gates, and a:br is one line-break character in E2
+                    # context/offsets (0.5.0). The walk lives in inline.py and is shared
+                    # with the glyph-box builder, because paragraph text is the one thing
+                    # the typography and geometry sides must agree on.
+                    items = iter_inline_items(para)
                     run_offs = []
                     pos = 0
                     pieces = []

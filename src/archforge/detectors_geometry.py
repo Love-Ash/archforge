@@ -40,41 +40,15 @@ except ImportError:   # pragma: no cover
 import io as _io
 
 
-class _FldRun:
-    """Adapter for a:fld (auto fields such as slide number, date). Since CT_TextField also has
-    an rPr+t structure per the schema, PowerPoint renders it with the same rules as a normal
-    run, but python-pptx's para.runs only returns a:r, so field text was a blind spot for
-    E1/E3/E4 (carried over from the fourth review, 0.5.0). Exposes only the minimal interface
-    the checking code uses: ._r for run_fonts/run_track, .font.size for size."""
-    __slots__ = ("_r", "text")
-
-    class _Pt:
-        __slots__ = ("pt",)
-
-        def __init__(self, pt):
-            self.pt = pt
-
-    def __init__(self, fld):
-        self._r = fld
-        t = fld.find(NS + "t")
-        self.text = (t.text or "") if t is not None else ""
-
-    @property
-    def font(self):
-        return self   # only the .size access is used
-
-    @property
-    def size(self):
-        try:
-            v = self._r.find(NS + "rPr").get("sz")
-        except Exception:
-            return None
-        if not v:
-            return None
-        try:
-            return self._Pt(int(v) / 100.0)
-        except (TypeError, ValueError):
-            return None
+# _FldRun and the document-order inline walk moved to inline.py (#5, the first slice of
+# the document model): this module and lint.py carried the same walk written twice, and
+# paragraph text is the one thing typography and geometry must agree on. Re-imported here
+# so existing references (isinstance checks, lint's import of _FldRun from this module)
+# keep working.
+try:
+    from .inline import _FldRun, iter_inline_items
+except ImportError:   # standalone execution
+    from inline import _FldRun, iter_inline_items
 
 
 # Effective glyph bbox (in) per paragraph. Turned a magic index tuple into named fields
@@ -205,26 +179,9 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
             # Document-order walk over a:r / a:fld / a:br (0.6.0, external review): fld
             # text occupies real width and an explicit line break starts a new visual
             # line. Before this, a br-split sentence was measured as one overlong line
-            # (width overstated, height understated). Falls back to para.runs on any
-            # structural surprise.
-            items = []
-            try:
-                runs_l = list(para.runs)
-                r_seen = 0
-                for child in para._p:
-                    tag = child.tag
-                    if tag == NS + "r":
-                        if r_seen < len(runs_l):
-                            items.append(runs_l[r_seen])
-                            r_seen += 1
-                    elif tag == NS + "br":
-                        items.append(None)
-                    elif tag == NS + "fld":
-                        items.append(_FldRun(child))
-                if r_seen != len(runs_l):
-                    items = list(runs_l)
-            except Exception:
-                items = list(para.runs)
+            # (width overstated, height understated). The walk itself lives in inline.py
+            # and is shared with the E1-E4 loop; this side consumes only the run_like.
+            items = [run_like for run_like, _ri, _isf in iter_inline_items(para)]
             for r in items:
                 if r is None:   # a:br: next visual line
                     segs.append(0.0)

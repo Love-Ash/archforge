@@ -257,8 +257,8 @@ def _capabilities_and_abstentions(warns, render_requested):
                 count = int(cnt)
             except ValueError:
                 count = 1
-            rules, cap = _REASON_RULES.get(key, ([], "meta"))
-            degraded.add(cap)
+            rules, caps = _REASON_RULES.get(key, ([], ("meta",)))
+            degraded.update(caps)
             abstentions.append({"reason": key, "page": f.page, "count": count,
                                 "affected_rules": rules})
     caps = {}
