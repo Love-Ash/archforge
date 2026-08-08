@@ -83,8 +83,13 @@ caption. Remaining limitation: a placeholder's alignment inherited from layout l
 back to left alignment.
 
 This module is the engine: it walks a deck and returns findings. The command line that
-wraps it (flags, subcommands, exit codes, report files) lives in cli.py, which imports
-from here; the dependency never runs the other way.
+wraps it (flags, subcommands, exit codes, report files) lives in cli.py.
+
+The functional dependency runs one way, cli -> lint: nothing here calls the CLI. The import
+graph is not one-way, though, and saying so would be false. The module __getattr__ at the
+bottom imports cli to forward the old names, so `import archforge` traverses
+lint -> cli -> lint. PEP 562 defers that edge past module execution; it does not remove it,
+and a static import checker will report the cycle.
 """
 import os
 import sys
@@ -97,14 +102,10 @@ try:
     from .messages import M, set_lang, get_lang
     from .findings import Finding, shape_loc
     from .rules import RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE, severity
-    from . import config as _config
-    from . import reporters as _reporters
 except ImportError:   # fallback for standalone file execution (python lint.py)
     from messages import M, set_lang, get_lang
     from findings import Finding, shape_loc
     from rules import RULES, ALL_CODES, PROFILES, DEFAULT_PROFILE, severity
-    import config as _config
-    import reporters as _reporters
 
 try:
     from .geometry import (_pct_attr,
