@@ -244,23 +244,32 @@ function setIdle(err) {
 }
 function status(msg) { statusEl.textContent = msg || ""; }
 
+async function buildEngine() {
+  setBusy("검사 엔진을 준비하고 있습니다.",
+          "이 페이지에서 처음 실행할 때는 15–20초 걸릴 수 있습니다.");
+  status("실행 환경을 불러오는 중");
+  var py = await loadPyodide();
+  status("분석 모듈을 불러오는 중");
+  await py.loadPackage(["micropip", "lxml", "pillow"]);
+  status("검사 규칙을 불러오는 중");
+  var mp = py.pyimport("micropip");
+  try {
+    await mp.install(["python-pptx", "archforge==" + ARCHFORGE_VERSION]);
+  } catch (e) {
+    // In the minutes after a release, PyPI's index caches can still serve a listing
+    // without the pinned version. One quiet retry covers that window.
+    await new Promise(function (r) { setTimeout(r, 4000); });
+    await mp.install(["python-pptx", "archforge==" + ARCHFORGE_VERSION]);
+  }
+  return py;
+}
+
 function loadEngine() {
   if (!pyReady) {
-    pyReady = (async function () {
-      setBusy("검사 엔진을 준비하고 있습니다.",
-              "이 페이지에서 처음 실행할 때는 15–20초 걸릴 수 있습니다.");
-      status("실행 환경을 불러오는 중");
-      var py = await loadPyodide();
-      status("분석 모듈을 불러오는 중");
-      await py.loadPackage(["micropip", "lxml", "pillow"]);
-      status("검사 규칙을 불러오는 중");
-      var mp = py.pyimport("micropip");
-      await mp.install(["python-pptx", "archforge==" + ARCHFORGE_VERSION]);
-      return py;
-    })().catch(function (e) {
-      pyReady = null;
-      throw { engine: true, cause: e };
-    });
+    pyReady = buildEngine();
+    // Reset through a side branch so a failed build never stays cached: the next file
+    // selection rebuilds from scratch. Callers still see the original rejection.
+    pyReady.catch(function () { pyReady = null; });
   }
   return pyReady;
 }
@@ -326,8 +335,8 @@ async function lintFile(file) {
     py = await loadEngine();
   } catch (e) {
     setIdle(true);
-    status("검사 엔진을 불러오지 못했습니다.\n네트워크를 확인한 뒤 다시 시도하세요.");
-    console.error(e.cause || e);
+    status("검사 엔진을 불러오지 못했습니다.\n잠시 후 파일을 다시 선택하면 처음부터 재시도합니다.");
+    console.error(e);
     return;
   }
   try {
