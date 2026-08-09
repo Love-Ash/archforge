@@ -19,7 +19,7 @@ Two versions below never shipped. 0.2.1 and 0.3.1 have entries here but were sup
 same day they were written: 0.2.1 has no tag, 0.3.1 has a tag but no GitHub release, and
 neither reached PyPI. Every other version in this file is installable.
 
-## Unreleased
+## 0.9.1 (2026-08-09)
 
 The abstention contract stopped under-reporting, and the corpus reaches the OOXML shapes
 the engine has always claimed to handle.
