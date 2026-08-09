@@ -19,110 +19,110 @@ _LANG: "contextvars.ContextVar[Optional[str]]" = contextvars.ContextVar("archfor
 MESSAGES = {
     # ---- E gates
     "e1_run_ea": {
-        "ko": "한글 런의 a:ea가 라틴 전용 폰트(한글 글리프 없음, Malgun 폴백)",
+        "ko": "한글에 지정된 한글용 폰트에 정작 한글 글자가 없습니다. 보는 사람 환경의 기본 폰트로 바뀌어 표시됩니다",
         "en": "Hangul run's a:ea is a Latin-only font (no Hangul glyphs; silent Malgun fallback)",
     },
     "e1_theme_ea": {
-        "ko": "한글 런에 ea 미지정 + 테마 a:ea가 라틴 전용(Malgun 폴백)",
+        "ko": "한글용 폰트가 지정되지 않았고, 테마의 기본 한글 폰트에도 한글 글자가 없습니다. 환경에 따라 다른 폰트로 표시됩니다",
         "en": "No ea on Hangul run and the theme a:ea is Latin-only (Malgun fallback)",
     },
     "e1_latin_empty_theme": {
-        "ko": "한글 텍스트가 라틴 전용 폰트 지정 + 테마 a:ea 빈 슬롯(Malgun 폴백)",
+        "ko": "한글에 라틴 전용 폰트만 지정되어 있습니다. 한글 글자가 없어 보는 사람 환경의 기본 폰트로 대체됩니다",
         "en": "Hangul text set in a Latin-only font with an empty theme a:ea slot (Malgun fallback)",
     },
     "e1_nofont": {
-        "ko": "한글 런에 폰트 미지정 + 테마 a:ea 빈 슬롯(Malgun 폴백 확정)",
+        "ko": "이 한글에는 폰트가 전혀 지정되어 있지 않습니다. 어떤 폰트로 보일지는 여는 환경이 정하게 됩니다",
         "en": "No font anywhere on Hangul run and empty theme a:ea slot (guaranteed Malgun fallback)",
     },
     "e1_cjk_other": {
-        "ko": "가나·한자 텍스트가 해당 글리프 없는 폰트로 지정됨(OS 폴백)",
+        "ko": "가나·한자 텍스트에 해당 글자가 없는 폰트가 지정되어 있어 환경에 따라 다르게 표시됩니다",
         "en": "Kana/Hanzi text set in a font without those glyphs (OS fallback)",
     },
     "e2": {
-        "ko": "긴 대시류 문자 포함",
+        "ko": "문장 부호로 쓰인 긴 대시(—)가 있습니다. 쉼표나 쌍점으로 바꾸는 편이 자연스럽습니다",
         "en": "Dash-family character in rendered text",
     },
     "e3": {
-        "ko": "실효 폰트 %.1fpt < 하한 %.1fpt(판독 불가)%s",
+        "ko": "글자가 %.1fpt로, 읽기 하한 %.1fpt보다 작아 사실상 읽을 수 없습니다%s",
         "en": "Effective font %.1fpt below hard floor %.1fpt (unreadable)%s",
     },
     "e3_note": {
-        "ko": " (명목 %.1f * autofit %.2f)",
+        "ko": " (지정 크기 %.1fpt가 자동 맞춤으로 %.2f배 줄어든 결과)",
         "en": " (nominal %.1f * autofit %.2f)",
     },
     "e4": {
-        "ko": "한글·한자 run 에 양수 트래킹 %d(0.5pt 초과, 자간 벌어짐)",
+        "ko": "한글·한자 자간이 %d만큼 벌어져 있습니다. 한글은 자간을 띄우면 어색해 보이므로 되돌리는 편이 좋습니다",
         "en": "Positive tracking %d on a Hangul/Hanja run (over 0.5pt; letter-spacing damage)",
     },
     # ---- W gates
     "w1": {
-        "ko": "본문급 프레임 글자 %.1fpt < 권장 %.1fpt(출처·캡션이면 무시)",
+        "ko": "본문 크기 글상자의 글자가 %.1fpt로, 권장 하한 %.1fpt보다 작습니다. 출처 표기나 캡션이라면 무시해도 됩니다",
         "en": "Body-class frame text %.1fpt below recommended %.1fpt (ignore for sources/captions)",
     },
     "w5": {
-        "ko": "폰트 크기를 run·문단·상속 체인 어디에서도 못 찾음",
+        "ko": "이 텍스트의 글자 크기가 파일 어디에도 지정되어 있지 않습니다. 여는 프로그램에 따라 다르게 표시될 수 있습니다",
         "en": "Font size not found on run, paragraph, or anywhere in the inheritance chain",
     },
     "w6": {
-        "ko": "레이아웃 골격이 %d개 페이지에서 반복됨(클로드 티 의심, 성긴 디바이더 제외, 의도된 템플릿 시스템이면 무시)",
+        "ko": "같은 레이아웃 골격이 %d개 페이지에서 반복됩니다. 의도한 템플릿이라면 무시해도 되지만, 자동 생성 덱에서 흔한 흔적이기도 합니다",
         "en": "Layout skeleton repeated across %d pages (AI-deck tell; sparse dividers excluded; ignore for intentional template systems)",
     },
     "w7": {
-        "ko": "이미지 위 텍스트 대비 낮음 %.1f:1 (스크림·색 보강 필요)",
+        "ko": "이미지 위 글자의 명암 대비가 %.1f:1로 낮아 읽기 어렵습니다. 글자 색을 바꾸거나 이미지 위에 어두운 반투명 층을 깔아 보세요",
         "en": "Low text-over-image contrast %.1f:1 (add a scrim or adjust colors)",
     },
     "w8": {
-        "ko": "소형 CJK %.1fpt < %.1fpt(목업·카드 내부 추정, 판독 위험, 캡션이면 무시)",
+        "ko": "좁은 틀 안의 글자가 %.1fpt로, %.1fpt보다 작습니다. 기기 목업이나 카드 속 작은 글씨로 보이는데, 읽혀야 하는 내용이라면 키워야 합니다",
         "en": "Small CJK %.1fpt below %.1fpt in a narrow frame (likely mockup/card text; readability risk; ignore for captions)",
     },
     "w9": {
-        "ko": "accent 세로바 %d개로 항목 구조 반복(구조는 괘선·여백·활자로, accent는 점 하나로)",
+        "ko": "강조색 세로 막대 %d개가 목록 구분에 반복 사용됐습니다. 자동 생성 덱의 흔한 장식이라, 괘선이나 여백으로 바꾸면 인상이 정돈됩니다",
         "en": "%d accent vertical bars repeated as list markers (structure with rules/whitespace/type; keep accent to a single dot)",
     },
     "w10": {
-        "ko": "직접 그린 도식이 %d개 페이지에서 거의 동일 반복(의도된 교육 시퀀스인지 게으른 재탕인지 눈으로 확정)",
+        "ko": "직접 그린 도식이 %d개 페이지에서 거의 그대로 반복됩니다. 의도한 반복인지 눈으로 확인해 보세요",
         "en": "Hand-drawn diagram repeated nearly identically on %d pages (confirm by eye: intentional sequence or lazy reuse)",
     },
     "w11_buzz": {
-        "ko": "AI 티 버즈워드 %d종(카피 재작성 검토)",
+        "ko": "AI가 쓴 글에서 흔한 상투어가 %d종 발견됐습니다. 문구를 직접 다듬어 보세요",
         "en": "%d AI-tell buzzword type(s) (consider rewriting the copy)",
     },
     "w11_open": {
-        "ko": "뻔한 오프닝 상투구(표지·도입은 자기 목소리로)",
+        "ko": "표지나 도입부가 흔한 상투구로 시작합니다. 첫 문장은 직접 쓰는 편이 좋습니다",
         "en": "Stock opening cliche (open the deck in your own voice)",
     },
     "w12": {
-        "ko": "푸터 baseline 어긋남: 하우스 %.2fin 대비 살짝 다른 페이지 %d개(정렬 실수 의심)",
+        "ko": "페이지 하단 요소의 높이가 기준 %.2fin에서 살짝 어긋난 페이지가 %d개 있습니다. 정렬 실수로 보입니다",
         "en": "Footer baseline drift: house baseline %.2fin, %d page(s) slightly off (suspected alignment slip)",
     },
     "w13": {
-        "ko": "PPT 자체 효과 %d개 / %d개 페이지(그림자·글로·3D = 올드 티 의심, 의도한 스타일이면 무시)",
+        "ko": "파워포인트 기본 효과(그림자·광선·입체)가 %d곳, %d개 페이지에 쓰였습니다. 요즘 덱에서는 낡아 보이기 쉬우니 의도한 스타일인지 확인하세요",
         "en": "%d native PowerPoint effects across %d pages (shadow/glow/3D read dated; ignore if intentional)",
     },
     "w14": {
-        "ko": "타이틀 %d/%d개가 서술형 명사구(read 덱은 액션타이틀로, 에디토리얼·작품 소개 헤드라인은 무시)",
+        "ko": "제목 %d개(전체 %d개 중)가 내용을 설명만 하는 명사구입니다. 그 장의 주장을 담은 문장형 제목으로 바꾸면 전달력이 좋아집니다. 표지·목차 같은 구조 슬라이드는 세지 않았습니다",
         "en": "%d/%d titles are nominal phrases (use action titles for read decks; ignore for editorial headlines)",
     },
     "w15": {
-        "ko": "텍스트끼리 겹침 추정 %.0f%%(가림·충돌, 렌더 확인)",
+        "ko": "텍스트 상자 두 개가 겹쳐 보입니다(추정 겹침 %.0f%%). 실제 화면에서 확인해 하나를 옮기거나 줄이세요",
         "en": "Estimated text-on-text overlap %.0f%% (occlusion/collision; verify on render)",
     },
     "w16": {
-        "ko": "화면 밖 넘침 %.2fin(잘림, 렌더 확인)",
+        "ko": "내용이 슬라이드 밖으로 %.2fin 나가 있습니다. 잘려 보일 수 있으니 화면에서 확인하세요",
         "en": "Off-canvas overflow %.2fin (clipping; verify on render)",
     },
     "w16_text": {"ko": "텍스트 %r", "en": "text %r"},
     "w16_pic": {"ko": "그림 %.1fx%.1fin", "en": "picture %.1fx%.1fin"},
     "w17": {
-        "ko": "텍스트가 이미지 경계에 걸침(안 %.0f%%, 잘려 보임 의심, 렌더 확인)",
+        "ko": "글자가 이미지 가장자리에 걸쳐 있습니다(이미지 안쪽 %.0f%%). 잘린 것처럼 보일 수 있으니 화면에서 확인하세요",
         "en": "Text straddles an image ink edge (%.0f%% inside; may look clipped; verify on render)",
     },
     "w18_page": {
-        "ko": "일부 구간을 검사하지 못함(손상·비정형 속성): 이 페이지 결과는 불완전할 수 있음",
+        "ko": "이 페이지의 일부 구간은 손상되거나 비정형인 속성 때문에 검사하지 못했습니다. 결과가 불완전할 수 있습니다",
         "en": "Some spans on this page could not be checked (malformed/atypical attributes); results may be incomplete",
     },
     "w18_deck": {
-        "ko": "덱 단위 일부 검사를 수행하지 못함(손상·비정형 구조): 결과가 불완전할 수 있음",
+        "ko": "덱 전체 대상 검사 중 일부를 수행하지 못했습니다. 결과가 불완전할 수 있습니다",
         "en": "Some deck-level checks could not run (malformed/atypical structure); results may be incomplete",
     },
     "w6_detail": {"ko": "예 %s", "en": "e.g. %s"},

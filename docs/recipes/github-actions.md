@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Love-Ash/archforge@v0.9.1
+      - uses: Love-Ash/archforge@v0.9.2
         with:
           files: |
             decks/

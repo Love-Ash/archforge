@@ -218,7 +218,7 @@ json.dumps(doc, ensure_ascii=False)
         crossorigin="anonymous"></script>
 <script>
 "use strict";
-var ARCHFORGE_VERSION = "0.9.1";   // pinned: the verdict states which engine judged the deck
+var ARCHFORGE_VERSION = "0.9.2";   // pinned: the verdict states which engine judged the deck
 var pyReady = null;
 
 var drop = document.getElementById("drop");
@@ -301,7 +301,7 @@ function render(doc, name) {
     var rows = findings.map(function (f) {
       return "<tr><td class='t-code'><span class='dot " + f.sev + "'></span>" +
         "<span class='sr'>" + f.sevKo + " </span>" + esc(f.code) + "</td>" +
-        "<td class='t-page'>" + Number(f.page) + "쪽</td>" +
+        "<td class='t-page'>" + (Number(f.page) > 0 ? Number(f.page) + "쪽" : "전체") + "</td>" +
         "<td class='t-msg'>" + esc(f.message) + "</td>" +
         "<td class='t-det'>" + (f.detail ? esc(f.detail) : "—") + "</td></tr>";
     });

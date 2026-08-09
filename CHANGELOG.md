@@ -19,6 +19,18 @@ Two versions below never shipped. 0.2.1 and 0.3.1 have entries here but were sup
 same day they were written: 0.2.1 has no tag, 0.3.1 has a tag but no GitHub release, and
 neither reached PyPI. Every other version in this file is installable.
 
+## 0.9.2 (2026-08-10)
+
+Every Korean finding message is rewritten as plain sentences. The catalog was written as
+terse CLI annotations for an internal pipeline and it showed the moment an outside reader
+met it on the web page: compressed jargon ("read 덱은 액션타이틀로"), parenthetical asides,
+no sentences. Each message now states what is wrong, why it matters to the person reading
+the deck, and what to do -- 26 rewrites, format-specifier parity with the English side
+enforced by the existing catalog test, verdicts unchanged. English messages are untouched.
+
+The browser page labels deck-level findings (page 0) as 전체 instead of the literal 0쪽,
+and pins this release.
+
 ## 0.9.1 (2026-08-09)
 
 The abstention contract stopped under-reporting, and the corpus reaches the OOXML shapes

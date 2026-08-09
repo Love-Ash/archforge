@@ -112,8 +112,8 @@ def test_w11_ai_copy(tmp_path):
     tb(s, 1, 1, 10, 0.8, "두 사업의 시너지 효과를 극대화", font="Wanted Sans", size=14)
     _e, warns = lint_full(save(p, tmp_path, "fx.pptx"))
     w11 = by_code(warns, "W11")
-    assert any("오프닝" in m for (_si, m, _d) in w11)
-    assert any("버즈워드" in m for (_si, m, _d) in w11)
+    assert any("도입부" in m for (_si, m, _d) in w11)   # the opening-cliche variant
+    assert any("상투어" in m for (_si, m, _d) in w11)   # the buzzword variant
 
 def test_w12_footer_baseline(tmp_path):
     p = new_prs()
