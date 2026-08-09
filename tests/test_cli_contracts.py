@@ -1001,7 +1001,13 @@ def test_abstention_payload_reaches_the_json_output(tmp_path):
     report. Forces a guard to fail on a real deck and reads affected_rules back out of the
     schema-2 output rather than out of the table."""
     import subprocess
-    deck = os.path.join(_repo_root(), "examples", "broken.pptx")
+    # The deck is built here rather than taken from examples/: the sdist self-test runs
+    # this suite from the unpacked source distribution, which ships corpus/ but not
+    # examples/, and the first version of this test failed there with an empty stdout.
+    p = new_prs()
+    sl = add_slide(p)
+    tb(sl, 1, 1, 8, 0.6, "프레임 가드 강제용 한글", size=20)
+    deck = save(p, tmp_path, "guard.pptx")
     script = (
         "import sys, json;"
         "sys.path.insert(0, %r);"
