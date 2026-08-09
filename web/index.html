@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>archforge — 브라우저에서 덱 검사</title>
+<style>
+  :root { --ink:#1a1a1a; --sub:#666; --line:#ddd; --err:#c0392b; --warn:#8a6d1a; --ok:#1e7a46; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.65 "IBM Plex Sans KR","Segoe UI",sans-serif; color:var(--ink);
+         max-width:820px; padding:2.5rem 1.25rem 4rem; margin-inline:auto; }
+  h1 { font-size:1.5rem; margin:0 0 .25rem; }
+  .sub { color:var(--sub); margin:0 0 1.5rem; }
+  #drop { border:2px dashed var(--line); border-radius:8px; padding:2.5rem 1rem; text-align:center;
+          cursor:pointer; transition:border-color .15s; }
+  #drop.hot { border-color:var(--ink); }
+  #drop input { display:none; }
+  .privacy { font-size:.85rem; color:var(--sub); margin-top:.75rem; }
+  #status { margin:1.25rem 0 .5rem; color:var(--sub); white-space:pre-line; }
+  table { border-collapse:collapse; width:100%; margin-top:.75rem; }
+  th,td { text-align:left; padding:.4rem .6rem; border-bottom:1px solid var(--line);
+          vertical-align:top; font-size:.9rem; }
+  th { color:var(--sub); font-weight:600; }
+  .sev-error { color:var(--err); font-weight:600; }
+  .sev-warning { color:var(--warn); font-weight:600; }
+  .verdict { font-size:1.1rem; font-weight:700; margin:1rem 0 .25rem; }
+  .verdict.pass { color:var(--ok); } .verdict.fail { color:var(--err); }
+  .note { font-size:.85rem; color:var(--sub); }
+  code { background:#f4f4f4; padding:.1em .35em; border-radius:3px; font-size:.85em; }
+  footer { margin-top:2.5rem; font-size:.85rem; color:var(--sub); border-top:1px solid var(--line);
+           padding-top:1rem; }
+  a { color:inherit; }
+</style>
+</head>
+<body>
+<h1>archforge</h1>
+<p class="sub">AI가 만든 .pptx의 한글 폰트 폴백, 판독 불가 크기, 프레임 충돌을 배포 전에 잡는
+프리플라이트 린터. <span lang="en">Preflight linter for AI-generated PowerPoint.</span></p>
+
+<label id="drop">
+  <input type="file" id="file" accept=".pptx">
+  <strong>.pptx 파일을 끌어다 놓거나 클릭해서 선택</strong>
+  <div class="privacy">검사는 전부 이 브라우저 안(WebAssembly)에서 실행됩니다.
+  파일은 어떤 서버로도 전송되지 않습니다. Your deck never leaves this page.</div>
+</label>
+
+<div id="status"></div>
+<div id="result"></div>
+
+<footer>
+  결과 기준은 <code>--profile full</code>, 엔진은 PyPI의
+  <a href="https://pypi.org/project/archforge/">archforge</a> 그대로입니다.
+  CI에서 쓰려면 <a href="https://github.com/Love-Ash/archforge">GitHub</a>의
+  CLI와 Action이 본체입니다. 렌더 기반 검사(W7)는 브라우저 판에서 실행되지 않으며
+  결과에 not_requested로 표시됩니다.
+</footer>
+
+<script type="text/plain" id="pycode">
+import base64, json
+open("/tmp/deck.pptx", "wb").write(base64.b64decode(deck_b64))
+from archforge.lint import lint
+from archforge.reporters import build_json_doc
+from archforge.rules import PROFILES
+errors, warns = lint("/tmp/deck.pptx", profile="full")
+summary = {"error_count": len(errors), "warning_count": len(warns),
+           "pass": not errors, "incomplete": any(f.code == "W18" for f in warns)}
+doc = build_json_doc("deck.pptx", errors, warns, None, summary)
+json.dumps(doc, ensure_ascii=False)
+</script>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"
+        integrity="sha384-i3R37b3tF+HWudsUf1VSEOY2YxwSNMqY8DQa9Z0O3xh+NkJ9o+yjcGyIi5huj+nB"
+        crossorigin="anonymous"></script>
+<script>
+"use strict";
+var ARCHFORGE_VERSION = "0.9.1";   // pinned: the page states what engine judged the deck
+var pyReady = null;
+
+function status(msg) { document.getElementById("status").textContent = msg; }
+
+function loadEngine() {
+  if (!pyReady) {
+    pyReady = (async function () {
+      status("엔진 로딩 중... (최초 1회, 이후 캐시)");
+      var py = await loadPyodide();
+      await py.loadPackage(["micropip", "lxml", "pillow"]);
+      var mp = py.pyimport("micropip");
+      await mp.install(["python-pptx", "archforge==" + ARCHFORGE_VERSION]);
+      return py;
+    })();
+  }
+  return pyReady;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+  });
+}
+
+function render(doc, name) {
+  var rows = [];
+  var findings = doc.errors.map(function (f) { f.sev = "error"; return f; })
+    .concat(doc.warnings.map(function (f) { f.sev = "warning"; return f; }));
+  findings.forEach(function (f) {
+    rows.push("<tr><td class='sev-" + f.sev + "'>" + esc(f.code) + "</td><td>p" +
+      String(f.page).padStart(2, "0") + "</td><td>" + esc(f.message) +
+      "<div class='note'>" + esc(f.detail || "") + "</div></td></tr>");
+  });
+  var ok = doc.summary["pass"];
+  var html = "<div class='verdict " + (ok ? "pass" : "fail") + "'>" +
+    (ok ? "PASS — 차단 결함 없음" : "FAIL — ERROR " + doc.summary.error_count + "건") +
+    " <span class='note'>(WARN " + doc.summary.warning_count + "건, " + esc(name) + ", archforge " +
+    ARCHFORGE_VERSION + ")</span></div>";
+  if (findings.length) {
+    html += "<table><tr><th>코드</th><th>페이지</th><th>내용</th></tr>" + rows.join("") + "</table>";
+  } else {
+    html += "<p class='note'>보고할 발견이 없습니다.</p>";
+  }
+  html += "<p class='note'>각 코드의 의미와 수정법: <a href='https://github.com/Love-Ash/archforge/tree/main/docs/rules'>docs/rules</a></p>";
+  document.getElementById("result").innerHTML = html;
+}
+
+async function lintFile(file) {
+  if (!file || !/\.pptx$/i.test(file.name)) { status("pptx 파일이 아닙니다."); return; }
+  document.getElementById("result").innerHTML = "";
+  try {
+    var py = await loadEngine();
+    status("검사 중: " + file.name);
+    var buf = new Uint8Array(await file.arrayBuffer());
+    var b64 = "";
+    for (var i = 0; i < buf.length; i += 0x8000) {
+      b64 += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    }
+    py.globals.set("deck_b64", btoa(b64));
+    var res = await py.runPythonAsync(document.getElementById("pycode").textContent);
+    status("");
+    render(JSON.parse(res), file.name);
+  } catch (e) {
+    status("실패: " + e + "\n손상된 파일이거나 pptx가 아닐 수 있습니다. 콘솔에 상세가 남습니다.");
+    console.error(e);
+  }
+}
+
+var drop = document.getElementById("drop");
+document.getElementById("file").addEventListener("change", function (e) { lintFile(e.target.files[0]); });
+["dragover", "dragenter"].forEach(function (t) {
+  drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add("hot"); });
+});
+["dragleave", "drop"].forEach(function (t) {
+  drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove("hot"); });
+});
+drop.addEventListener("drop", function (e) { lintFile(e.dataTransfer.files[0]); });
+</script>
+</body>
+</html>
