@@ -148,6 +148,7 @@ WARNs are advisory:
 | `W6` | Same layout skeleton on 4+ pages (tunable; template systems: tune or skip) |
 | `W7` | Low text-over-image contrast (needs `--render`) |
 | `W8` | Small CJK in narrow frames, no wider than 4in (device mockups, cards) |
+| | Between the gates: text at 5.0-9.0pt in a frame that is neither body-class (W1) nor narrow (W8) is not judged by any size rule today. A pass says nothing about that band; see #13 for the calibration work to close it. |
 | `W9` | Accent vertical bars repeated as list markers |
 | `W10` | Hand-drawn diagram cloned across pages |
 | `W11` | AI-tell copy: buzzwords, stock openings |

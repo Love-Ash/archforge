@@ -480,16 +480,17 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
         # panel).
         if tboxes is not None:
             try:
-                text_overlap_check(slide, si, warns, boxes=tboxes)
+                text_overlap_check(slide, si, warns, boxes=tboxes, skipped=skipped)
             except Exception as e:
                 skipped["w15"] += 1
                 print("W15 skipped p%02d: %s" % (si, e), file=sys.stderr)
         try:
-            overflow_check(slide, si, sw_in, sh_in, warns,
+            overflow_check(slide, si, sw_in, sh_in, warns, skipped=skipped,
                            boxes=tboxes if tboxes is not None else [],
                            pics=pboxes if pboxes is not None else [])
             if tboxes is not None and pboxes is not None:
-                text_image_straddle_check(slide, si, sw_in, sh_in, warns, boxes=tboxes, pics=pboxes)
+                text_image_straddle_check(slide, si, sw_in, sh_in, warns, skipped=skipped,
+                                          boxes=tboxes, pics=pboxes)
         except Exception as e:
             skipped["w16_w17"] += 1
             print("W16/W17 skipped p%02d: %s" % (si, e), file=sys.stderr)

@@ -431,6 +431,18 @@ MESSAGES = {
         "ko": "데모 덱을 생성할 폴더(기본 ./archforge-demo)",
         "en": "directory to write the demo decks to (default ./archforge-demo)",
     },
+    "rollup_header": {
+        "ko": "-- 같은 원인 묶음 (상세는 아래 개별 행) --",
+        "en": "-- grouped by shared cause (details below) --",
+    },
+    "rollup_line": {
+        "ko": "%s x%d",
+        "en": "%s x%d",
+    },
+    "rollup_line_cause": {
+        "ko": "%s x%d, 최다 원인 %s (%d건)",
+        "en": "%s x%d, dominant cause %s (%d hits)",
+    },
     "demo_built": {
         "ko": "archforge: 데모 덱 생성 완료 -> %s (broken.pptx = 결함 6종, fixed.pptx = 교정본, 검사는 --profile full 기준)",
         "en": "archforge: demo decks written -> %s (broken.pptx = seeded defects, fixed.pptx = the corrected version; linted with --profile full)",

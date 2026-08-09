@@ -31,6 +31,15 @@ def build_json_doc(path: str, errors: List, warns: List, ghost, summary: Dict,
     `abstentions[]`, an `invocation` block (profile/policy/config/thresholds), and a
     `rules` split (executed / profile_excluded / user_suppressed) so a consumer can tell
     why a rule produced nothing (0.7.1). Both shapes carry the same verdict."""
+    # Canvas dimensions travel with the report (#14): bbox is useless for planning a
+    # W16 move without knowing how big the canvas is, and the HTML reporter already
+    # reads this exact value. None (unreadable package) is omitted, not guessed.
+    try:
+        from .ooxml import canvas_size_in
+    except ImportError:   # standalone execution
+        from ooxml import canvas_size_in
+    cv = canvas_size_in(path)
+    canvas = {"width_in": cv[0], "height_in": cv[1]} if cv else None
     if schema == "2.0":
         findings = ([f.to_dict("2.0", severity_override="error") for f in errors] +
                     [f.to_dict("2.0", severity_override="warning") for f in warns])
@@ -38,6 +47,7 @@ def build_json_doc(path: str, errors: List, warns: List, ghost, summary: Dict,
             "schema_version": "2.0",
             "tool": {"name": "archforge", "version": _tool_version()},
             "target_renderer": "powerpoint-windows",
+            "canvas": canvas,
             "file": path,
             "lang": get_lang(),
             "invocation": invocation or {},
@@ -52,6 +62,7 @@ def build_json_doc(path: str, errors: List, warns: List, ghost, summary: Dict,
         "schema_version": "1.0",
         "tool": {"name": "archforge", "version": _tool_version()},
         "target_renderer": "powerpoint-windows",
+        "canvas": canvas,
         "file": path,
         "lang": get_lang(),
         "errors": [f.to_dict() for f in errors],
@@ -73,6 +84,33 @@ def render_text(path: str, errors: List, warns: List, ghost,
             lines.append("  p%02d  %s" % (si, txt[:60]))
     if not errors and not warns:
         lines.append("clean: ERROR 0, WARN 0")
+    # Same-cause rollup (#14): a real deck produced 91 errors of which 80 were E1 with the
+    # identical font token, and a flat list buries "one font choice is wrong" under its own
+    # evidence. When a code fires 4+ times, one header line states the count and, if a
+    # single detail token dominates, the shared cause. The per-finding lines stay: the
+    # rollup is a table of contents, not a replacement, and the JSON stays flat because
+    # machine consumers group for themselves.
+    import re as _re
+    from collections import Counter as _Counter
+    by_code = _Counter(f.code for f in errors + warns)
+    rollup = []
+    for code, n in sorted(by_code.items(), key=lambda kv: -kv[1]):
+        if n < 4:
+            continue
+        tokens = _Counter()
+        for f in errors + warns:
+            if f.code == code:
+                m = _re.search(r"(\w+='[^']*')", f.detail or "")
+                if m:
+                    tokens[m.group(1)] += 1
+        top = tokens.most_common(1)
+        if top and top[0][1] >= max(3, n // 2):
+            rollup.append(M("rollup_line_cause") % (code, n, top[0][0], top[0][1]))
+        else:
+            rollup.append(M("rollup_line") % (code, n))
+    if rollup:
+        lines.append(M("rollup_header"))
+        lines.extend("  " + r for r in rollup)
     for f in errors:
         lines.append("  ERROR p%02d [%s] %s | %s" % (f.page, f.code, f.message, f.detail))
     for f in warns:

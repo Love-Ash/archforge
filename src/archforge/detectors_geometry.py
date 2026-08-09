@@ -321,7 +321,8 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
     return out
 
 
-def text_overlap_check(slide, si, warns, boxes: Optional[List[GlyphBox]] = None):
+def text_overlap_check(slide, si, warns, boxes: Optional[List[GlyphBox]] = None,
+                       skipped=None):
     """W15: the effective glyph regions of two different text frames overlap meaningfully
     (occlusion/collision). This is approximation-based, hence WARN. Fires only when the
     intersection area exceeds 45% of the smaller box, at most 2 findings per page.
@@ -356,6 +357,8 @@ def text_overlap_check(slide, si, warns, boxes: Optional[List[GlyphBox]] = None)
                 hits.append((area / amin, a, b))
     # Sort key is frac only: GlyphBox's sp field isn't comparable, so a full tuple comparison
     # would fail (0.5.0)
+    if skipped is not None and len(hits) > 2:
+        skipped["w15_capped"] += len(hits) - 2
     for frac, a, b in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
         # loc: not the frame's raw bbox, but the effective glyph bbox (absolute, in) actually
         # used to judge the overlap, as-is.
@@ -445,7 +448,7 @@ def _pic_boxes(slide, sw_in, sh_in, skipped=None):
     return out
 
 
-def overflow_check(slide, si, sw_in, sh_in, warns,
+def overflow_check(slide, si, sw_in, sh_in, warns, skipped=None,
                    boxes: Optional[List[GlyphBox]] = None, pics: Optional[list] = None):
     """W16: off-canvas overflow. Using the frame bbox as the criterion was previously
     rejected because of the large false-positive rate from the generous-frame convention, but
@@ -474,6 +477,8 @@ def overflow_check(slide, si, sw_in, sh_in, warns,
                          shape_loc(psp, bbox=[px0, py0, px1 - px0, py1 - py0])))
     # Sort key is over only: a loc dict isn't comparable, so a full tuple comparison would
     # fail (0.5.0)
+    if skipped is not None and len(hits) > 2:
+        skipped["w16_capped"] += len(hits) - 2
     for over, what, fpk, loc in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
         # fp_key: detail (what) is a locale-dependent string, so it's excluded from the
         # baseline fingerprint (fourth review)
@@ -509,7 +514,7 @@ def _occluder_boxes(slide, sw_in, sh_in):
     return out
 
 
-def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
+def text_image_straddle_check(slide, si, sw_in, sh_in, warns, skipped=None,
                               boxes: Optional[List[GlyphBox]] = None, pics: Optional[list] = None):
     """W17: text straddles the ink boundary of a non-background picture (only 25-75% of the
     glyph is inside the image) = half on, half off, so it looks cropped or the background
@@ -555,6 +560,8 @@ def text_image_straddle_check(slide, si, sw_in, sh_in, warns,
             if not carded:
                 hits.append((frac, gb, (px0, py0, px1, py1, psp)))
     # Sort key is frac only (sp field isn't comparable, 0.5.0)
+    if skipped is not None and len(hits) > 2:
+        skipped["w17_capped"] += len(hits) - 2
     for frac, gb, pic in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
         loc = shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0],
                         cell=gb.cell, paragraph=gb.para, field=gb.field) or {}

@@ -1073,3 +1073,26 @@ def test_corpus_exercises_the_structural_axes():
         "no corpus deck exercises: %s. The unit tests cover these paths, but ACCURACY.md is "
         "computed from the corpus, so a gap here means the published record does not reach "
         "them." % missing)
+
+
+def test_geometry_caps_disclose_suppressed_findings(tmp_path):
+    """#13: W15/W16/W17 keep the top 2 hits per page, which is a sane noise decision that
+    nothing disclosed -- an agent that fixed two overlaps could not know why two more
+    appeared on the next run. Four overlapping pairs must yield exactly 2 W15 findings plus
+    a w15_capped abstention carrying the suppressed count, and the canvas field must be
+    present so the consumer can plan geometry fixes from the payload alone (#14)."""
+    p = new_prs()
+    s = add_slide(p)
+    for i in range(4):
+        tb(s, 1 + i * 2.8, 3.0, 2.5, 0.6, "겹침 %da" % i, size=20)
+        tb(s, 1.15 + i * 2.8, 3.1, 2.5, 0.6, "겹침 %db" % i, size=20)
+    deck = save(p, tmp_path, "caps.pptx")
+    r = run_cli([deck, "--profile", "full", "--json", "--schema", "2"], lang="en")
+    doc = json.loads(r.stdout)
+    w15 = [f for f in doc["findings"] if f["code"] == "W15"]
+    assert len(w15) == 2, "cap should keep exactly 2, got %d" % len(w15)
+    capped = [a for a in doc["abstentions"] if a["reason"] == "w15_capped"]
+    assert capped and capped[0]["count"] == 2, doc["abstentions"]
+    assert capped[0]["affected_rules"] == ["W15"]
+    assert doc["capabilities"]["geometry"] == "partial"
+    assert doc["canvas"] == {"width_in": 13.333, "height_in": 7.5}

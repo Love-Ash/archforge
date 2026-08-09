@@ -24,6 +24,22 @@ neither reached PyPI. Every other version in this file is installable.
 The abstention contract stopped under-reporting, and the corpus reaches the OOXML shapes
 the engine has always claimed to handle.
 
+### From the product-lens review
+
+- W15/W16/W17's per-page cap of 2 findings is disclosed instead of silent: suppressed hits
+  surface as `w15_capped`/`w16_capped`/`w17_capped` abstentions with the count, so an agent
+  loop knows to re-lint after fixing. Measured on 29 real decks: 12 previously invisible
+  suppressions now reported, no other finding changed.
+- The report carries the slide canvas (`canvas.width_in`/`height_in`, both schemas,
+  additive), so an off-canvas fix target is computable from the JSON alone.
+- The text report opens with a same-cause rollup when a code fires 4+ times. A real deck
+  produced 91 errors of which 80 were one font token; the rollup states that in one line.
+- The unjudged size band (5.0-9.0pt outside body-class and narrow frames) is stated in the
+  README instead of discoverable only by falling into it. Closing it is #13.
+- W7's render input is documented (docs/recipes/rendering.md: LibreOffice and PowerPoint
+  COM paths); the Actions recipe is version-gated; the hero states E1/E4's CJK scope;
+  `archforge demo` names the profile it lints with.
+
 ### Fixed
 
 - The schema-2 abstention payload now names every rule a guard failure blocked (#11). The

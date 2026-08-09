@@ -78,6 +78,7 @@ instead of searching by text: `shape_id`/`shape_name`, `bbox` `[x,y,w,h]` in inc
 frame, table `cell` as `[row, col]`, `field: true` when the text lives in an `a:fld`
 auto field (slide number/date; no `run` index there), `part` (the slide XML part), and
 for pair findings (W15 overlap, W17 straddle) a `related` counterpart with the same keys.
+The report's top-level `canvas` object carries the slide dimensions in inches (`width_in`/`height_in`), so an off-canvas (W16) move target is computable from the payload alone.
 `--schema 2` switches to schema 2.0: a single `findings[]` array with `severity` and a
 structured `data` object per item (numbers, not a parsed sentence), plus a
 `capabilities` map and a structured `abstentions[]`. Schema 1.0 (the default above) is
@@ -121,6 +122,7 @@ says so. Most are approximation-based, calibrated against rendered output
 | W13 | Native PowerPoint shadow/glow/3D effects | Remove; they read as dated |
 | W14 | Most titles are noun phrases, not claims (titles with figures count as claims) | Rewrite as action titles (the `--ghost` list should read as a story). Editorial/portfolio decks: `--skip W14` |
 | W15 | Two text frames' estimated glyph areas overlap >45% | Check the rendered page; move/shrink one. Drop caps and echo typography are auto-excluded |
+| | W15/W16/W17 report at most 2 findings per page; extra hits surface as a `w15_capped`/`w16_capped`/`w17_capped` abstention with the suppressed count, so re-lint after fixing -- more may be waiting | |
 | W16 | Text glyphs or picture ink extend past the canvas edge | Pull content inside; decorative shape bleed is auto-excluded |
 | W17 | Text straddles a picture's ink edge (25-75% inside) | Move the caption fully on or off the image; captions on solid cards are auto-excluded |
 | W18 | Some spans (page-level, `page` N) or deck-level checks (`page` 0) could not run: malformed/atypical attributes, vertical text, or RTL/complex scripts whose geometry cannot be estimated. Results may be incomplete | Treat the scope as unverified: inspect stderr for what was skipped, fix the malformed source, re-lint. Under `--strict` this fails the build |
