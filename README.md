@@ -11,6 +11,8 @@ detection (E1/E4) is CJK-specific by design -- deepest for Hangul --
 and does not fire on Latin-only decks; every other gate is
 script-independent.
 
+**Try it in your browser -- no install, the deck never leaves the page:** [love-ash.github.io/archforge](https://love-ash.github.io/archforge/)
+
 [![pypi](https://img.shields.io/pypi/v/archforge)](https://pypi.org/project/archforge/)
 ![python](https://img.shields.io/badge/python-3.9%2B-3776AB)
 ![license](https://img.shields.io/badge/license-MIT-green)

@@ -7,6 +7,8 @@
 조용한 한글 폰트 폴백, 판독 불가 크기, 프레임 충돌, 화면 밖 잘림, AI 티 문장부호를
 사람이 렌더를 보기 전에 `.pptx` 파일에서 잡아냅니다.
 
+**설치 없이 브라우저에서 바로 검사할 수 있습니다(파일은 전송되지 않습니다):** [love-ash.github.io/archforge](https://love-ash.github.io/archforge/)
+
 [![pypi](https://img.shields.io/pypi/v/archforge)](https://pypi.org/project/archforge/)
 ![python](https://img.shields.io/badge/python-3.9%2B-3776AB)
 ![license](https://img.shields.io/badge/license-MIT-green)
