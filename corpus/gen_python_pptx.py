@@ -100,6 +100,38 @@ def main():
         _tb(s, 12.0, 4.5, 3.0, 0.6, "Next quarter guidance", size=18, ea="맑은 고딕")
     emit("w16_offcanvas", w16, {"expected": {"W16": 1}})
 
+    def w19(p):
+        from pptx.dml.color import RGBColor
+        s = p.slides.add_slide(p.slide_layouts[6])
+        box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(1))
+        box.fill.solid()
+        box.fill.fore_color.rgb = RGBColor.from_string("FFFFFF")
+        r = box.text_frame.paragraphs[0].add_run()
+        r.text = "Nearly invisible label"
+        r.font.size = Pt(18)
+        r.font.color.rgb = RGBColor.from_string("DDDDDD")
+    emit("w19_low_contrast", w19, {"expected": {"W19": 1},
+         "notes": "Explicit #DDDDDD text on the shape's own explicit #FFFFFF solid fill. "
+                  "Ground truth by construction: relative luminance of #DDDDDD is 0.723 and "
+                  "of #FFFFFF is 1.0, so the WCAG ratio is 1.05/0.773 = 1.36, under the "
+                  "calibrated 2.0 threshold. Both colors are explicit RGB, so no resolution "
+                  "chain is involved."})
+
+    def w19_neg(p):
+        from pptx.dml.color import RGBColor
+        s = p.slides.add_slide(p.slide_layouts[6])
+        box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(1))
+        box.fill.solid()
+        box.fill.fore_color.rgb = RGBColor.from_string("FFFFFF")
+        r = box.text_frame.paragraphs[0].add_run()
+        r.text = "Subdued but readable caption"
+        r.font.size = Pt(12)
+        r.font.color.rgb = RGBColor.from_string("6E6E73")
+    emit("w19_contrast_negative", w19_neg, {"expected": {},
+         "notes": "Subdued gray #6E6E73 on white, the standard secondary-text idiom. Ratio "
+                  "is roughly 4.9:1, far above the 2.0 threshold; a rule that fires here "
+                  "would flag every well-set caption. Must stay silent."})
+
     def clean(p):
         s = p.slides.add_slide(p.slide_layouts[6])
         _tb(s, 1, 1, 8, 1, "Quarterly results improved", size=20, ea="맑은 고딕")

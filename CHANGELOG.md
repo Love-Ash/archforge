@@ -19,6 +19,31 @@ Two versions below never shipped. 0.2.1 and 0.3.1 have entries here but were sup
 same day they were written: 0.2.1 has no tag, 0.3.1 has a tag but no GitHub release, and
 neither reached PyPI. Every other version in this file is installable.
 
+## 0.10.0 (2026-08-10)
+
+A new gate, and the last count-only abstention grew a location. Both close #13.
+
+### W19: text nearly invisible on its own solid fill
+
+The renderless sibling of W7. A solid fill is exactly knowable from XML, and the most
+common AI-deck contrast defect -- ghost placeholder text left the same color as its box,
+light gray on white -- never touches an image. Fires under 2.0:1 WCAG luminance ratio
+between the effective run color and the shape's own fill; anything inherited-unknown or
+undecodable abstains (`w19_color_unknown`) instead of guessing, findings cap at 2 per page
+with a `w19_capped` disclosure, and slide backgrounds stay out of scope on purpose.
+
+The threshold is measured, not chosen: on 29 real decks, everything under 2.0:1 was a
+same-color ghost (1.0:1, literally invisible) or a near-invisible watermark (1.85:1),
+while intentional white-on-brand-color display type sits at 2.3:1 and above. Runs in the
+`full` profile only while the threshold soaks; corpus carries a fixture in each direction.
+
+### Abstentions say where
+
+A `vertical_text` or `complex_script` abstention now carries the excluded frames'
+locations (shape id, name, bbox) in schema 2.0, so a JSON consumer can tell WHICH frame
+needs human eyes instead of dead-ending at a count. Additive: schema 1.0 is untouched and
+count-only reasons stay count-only.
+
 ## 0.9.3 (2026-08-10)
 
 - The W12 message says whose baseline it is. It read as if 7.08in were an external

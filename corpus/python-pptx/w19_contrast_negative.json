@@ -1,0 +1,7 @@
+{
+  "expected": {},
+  "notes": "Subdued gray #6E6E73 on white, the standard secondary-text idiom. Ratio is roughly 4.9:1, far above the 2.0 threshold; a rule that fires here would flag every well-set caption. Must stay silent.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

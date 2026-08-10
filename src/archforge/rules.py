@@ -28,6 +28,7 @@ RULES = {
     "W16": ("warning", "geometry",  "w16"),
     "W17": ("warning", "geometry",  "w17"),
     "W18": ("warning", "meta",      "w18_page"),
+    "W19": ("warning", "render",    "w19"),
 }
 
 ALL_CODES = frozenset(RULES)
@@ -55,6 +56,7 @@ TITLES = {
     "W16": "Text or picture ink off-canvas",
     "W17": "Text straddling a picture ink edge",
     "W18": "Some spans could not be checked (incomplete result)",
+    "W19": "Low text contrast on a solid fill",
 }
 
 # Profile = engine execution policy (since 0.3.1, excluded rules simply do not run).
@@ -62,8 +64,11 @@ TITLES = {
 # run by default; AI-tell/house-style rules (E2, W6, W9-W14) are full opt-in.
 PROFILES = {
     "full": frozenset(),
-    "core": frozenset({"E2", "W6", "W9", "W10", "W11", "W12", "W13", "W14"}),
-    "editorial": frozenset({"W6", "W14"}),
+    # W19 ships full-only while its 2.0:1 threshold soaks: calibrated on the 29-deck
+    # private set (7 firings, all defensible: two same-color ghost placeholders, five
+    # white-on-bright-green watermarks; everything >= 2.3 was intentional design).
+    "core": frozenset({"E2", "W6", "W9", "W10", "W11", "W12", "W13", "W14", "W19"}),
+    "editorial": frozenset({"W6", "W14", "W19"}),
 }
 
 DEFAULT_PROFILE = "core"
@@ -117,7 +122,7 @@ _CAPABILITY_OF_RULE = {
     "W15": "geometry", "W16": "geometry", "W17": "geometry",
     "W6": "structure", "W10": "structure", "W12": "structure",
     "W9": "structure", "W11": "structure", "W13": "structure", "W14": "structure",
-    "W7": "render",
+    "W7": "render", "W19": "render",
 }
 
 _REASON_AFFECTED = {
@@ -141,6 +146,9 @@ _REASON_AFFECTED = {
     "w7_no_render": ["W7"],
     "w7_color_unknown": ["W7"],
     "render_dir_missing": ["W7"],
+    "w19": ["W19"],
+    "w19_capped": ["W19"],
+    "w19_color_unknown": ["W19"],
     "w9": ["W9"],
     "w6_sig": ["W6"],
     "w6": ["W6"],

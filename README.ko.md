@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Love-Ash/archforge@v0.9.3
+      - uses: Love-Ash/archforge@v0.10.0
         with:
           files: |
             decks/
@@ -115,7 +115,7 @@ pre-commit:
 ```yaml
 repos:
   - repo: https://github.com/Love-Ash/archforge
-    rev: v0.9.3
+    rev: v0.10.0
     hooks:
       - id: archforge
         # args: [--profile, full]
@@ -151,6 +151,7 @@ repos:
 | `W16` | 화면 밖 넘침 |
 | `W17` | 텍스트가 이미지 잉크 경계에 걸침 |
 | `W18` | 손상·비정형 속성으로 일부 구간 검사 불능 (결과 불완전 가능, `--strict`면 실패) |
+| `W19` | 글자 색이 상자 배경색과 거의 같아(대비 2.0:1 미만) 사실상 안 보이는 텍스트: 같은 색으로 남은 유령 플레이스홀더가 대표 사례. 렌더 없이 XML 색만으로 판정, 임계값 소크 동안 `full` 프로필 전용 |
 
 프로파일이 객관 결함과 스타일 정책을 분리하고, 0.4.0부터 기본값이 `core`입니다.
 기계적 게이트만(E1/E3/E4, W1/W5/W7/W8, W15~W18) 기본으로 돌고, AI 티·관행 규칙

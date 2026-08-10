@@ -117,6 +117,10 @@ MESSAGES = {
         "ko": "글자가 이미지 가장자리에 걸쳐 있습니다(이미지 안쪽 %.0f%%). 잘린 것처럼 보일 수 있으니 화면에서 확인하세요",
         "en": "Text straddles an image ink edge (%.0f%% inside; may look clipped; verify on render)",
     },
+    "w19": {
+        "ko": "글자 색과 상자 배경색의 명암 대비가 %.1f:1로, 거의 안 보이는 수준입니다. 글자 색이나 배경색을 바꿔 주세요",
+        "en": "Text-on-fill contrast %.1f:1, close to invisible (change the text or fill color)",
+    },
     "w18_page": {
         "ko": "이 페이지의 일부 구간은 손상되거나 비정형인 속성 때문에 검사하지 못했습니다. 결과가 불완전할 수 있습니다",
         "en": "Some spans on this page could not be checked (malformed/atypical attributes); results may be incomplete",
@@ -418,6 +422,7 @@ MESSAGES = {
     "fix_w15": {"ko": "렌더에서 확인 후 한쪽을 이동·축소하세요", "en": "Check the render, then move or shrink one frame"},
     "fix_w16": {"ko": "내용을 캔버스 안으로. 장식 도형 블리드는 자동 제외됩니다", "en": "Pull content inside the canvas; decorative shape bleed is auto-excluded"},
     "fix_w17": {"ko": "캡션을 이미지 위나 밖으로 완전히 옮기세요", "en": "Move the caption fully on or off the image"},
+    "fix_w19": {"ko": "글자 색이나 상자 배경색을 바꿔 대비를 2:1 이상으로. 같은 색 유령 텍스트는 삭제", "en": "Change the text or fill color to reach at least 2:1; delete same-color ghost text"},
     "fix_w18": {"ko": "검사 못 한 구간이 있습니다. stderr에서 원인을 보고 원본을 고친 뒤 재린트하세요. CI는 --fail-incomplete 권장", "en": "Part of the deck went unchecked; see stderr for why, fix the malformed source, re-lint. Use --fail-incomplete in CI"},
     "subcmd_conflict": {
         "ko": "archforge: 참고: 현재 폴더에 %r 파일이 있지만 서브커맨드를 실행합니다. 그 파일을 린트하려면 `archforge ./%s`",

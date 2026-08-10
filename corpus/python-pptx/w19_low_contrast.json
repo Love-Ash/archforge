@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W19": 1
+  },
+  "notes": "Explicit #DDDDDD text on the shape's own explicit #FFFFFF solid fill. Ground truth by construction: relative luminance of #DDDDDD is 0.723 and of #FFFFFF is 1.0, so the WCAG ratio is 1.05/0.773 = 1.36, under the calibrated 2.0 threshold. Both colors are explicit RGB, so no resolution chain is involved.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

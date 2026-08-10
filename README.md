@@ -107,7 +107,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Love-Ash/archforge@v0.9.3
+      - uses: Love-Ash/archforge@v0.10.0
         with:
           files: |
             decks/
@@ -124,7 +124,7 @@ pre-commit:
 ```yaml
 repos:
   - repo: https://github.com/Love-Ash/archforge
-    rev: v0.9.3
+    rev: v0.10.0
     hooks:
       - id: archforge
         # args: [--profile, full]
@@ -161,6 +161,7 @@ WARNs are advisory:
 | `W16` | Text glyphs or picture ink off-canvas |
 | `W17` | Text straddling an image ink edge |
 | `W18` | Some spans could not be checked (malformed input): results incomplete. Fails under `--strict` |
+| `W19` | Text color nearly identical to its own shape's solid fill (under 2.0:1 contrast): ghost placeholder text and near-invisible labels. XML colors only, no render needed; runs in the `full` profile while the threshold soaks |
 
 Profiles separate objective defects from style policy, and since 0.4.0 the default is
 `core`: only the mechanical gates (E1/E3/E4, W1/W5/W7/W8, W15-W18) run unless you opt in.

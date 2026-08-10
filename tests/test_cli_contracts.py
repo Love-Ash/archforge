@@ -1102,3 +1102,29 @@ def test_geometry_caps_disclose_suppressed_findings(tmp_path):
     assert capped[0]["affected_rules"] == ["W15"]
     assert doc["capabilities"]["geometry"] == "partial"
     assert doc["canvas"] == {"width_in": 13.333, "height_in": 7.5}
+
+
+def test_abstention_carries_excluded_frame_location(tmp_path):
+    """#13 item 3: a vertical_text abstention was a count with no way to tell WHICH frame
+    was excluded, so the JSON-first fix path dead-ended exactly where the report was
+    asking for human eyes. Emitters that know their shape now ride a locations list on
+    the abstention entry; count-only reasons stay count-only, and schema 1.0 is
+    untouched (data is a schema-2 surface)."""
+    p = new_prs()
+    s = add_slide(p)
+    box = tb(s, 2, 1, 1, 4, "세로쓰기 텍스트", size=14)
+    bodyPr = box.text_frame._txBody.find(qn("a:bodyPr"))
+    bodyPr.set("vert", "eaVert")
+    deck = save(p, tmp_path, "vert.pptx")
+    r = run_cli([deck, "--profile", "full", "--json", "--schema", "2"], lang="en")
+    doc = json.loads(r.stdout)
+    ab = [a for a in doc["abstentions"] if a["reason"] == "vertical_text"]
+    assert ab, doc["abstentions"]
+    locs = ab[0].get("locations")
+    assert locs and "shape_id" in locs[0] and "bbox" in locs[0], ab[0]
+    assert abs(locs[0]["bbox"][0] - 2.0) < 0.01
+    # schema 1.0 stays as it was: no data payload on its findings
+    r1 = run_cli([deck, "--profile", "full", "--json"], lang="en")
+    doc1 = json.loads(r1.stdout)
+    w18 = [f for f in doc1["warnings"] if f["code"] == "W18"]
+    assert w18 and "data" not in w18[0]

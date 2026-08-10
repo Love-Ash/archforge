@@ -424,3 +424,32 @@ def test_w7_unknown_explicit_color_abstains(tmp_path):
     _e, warns = lint_full(save(p, tmp_path, "hsl.pptx"), render_dir=d)
     assert "W7" not in codes(warns), codes(warns)
     assert "W18" in codes(warns), codes(warns)
+
+
+def test_w19_solid_fill_contrast(tmp_path):
+    """W19 (0.10): text nearly indistinguishable from its own shape's solid fill.
+    Calibrated at 2.0:1 on the 29-deck set; the killer case is ghost placeholder text
+    left the same color as its fill (1.0:1, literally invisible). Findings cap at 2 per
+    page with a w19_capped disclosure, and the rule runs in the full profile only."""
+    from pptx.dml.color import RGBColor
+    p = new_prs()
+    s = add_slide(p)
+    for i in range(3):   # three same-color ghosts: expect 2 findings + capped=1
+        box = tb(s, 1, 1 + i * 1.5, 5, 1, "ghost %d" % i, size=18)
+        box.fill.solid()
+        box.fill.fore_color.rgb = RGBColor.from_string("E5B704")
+        box.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor.from_string("E5B704")
+    deck = save(p, tmp_path, "ghost.pptx")
+    r = run_cli([deck, "--profile", "full", "--json", "--schema", "2"], lang="en")
+    doc = json.loads(r.stdout)
+    w19 = [f for f in doc["findings"] if f["code"] == "W19"]
+    assert len(w19) == 2, [f["code"] for f in doc["findings"]]
+    assert w19[0]["data"]["contrast_ratio"] == 1.0
+    assert w19[0]["data"]["bg_hex"] == "E5B704"
+    assert "location" in w19[0] and "shape_id" in w19[0]["location"]
+    capped = [a for a in doc["abstentions"] if a["reason"] == "w19_capped"]
+    assert capped and capped[0]["count"] == 1
+    # full-only while the threshold soaks
+    r_core = run_cli([deck, "--json"], lang="en")
+    doc_core = json.loads(r_core.stdout)
+    assert not [f for f in doc_core["warnings"] if f["code"] == "W19"]

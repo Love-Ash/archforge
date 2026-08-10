@@ -126,6 +126,7 @@ says so. Most are approximation-based, calibrated against rendered output
 | W16 | Text glyphs or picture ink extend past the canvas edge | Pull content inside; decorative shape bleed is auto-excluded |
 | W17 | Text straddles a picture's ink edge (25-75% inside) | Move the caption fully on or off the image; captions on solid cards are auto-excluded |
 | W18 | Some spans (page-level, `page` N) or deck-level checks (`page` 0) could not run: malformed/atypical attributes, vertical text, or RTL/complex scripts whose geometry cannot be estimated. Results may be incomplete | Treat the scope as unverified: inspect stderr for what was skipped, fix the malformed source, re-lint. Under `--strict` this fails the build |
+| W19 | Text color nearly identical to its own shape's solid fill, under 2.0:1 contrast (ghost placeholders, near-invisible labels; XML colors only, full profile only) | Change the text or fill color to reach at least 2:1; delete same-color ghost text |
 
 ## Agent workflow
 

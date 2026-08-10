@@ -192,7 +192,8 @@ try:
                      effects_check_deck,
                      _diagram_clone_marks,
                      slide_layout_sig,
-                     contrast_check)
+                     contrast_check,
+                     solid_contrast_check)
 except ImportError:   # standalone execution
     from detectors_visual import (_EFFECT_TAGS,
                     _3D_TAGS,
@@ -204,7 +205,8 @@ except ImportError:   # standalone execution
                     effects_check_deck,
                     _diagram_clone_marks,
                     slide_layout_sig,
-                    contrast_check)
+                    contrast_check,
+                    solid_contrast_check)
 try:
     from .inline import iter_inline_items
     from .detectors_geometry import (_FldRun,
@@ -374,7 +376,9 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
     titles = {}
     excl = PROFILES.get(profile, frozenset())
     fonts_map = theme_fonts_by_master(prs)
-    colors_map = theme_colors_by_master(prs) if render_dir else {}
+    # Theme colors are read unconditionally since W19: the solid-fill contrast gate
+    # resolves run colors through the same schemeClr machinery W7 uses, without a render.
+    colors_map = theme_colors_by_master(prs)
     colors_default = next((v for v in colors_map.values() if v is not None), None)
     thm_default = next((v for v in fonts_map.values() if v is not None), None)
     deck_skipped = Counter()   # deck-level unable-to-check (used to fire W18 p00)
@@ -406,6 +410,8 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
         except Exception:
             pass
         skipped = Counter()   # W18: tallies unable-to-check regions (surfaces silent
+        skipped_locs = {}     # reason -> [shape_loc]: where the excluded frames sit,
+                              # for emitters that know their shape (#13)
                                # degradation in the JSON)
         try:
             slide_part = str(slide.part.partname)   # for the part field of a finding
@@ -451,6 +457,13 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             except Exception as e:
                 skipped["w9"] += 1
                 print("W9 skipped p%02d: %s" % (si, e), file=sys.stderr)
+        if "W19" not in excl:
+            try:
+                solid_contrast_check(slide, si, warns, styler=styler,
+                                     thm_colors=thm_colors, skipped=skipped)
+            except Exception as e:
+                skipped["w19"] += 1
+                print("W19 skipped p%02d: %s" % (si, e), file=sys.stderr)
         if "W12" not in excl or "W13" not in excl:
             try:
                 foot_tops[si] = footer_top(slide, sw, sh)
@@ -463,7 +476,8 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
         # a large-deck performance issue, external review 2026-07-10)
         sw_in, sh_in = sw / EMU_PER_IN, sh / EMU_PER_IN
         try:
-            tboxes = _text_glyph_boxes(slide, skipped=skipped, styler=styler)
+            tboxes = _text_glyph_boxes(slide, skipped=skipped, styler=styler,
+                                       skipped_locs=skipped_locs)
         except Exception as e:
             tboxes = None
             skipped["glyph_boxes"] += 1
@@ -698,7 +712,11 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
         # 2026-07-10). Promoted to exit 1 under --strict.
         if skipped:
             det = ", ".join("%s=%d" % (k, v) for k, v in sorted(skipped.items()))
-            warns.append(Finding(si, "W18", "w18_page", (), det))
+            # Locations ride in data, additively: reasons whose emitter knows its shape
+            # say which frames were excluded, so the abstention is actionable from the
+            # JSON alone instead of dead-ending at a count (#13).
+            warns.append(Finding(si, "W18", "w18_page", (), det,
+                                 data={"locations": skipped_locs} if skipped_locs else None))
 
     # If there are zero matches for the naming convention (p01.png) but PNGs with other names
     # exist, hint at the naming convention.

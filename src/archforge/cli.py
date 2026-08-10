@@ -259,8 +259,15 @@ def _capabilities_and_abstentions(warns, render_requested):
                 count = 1
             rules, caps = _REASON_RULES.get(key, ([], ("meta",)))
             degraded.update(caps)
-            abstentions.append({"reason": key, "page": f.page, "count": count,
-                                "affected_rules": rules})
+            entry = {"reason": key, "page": f.page, "count": count,
+                     "affected_rules": rules}
+            # Emitters that know their shape say where the excluded frames sit (#13):
+            # without this, a vertical_text abstention was a count with no way to tell
+            # WHICH frame needs human eyes, and the JSON-first fix path dead-ended.
+            locs = (f.data() or {}).get("locations", {}).get(key)
+            if locs:
+                entry["locations"] = locs
+            abstentions.append(entry)
     caps = {}
     caps["typography"] = "partial" if "typography" in degraded else "complete"
     caps["geometry"] = "partial" if "geometry" in degraded else "complete"

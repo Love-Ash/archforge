@@ -24,13 +24,17 @@ try:
     from .ooxml import EMU_PER_IN, NS
     from .colors import (_is_accent, _luma, _resolve_run_rgb, _shape_fill_hex,
                          _shape_line_hex, _COLOR_UNKNOWN)
-    from .geometry import _geo_rect, _is_pic, iter_shapes, iter_shapes_geo
+    from .geometry import (_geo_rect, _is_pic, iter_shapes, iter_shapes_geo,
+                           collect_frames as _collect_frames)
+    from .inline import iter_inline_items
 except ImportError:   # standalone execution
     from findings import Finding, shape_loc
     from ooxml import EMU_PER_IN, NS
     from colors import (_is_accent, _luma, _resolve_run_rgb, _shape_fill_hex,
                         _shape_line_hex, _COLOR_UNKNOWN)
-    from geometry import _geo_rect, _is_pic, iter_shapes, iter_shapes_geo
+    from geometry import (_geo_rect, _is_pic, iter_shapes, iter_shapes_geo,
+                          collect_frames as _collect_frames)
+    from inline import iter_inline_items
 
 try:
     from PIL import Image
@@ -311,3 +315,72 @@ def contrast_check(slide, si, sw, sh, render_dir, warns, styler=None, thm_colors
             return "ok"
     return "ok"   # found and checked the render PNG for this page (regardless of whether
                   # W7 actually fired)
+
+
+def solid_contrast_check(slide, si, warns, styler=None, thm_colors=None, skipped=None,
+                         skipped_locs=None):
+    """W19: text whose color is nearly indistinguishable from its own shape's solid fill.
+
+    The renderless sibling of W7. W7 needs a rendered PNG because an image background is
+    unknowable from XML; a solid fill is exactly knowable, and the most common AI-deck
+    contrast defect -- light gray text in a white box, or ghost placeholder text left the
+    same color as its fill -- never touches an image at all.
+
+    Scope is deliberately narrow so silence stays honest: only the run's OWN shape fill
+    (slide backgrounds and shapes underneath need occlusion logic and belong to the
+    rendered path), and only when both the fill and the effective run color resolve to
+    definite RGB values. An explicit-but-undecodable color (hslClr and friends,
+    _COLOR_UNKNOWN) is surfaced as a w19_color_unknown abstention; a run with no explicit
+    color anywhere is skipped without noise, because no claim about its contrast is
+    checkable from the XML.
+
+    The 2.0:1 threshold is calibrated, not chosen: across the 29-deck private set,
+    everything under 2.0 was a same-color ghost placeholder (1.0:1) or a near-invisible
+    watermark (1.85:1), and everything intentional -- white display type on brand colors --
+    sat at 2.3:1 or higher. Findings cap at 2 per page with a w19_capped disclosure, the
+    same pattern the geometry gates use."""
+    hits = []
+    for tf, _w, sp, cell_rc, sp_xf in _collect_frames(slide.shapes):
+        try:
+            fill = _shape_fill_hex(sp)
+        except Exception:
+            fill = None
+        if not fill:
+            continue
+        try:
+            bg = (int(fill[0:2], 16), int(fill[2:4], 16), int(fill[4:6], 16))
+        except Exception:
+            continue
+        for pi, para in enumerate(tf.paragraphs):
+            for ri, (run_like, _rix, is_fld) in enumerate(iter_inline_items(para)):
+                if run_like is None or not (run_like.text or "").strip():
+                    continue
+                try:
+                    rgb = _resolve_run_rgb(run_like, para, tf, sp, slide, styler, thm_colors)
+                except Exception:
+                    continue
+                if rgb is None:
+                    continue
+                if rgb is _COLOR_UNKNOWN:
+                    if skipped is not None:
+                        skipped["w19_color_unknown"] += 1
+                    continue
+                lt, lb = _luma(rgb), _luma(bg)
+                ratio = (max(lt, lb) + 0.05) / (min(lt, lb) + 0.05)
+                if ratio < 2.0:
+                    hits.append((ratio, si, fill, rgb, run_like.text, sp, pi, ri,
+                                 cell_rc, sp_xf, is_fld))
+    if skipped is not None and len(hits) > 2:
+        skipped["w19_capped"] += len(hits) - 2
+    for ratio, si_, fill, rgb, text, sp, pi, ri, cell_rc, sp_xf, is_fld in \
+            sorted(hits, key=lambda h: h[0])[:2]:
+        warns.append(Finding(si_, "W19", "w19", (ratio,),
+                             "bg=#%s fg=#%02X%02X%02X text=%r"
+                             % (fill, rgb[0], rgb[1], rgb[2], text[:24]),
+                             data={"contrast_ratio": round(ratio, 2),
+                                   "bg_hex": fill,
+                                   "fg_hex": "%02X%02X%02X" % rgb,
+                                   "confidence": "estimate",
+                                   "evidence_source": "xml_colors"},
+                             loc=shape_loc(sp, paragraph=pi, run=ri, cell=cell_rc,
+                                           xf=sp_xf, field=is_fld)))

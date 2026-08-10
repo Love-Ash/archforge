@@ -95,7 +95,26 @@ def _empty_para_pt(para, default_pt):
     return default_pt
 
 
-def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
+def _note_loc(skipped_locs, key, sp):
+    """Records where an excluded frame sits, so the abstention is actionable (#13).
+
+    The skip counters only count, and a JSON consumer reading a vertical_text abstention
+    could not tell which frame was excluded -- the auto-fix path dead-ended exactly where
+    the report was telling it something needs human eyes. Purely additive: callers that
+    pass no dict get the old behaviour, and a shape that yields no location is skipped
+    rather than guessed at."""
+    if skipped_locs is None:
+        return
+    try:
+        loc = shape_loc(sp)
+    except Exception:
+        loc = None
+    if loc:
+        skipped_locs.setdefault(key, []).append(loc)
+
+
+def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None,
+                      skipped_locs=None):
     """Approximates the effective glyph bbox (in) per paragraph. Returns
     [(x0,y0,x1,y1,representative text,max_pt,frame_id)].
     Width is summed from each run's actual size; line height reflects the actual
@@ -129,6 +148,7 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
             if vert not in (None, "horz"):
                 if skipped is not None:
                     skipped["vertical_text"] += 1
+                    _note_loc(skipped_locs, "vertical_text", owner_sp)
                 return
         except Exception:
             bodyPr = None
@@ -159,6 +179,7 @@ def _text_glyph_boxes(slide, default_pt=12.0, skipped=None, styler=None):
             if _geometry_unsupported(frame_text):
                 if skipped is not None:
                     skipped["complex_script"] += 1
+                    _note_loc(skipped_locs, "complex_script", owner_sp)
                 return
         except Exception:
             pass

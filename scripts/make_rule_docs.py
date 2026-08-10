@@ -33,6 +33,7 @@ MEANING = {
     "W16": "Text glyphs or picture ink extend past the canvas edge beyond tolerance. Decorative shape bleed is auto-excluded.",
     "W17": "Text straddles a picture's ink edge (25-75% inside): it will look clipped or split. Captions fully on cards are auto-excluded.",
     "W18": "Some spans or deck-level checks could not run (malformed attributes, vertical text, complex scripts, decode budgets). The result may be incomplete; gate CI with --fail-incomplete.",
+    "W19": "Text sitting on a shape's own solid fill whose color contrast with that fill is below 2.0:1 -- close to invisible. Judged only when both the fill and the effective run color resolve to definite RGB values; anything inherited or undecodable abstains instead of guessing. Calibrated on 29 real decks: everything flagged at this threshold was a same-color ghost placeholder or near-invisible watermark, while intentional white-on-brand-color display type sits above 2.3:1 and passes. Runs in the full profile only while the threshold soaks.",
 }
 
 

@@ -170,6 +170,13 @@
             "items": {
               "$ref": "#/$defs/code"
             }
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Structured locations of the excluded frames, present when the emitter knows its shape"
           }
         }
       }
