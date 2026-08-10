@@ -19,6 +19,18 @@ Two versions below never shipped. 0.2.1 and 0.3.1 have entries here but were sup
 same day they were written: 0.2.1 has no tag, 0.3.1 has a tag but no GitHub release, and
 neither reached PyPI. Every other version in this file is installable.
 
+## 0.9.3 (2026-08-10)
+
+- The W12 message says whose baseline it is. It read as if 7.08in were an external
+  guideline; the baseline is this deck's own convention -- the height most of its pages
+  align their bottom element to -- and a flagged page deviates slightly from what the deck
+  itself does everywhere else. Asked by the first outside reader of the web report.
+- The unjudged size band (5.0-9.0pt outside W1/W8 conditions, disclosed in 0.9.1) was
+  measured across 29 real decks: all 1,231 silent runs were page furniture (copyright
+  lines, template watermarks, page numbers, running footers), zero were readable content.
+  The gates deliberately stay as they are; the README states the evidence instead of a
+  promise to revisit.
+
 ## 0.9.2 (2026-08-10)
 
 Every Korean finding message is rewritten as plain sentences. The catalog was written as

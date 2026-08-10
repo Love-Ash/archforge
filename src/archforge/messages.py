@@ -92,7 +92,7 @@ MESSAGES = {
         "en": "Stock opening cliche (open the deck in your own voice)",
     },
     "w12": {
-        "ko": "페이지 하단 요소의 높이가 기준 %.2fin에서 살짝 어긋난 페이지가 %d개 있습니다. 정렬 실수로 보입니다",
+        "ko": "이 덱의 다른 페이지들은 하단 요소를 위에서 %.2fin 위치에 맞춰 두었는데, 거기서 살짝 벗어난 페이지가 %d개 있습니다. 정렬 실수로 보입니다",
         "en": "Footer baseline drift: house baseline %.2fin, %d page(s) slightly off (suspected alignment slip)",
     },
     "w13": {

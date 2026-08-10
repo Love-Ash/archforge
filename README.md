@@ -107,7 +107,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Love-Ash/archforge@v0.9.2
+      - uses: Love-Ash/archforge@v0.9.3
         with:
           files: |
             decks/
@@ -124,7 +124,7 @@ pre-commit:
 ```yaml
 repos:
   - repo: https://github.com/Love-Ash/archforge
-    rev: v0.9.2
+    rev: v0.9.3
     hooks:
       - id: archforge
         # args: [--profile, full]
@@ -150,7 +150,7 @@ WARNs are advisory:
 | `W6` | Same layout skeleton on 4+ pages (tunable; template systems: tune or skip) |
 | `W7` | Low text-over-image contrast (needs `--render`) |
 | `W8` | Small CJK in narrow frames, no wider than 4in (device mockups, cards) |
-| | Between the gates: text at 5.0-9.0pt in a frame that is neither body-class (W1) nor narrow (W8) is not judged by any size rule today. A pass says nothing about that band; see #13 for the calibration work to close it. |
+| | Between the gates: text at 5.0-9.0pt in a frame that is neither body-class (W1) nor narrow (W8) is deliberately not judged. Measured across 29 real decks (2026-08-10): every one of the 1,231 runs in that band was page furniture -- copyright lines, template watermarks, page numbers, running footers -- and zero were content meant to be read. A gate there would trade hundreds of false positives for no measured catch. The measurement is re-runnable; an outside report of a real miss in this band is exactly the fixture #8 asks for. |
 | `W9` | Accent vertical bars repeated as list markers |
 | `W10` | Hand-drawn diagram cloned across pages |
 | `W11` | AI-tell copy: buzzwords, stock openings |
