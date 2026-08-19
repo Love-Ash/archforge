@@ -16,6 +16,11 @@ on:
         description: 'Tag to build and publish (e.g. v0.6.2)'
         required: true
 
+# Least privilege: every job here only reads the repo. The pypi job in
+# publish.yml keeps its own id-token: write override.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
