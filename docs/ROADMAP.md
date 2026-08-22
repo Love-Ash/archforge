@@ -62,8 +62,18 @@ and (c) real outside adoption. Adding a W19 does not move any of these.
 
 Tracked here so they are not lost. Per the note above, none of these gate a release.
 
-- W14-EN: extend the W14 nominal-title heuristic (currently Korean-only) to English.
-  Field evidence: English-deck users report the same failure shape, fragment titles
-  that name a topic without making a claim ("Eight rungs, gates not dates";
-  r/ClaudeAI, 2026-07). English needs its own claim/verb detection, so it ships only
-  with its own measured precision bar, like the Korean heuristic did.
+- Footer-zone rule, parked on the `w19-footer-zone` branch (2026-08-02). The engine
+  wiring and a contrast ink-contamination guard were written against a live deck and
+  then parked rather than shipped: no fixtures, no rule page in any inventory,
+  unrecorded thresholds, and a coordinate bug where `_footer_rules_y` reads
+  pre-transform local coordinates and compares them against absolute glyph boxes.
+  `W19_CONTINUATION.md` on that branch carries the blocking work. It needs a new rule
+  ID before it can ship: W19 was reused in 0.10.0 for the solid-fill contrast gate, so
+  the parked branch and main now disagree about what W19 names.
+
+W14-EN used to sit in this list and no longer does, because it shipped in 0.9.0. An
+English title counts as a claim when it carries a finite verb from a measured allowlist
+or a number with a unit; bare noun phrases do not; structural titles are excluded from
+the eligibility pool in both languages; and the majority gate and profile behaviour are
+unchanged from the Hangul path (#7, #9, the first outside contribution, by
+@AshSgDe29071999).
