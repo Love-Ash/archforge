@@ -10,10 +10,12 @@ release moment", so on main these are always equal:
   - CHANGELOG.md latest heading
   - README.md / README.ko.md  Action example tag and pre-commit rev
   - .pre-commit-hooks.yaml    usage-comment rev
+  - .claude-plugin/plugin.json  version (plugin marketplaces gate updates on it)
 
 Exit 1 with a diff-style listing on any mismatch. Runs in CI on every push.
 """
 import io
+import json
 import os
 import re
 import sys
@@ -46,6 +48,9 @@ def main():
 
     for found in re.findall(r"rev: v([0-9][^\s\"']*)", _read(".pre-commit-hooks.yaml")):
         checks.append((".pre-commit-hooks.yaml rev", found))
+
+    manifest = json.loads(_read(".claude-plugin/plugin.json"))
+    checks.append((".claude-plugin/plugin.json version", manifest.get("version")))
 
     bad = [(where, got) for where, got in checks if got != truth]
     print("version truth (pyproject.toml): %s  |  %d reference(s) checked"

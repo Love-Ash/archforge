@@ -1,0 +1,21 @@
+{
+  "name": "archforge",
+  "description": "Preflight linter for AI-generated PowerPoint. Reads the built .pptx itself (XML, font-resolution chain, geometry, image alpha; no PowerPoint installation) and blocks silent font fallback, unreadable sizes, colliding frames, off-canvas text, and AI-tell punctuation before a human sees a render. The skill teaches the build-lint-fix loop; the linter is a Python CLI, so `pip install archforge` is required.",
+  "version": "0.10.0",
+  "author": {
+    "name": "Minjae Kwon (Ash)",
+    "url": "https://github.com/Love-Ash"
+  },
+  "homepage": "https://github.com/Love-Ash/archforge",
+  "repository": "https://github.com/Love-Ash/archforge",
+  "license": "MIT",
+  "keywords": [
+    "pptx",
+    "powerpoint",
+    "linter",
+    "preflight",
+    "deck",
+    "cjk",
+    "quality-gate"
+  ]
+}
