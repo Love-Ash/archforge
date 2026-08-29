@@ -1,0 +1,7 @@
+{
+  "expected": {},
+  "notes": "Same SVG geometry with near-black text on the bar, about 8.4:1. A label deliberately set on a colored bar is normal chart design and the gate must stay silent on it.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

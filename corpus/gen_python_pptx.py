@@ -224,6 +224,75 @@ def main():
                   "branch of the background resolution, where the ghost fixture pins "
                   "the theme-fallback branch."})
 
+    def _svg_deck(p, text_fill):
+        # An svgBlip picture built by hand, no matplotlib: a green bar as an M/L/z
+        # path and one caption string laid across it, the shape SVG exporters emit.
+        from pptx.oxml.ns import qn
+        from pptx.opc.package import Part
+        from pptx.opc.packuri import PackURI
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">'
+            '<path d="M 0 200 L 400 200 L 400 0 L 0 0 z" style="fill: #0A0B0C"/>'
+            '<path d="M 120 180 L 280 180 L 280 30 L 120 30 z" style="fill: #20C997"/>'
+            '<text x="200" y="120" style="font-size: 12px; text-anchor: middle; '
+            'fill: %s">caption resting on the bar</text>'
+            "</svg>" % text_fill
+        ).encode("utf-8")
+        s = p.slides.add_slide(p.slide_layouts[6])
+        png = os.path.join(HERE, "_svg_fallback.png")
+        if not os.path.exists(png):
+            from pptx.util import Emu as _Emu  # noqa: local import keeps top clean
+            import zlib, struct
+
+            def _chunk(tag, data):
+                c = struct.pack(">I", len(data)) + tag + data
+                return c + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+            raw = b"".join(b"\x00" + b"\x10\x10\x10" * 4 for _ in range(4))
+            body = (_chunk(b"IHDR", struct.pack(">IIBBBBB", 4, 4, 8, 2, 0, 0, 0))
+                    + _chunk(b"IDAT", zlib.compress(raw))
+                    + _chunk(b"IEND", b""))
+            with open(png, "wb") as f:
+                f.write(b"\x89PNG\r\n\x1a\n" + body)
+        pic = s.shapes.add_picture(png, Inches(1), Inches(1), width=Inches(8),
+                                   height=Inches(4))
+        n = 1
+        while any(str(pt.partname) == "/ppt/media/svgimage%d.svg" % n
+                  for pt in p.part.package.iter_parts()):
+            n += 1
+        uri = PackURI("/ppt/media/svgimage%d.svg" % n)
+        svg_part = Part(uri, "image/svg+xml", p.part.package, svg)
+        rid = s.part.relate_to(
+            svg_part,
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image")
+        blip = pic._element.blipFill.find(qn("a:blip"))
+        ext_lst = blip.makeelement(qn("a:extLst"), {})
+        ext = blip.makeelement(qn("a:ext"),
+                               {"uri": "{96DAC541-7B7A-43D3-8B79-37D633B846F1}"})
+        svg_el = blip.makeelement(
+            "{http://schemas.microsoft.com/office/drawing/2016/SVG/main}svgBlip",
+            {qn("r:embed"): rid})
+        ext.append(svg_el)
+        ext_lst.append(ext)
+        blip.append(ext_lst)
+
+    def w20_svg(p):
+        _svg_deck(p, "#8A8F98")   # gray on the green bar: 1.5:1, buried
+    emit("w20_svg_buried", w20_svg, {"expected": {"W20": 1},
+         "notes": "A caption inside an svgBlip vector picture, laid across a solid "
+                  "green bar at roughly 1.5:1. The same defect as the shape variant "
+                  "one container deeper: a PNG chart erases its text, an SVG chart "
+                  "keeps it as XML, and this fixture pins that the gate actually "
+                  "reads the picture. Ground truth by construction; the PNG fallback "
+                  "is a 4x4 stub so only the vector side carries content."})
+
+    def w20_svg_neg(p):
+        _svg_deck(p, "#0B0B0B")   # near-black on the green bar: ~8.4:1, readable
+    emit("w20_svg_readable", w20_svg_neg, {"expected": {},
+         "notes": "Same SVG geometry with near-black text on the bar, about 8.4:1. "
+                  "A label deliberately set on a colored bar is normal chart design "
+                  "and the gate must stay silent on it."})
+
     def clean(p):
         s = p.slides.add_slide(p.slide_layouts[6])
         _tb(s, 1, 1, 8, 1, "Quarterly results improved", size=20, ea="맑은 고딕")

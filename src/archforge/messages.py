@@ -125,6 +125,10 @@ MESSAGES = {
         "ko": "글자가 아래 도형 위에 %.0f%% 걸쳐 있고 대비가 %.1f:1이라 묻혀서 읽기 어렵습니다. 글자를 도형 밖으로 옮기거나 색을 바꿔 주세요",
         "en": "Text sits on the shape beneath it (%.0f%% covered) at %.1f:1 contrast and is buried (move it off the shape or change the color)",
     },
+    "w20_svg": {
+        "ko": "벡터 그림(SVG) 안에서 글자가 아래 도형에 %.0f%% 걸쳐 있고 대비가 %.1f:1이라 묻혀서 읽기 어렵습니다. 차트 쪽에서 글자를 옮기거나 색을 바꿔 주세요",
+        "en": "Inside a vector picture (SVG), text sits on the shape beneath it (%.0f%% covered) at %.1f:1 contrast and is buried (move it or change a color in the chart)",
+    },
     "w20_bg": {
         "ko": "글자가 슬라이드 배경 위에 그대로 놓여 있는데 배경과의 대비가 %.1f:1이라 사실상 안 보입니다. 글자 색이나 배경색을 바꿔 주세요",
         "en": "Text sits directly on the slide background at %.1f:1 contrast, close to invisible (change the text or background color)",

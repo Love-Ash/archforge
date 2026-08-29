@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W20": 1
+  },
+  "notes": "A caption inside an svgBlip vector picture, laid across a solid green bar at roughly 1.5:1. The same defect as the shape variant one container deeper: a PNG chart erases its text, an SVG chart keeps it as XML, and this fixture pins that the gate actually reads the picture. Ground truth by construction; the PNG fallback is a 4x4 stub so only the vector side carries content.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

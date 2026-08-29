@@ -507,3 +507,68 @@ def test_w20_background_contrast(tmp_path):
     assert not [a for a in doc3["abstentions"]
                 if a["reason"] == "w20_color_unknown"], doc3["abstentions"]
     assert not [f for f in doc3["findings"] if f["code"] == "W20"]
+
+
+def test_w20_svg_buried_text(tmp_path):
+    """W20 svg variant (unreleased): text inside an svgBlip picture, judged against
+    the SVG shapes painted before it. A buried caption fires; the same SVG with its
+    text outlined to paths (the matplotlib default) has no text elements left and
+    the gate must stay honestly silent rather than guess at pixels."""
+    from pptx.oxml.ns import qn
+    from pptx.opc.package import Part
+    from pptx.opc.packuri import PackURI
+
+    def svg_deck(tmp_path, name, body):
+        p = new_prs()
+        s = add_slide(p)
+        png = str(tmp_path / "fallback.png")
+        import zlib, struct
+
+        def chunk(tag, data):
+            c = struct.pack(">I", len(data)) + tag + data
+            return c + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+        raw = b"".join(b"\x00" + b"\x10\x10\x10" * 4 for _ in range(4))
+        with open(png, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n"
+                    + chunk(b"IHDR", struct.pack(">IIBBBBB", 4, 4, 8, 2, 0, 0, 0))
+                    + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+        pic = s.shapes.add_picture(png, Inches(1), Inches(1), width=Inches(8), height=Inches(4))
+        part = Part(PackURI("/ppt/media/svgimage1.svg"), "image/svg+xml",
+                    p.part.package, body.encode("utf-8"))
+        rid = s.part.relate_to(
+            part,
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image")
+        blip = pic._element.blipFill.find(qn("a:blip"))
+        ext_lst = blip.makeelement(qn("a:extLst"), {})
+        ext = blip.makeelement(qn("a:ext"),
+                               {"uri": "{96DAC541-7B7A-43D3-8B79-37D633B846F1}"})
+        svg_el = blip.makeelement(
+            "{http://schemas.microsoft.com/office/drawing/2016/SVG/main}svgBlip",
+            {qn("r:embed"): rid})
+        ext.append(svg_el)
+        ext_lst.append(ext)
+        blip.append(ext_lst)
+        return save(p, tmp_path, name)
+
+    buried = ('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">'
+              '<path d="M 120 180 L 280 180 L 280 30 L 120 30 z" style="fill: #20C997"/>'
+              '<text x="200" y="120" style="font-size: 12px; text-anchor: middle; '
+              'fill: #8A8F98">caption resting on the bar</text></svg>')
+    deck = svg_deck(tmp_path, "svg_buried.pptx", buried)
+    r = run_cli([deck, "--profile", "full", "--json", "--schema", "2"], lang="en")
+    doc = json.loads(r.stdout)
+    w20 = [f for f in doc["findings"] if f["code"] == "W20"]
+    assert len(w20) == 1, [f["code"] for f in doc["findings"]]
+    assert w20[0]["data"]["evidence_source"] == "svg_vector"
+    assert w20[0]["data"]["bg_hex"] == "20C997"
+
+    outlined = ('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">'
+                '<path d="M 120 180 L 280 180 L 280 30 L 120 30 z" '
+                'style="fill: #20C997"/>'
+                '<path d="M 130 118 L 270 118 L 270 122 L 130 122 z" '
+                'style="fill: #8A8F98"/></svg>')
+    deck2 = svg_deck(tmp_path, "svg_outlined.pptx", outlined)
+    r2 = run_cli([deck2, "--profile", "full", "--json", "--schema", "2"], lang="en")
+    doc2 = json.loads(r2.stdout)
+    assert not [f for f in doc2["findings"] if f["code"] == "W20"], doc2["findings"]

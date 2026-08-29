@@ -487,7 +487,7 @@ def _bg_color_hex(parent, thm_colors):
 def _bg_exposure_walk(slide, sw_in, sh_in):
     """Everything standing between a text frame and the page background.
 
-    Returns (blockers, page). blockers are (x0, y0, x1, y1, z, undecodable, element)
+    Returns (blockers, page). blockers are (x0, y0, x1, y1, z, solid-hex-or-None, element)
     for every shape that renders ink of its own: pictures, and any shape whose fill
     python-pptx does not report as the explicit no-fill. Type 5 covers both an
     a:noFill and an unfilled text box (measured: a bare add_textbox reports 5), and
@@ -523,13 +523,13 @@ def _bg_exposure_walk(slide, sw_in, sh_in):
             if page is None or z > page[1]:
                 page = (hexv, z, sp._element)
             continue
-        blockers.append((x, y, x + w, y + h, z, solid is None, sp._element))
+        blockers.append((x, y, x + w, y + h, z, solid, sp._element))
     return blockers, page
 
 
 def underlying_contrast_check(slide, si, sw_in, sh_in, warns, boxes=None, styler=None,
                               thm_colors=None, skipped=None, min_cover=0.5):
-    """W20: text buried on what is drawn behind it, a filled shape or the page itself.
+    """W20: text buried on what is actually visible behind it.
 
     W19 answers the same question one shape earlier: a run inside its own fill. It stops
     there on purpose, and its docstring says why -- anything underneath "needs occlusion
@@ -537,30 +537,28 @@ def underlying_contrast_check(slide, si, sw_in, sh_in, warns, boxes=None, styler
     being true once W17 built the z-ordered box list, so the case is now decidable from
     XML with no render at all, and this gate closes it.
 
-    Two variants share the verdict and the 2.0:1 line. The shape variant (reason w20) is
-    a caption laid across a chart's bars, a footnote dropped onto a colored panel, a
-    label that slid onto a card after an edit round. The background variant (reason
-    w20_bg) is the same defect one layer further down: a transparent text frame sitting
-    on the bare page, judged against the resolved slide background, which is how ghost
-    text left on an empty slide finally gets caught. A background or an underlying fill
-    that cannot be decoded from XML (gradients, picture fills, nonstandard background
-    style references) abstains as w20_fill_unknown instead of guessing.
+    The background of a glyph is whatever is painted directly beneath it, so the layers
+    under the text are consumed in descending z: an upper card claims its overlap first,
+    and a shape below it only counts for whatever area is still exposed. The first cut
+    of this gate compared the text against every lower layer independently, and a
+    readable label on a bright bar was flagged against the page behind the bar -- the
+    fixture that caught it is in the corpus. Whatever area no shape claims falls through
+    to the resolved slide background (an explicit solid p:bg at slide, layout, or master
+    level, the stock bgRef-1001 style through the theme, or a full-bleed solid shape
+    painted as the ground), which is how ghost text left on an empty slide gets caught.
 
-    Coverage is summed across every low-contrast shape under the run, not measured per
-    shape. A caption spanning two bars is buried by both, and scoring them separately
-    lets each fall under the bar while the text is more than half covered -- measured
-    while prototyping this gate against a real deck, where a caption split 27.5%/27.5%
-    across two bars scored zero on a per-shape test. The background variant mirrors
-    that with exposure: the glyph area NOT covered by any ink-bearing shape must clear
-    the same floor before the page color is allowed to matter.
+    Low-contrast exposure is summed across layers, not judged per shape: a caption
+    spanning two bars is buried by both (measured on a real deck, 27.5% + 27.5%, zero
+    on a per-shape test). Undecodable paint under the text -- gradients, pictures,
+    style-inherited fills, an undecodable background -- abstains as w20_fill_unknown
+    once it claims enough of the glyph area, because no honest verdict exists there.
+    A text frame with its own fill is out entirely: a solid one is W19's verdict, and
+    a style-inherited one renders as a color this gate cannot know.
 
-    Contrast uses the same 2.0:1 line as W19, because it is the same physical judgment
-    about the same two colors. Coverage defaults to 50% of the glyph box and is the
-    parameter that still needs a corpus sweep; text that merely clips a panel corner is
-    not a defect. Findings cap at 2 per page with a w20_capped disclosure."""
+    Contrast uses the same 2.0:1 line as W19; the 50% floor is the parameter still
+    soaking. Findings cap at 2 per page with a w20_capped disclosure."""
     if boxes is None:
         return
-    backdrops = _filled_backdrops(slide, sw_in, sh_in)
     blockers, page = _bg_exposure_walk(slide, sw_in, sh_in)
     slide_bg = _slide_bg_hex(slide, thm_colors)
     zmap = _shape_z(slide)
@@ -574,46 +572,19 @@ def underlying_contrast_check(slide, si, sw_in, sh_in, warns, boxes=None, styler
         tz = zmap.get(id(gb.sp._element))
         if tz is None:
             continue
-        rgb = _paragraph_rgb(gb, slide, styler, thm_colors, skipped)
-        if rgb is None:
-            continue
-        covered = 0.0
-        worst = None
-        for (bx0, by0, bx1, by1, bz, fill, bsp) in backdrops:
-            if bz >= tz or bsp._element is gb.sp._element:
-                continue
-            ix = min(gb.x1, bx1) - max(gb.x0, bx0)
-            iy = min(gb.y1, by1) - max(gb.y0, by0)
-            if ix <= 0 or iy <= 0:
-                continue
-            try:
-                bg = (int(fill[0:2], 16), int(fill[2:4], 16), int(fill[4:6], 16))
-            except Exception:
-                continue
-            lt, lb = _luma(rgb), _luma(bg)
-            ratio = (max(lt, lb) + 0.05) / (min(lt, lb) + 0.05)
-            if ratio >= 2.0:
-                continue
-            covered += ix * iy
-            if worst is None or ratio < worst[0]:
-                worst = (ratio, fill, bsp)
-        if worst is not None:
-            cover = min(covered / area, 1.0)
-            if cover >= min_cover:
-                hits.append(("w20", worst[0], cover, gb, rgb, worst[1], worst[2]))
-                continue
-        # Background variant. Only a transparent text frame sits on the page: an own
-        # solid fill is W19's verdict, and an own style-inherited fill renders as a
-        # color this gate cannot know, so both stay out.
         try:
             own = gb.sp.fill.type
         except Exception:
             continue
-        if own is None or int(own) != 5:
+        if own is not None and int(own) != 5:
             continue
-        blocked = 0.0
-        unknown_cover = 0.0
-        for (bx0, by0, bx1, by1, bz, undec, bel) in blockers:
+        rgb = _paragraph_rgb(gb, slide, styler, thm_colors, skipped)
+        if rgb is None:
+            continue
+        # Consume the area top-down: each lower layer claims what is left of the
+        # glyph box after every layer above it took its share.
+        layers = []
+        for (bx0, by0, bx1, by1, bz, fill, bel) in blockers:
             if bz >= tz or bel is gb.sp._element:
                 continue
             if page is not None and bel is page[2]:
@@ -622,44 +593,70 @@ def underlying_contrast_check(slide, si, sw_in, sh_in, warns, boxes=None, styler
             iy = min(gb.y1, by1) - max(gb.y0, by0)
             if ix <= 0 or iy <= 0:
                 continue
-            blocked += ix * iy
-            if undec:
-                unknown_cover += ix * iy
-        if unknown_cover / area >= min_cover:
+            layers.append((bz, ix * iy, fill, bel))
+        layers.sort(key=lambda l: l[0], reverse=True)
+        remaining = area
+        buried = 0.0
+        unknown = 0.0
+        worst = None
+        for (bz, ov, fill, bel) in layers:
+            take = min(ov, remaining)
+            if take <= 0:
+                continue
+            if fill is None:
+                unknown += take
+            else:
+                try:
+                    bg = (int(fill[0:2], 16), int(fill[2:4], 16), int(fill[4:6], 16))
+                except Exception:
+                    unknown += take
+                    remaining -= take
+                    continue
+                lt, lb = _luma(rgb), _luma(bg)
+                ratio = (max(lt, lb) + 0.05) / (min(lt, lb) + 0.05)
+                if ratio < 2.0:
+                    buried += take
+                    if worst is None or ratio < worst[0]:
+                        worst = (ratio, fill, bel, "w20")
+            remaining -= take
+            if remaining <= 0:
+                break
+        if remaining > 0:
+            bg_hex = slide_bg
+            if page is not None:
+                if tz <= page[1]:
+                    remaining = 0       # under a full-bleed overlay: not visible at all
+                    bg_hex = None
+                else:
+                    bg_hex = page[0]
+            if remaining > 0 and bg_hex is _BG_UNKNOWN:
+                unknown += remaining
+            elif remaining > 0 and bg_hex:
+                try:
+                    bg = (int(bg_hex[0:2], 16), int(bg_hex[2:4], 16),
+                          int(bg_hex[4:6], 16))
+                    lt, lb = _luma(rgb), _luma(bg)
+                    ratio = (max(lt, lb) + 0.05) / (min(lt, lb) + 0.05)
+                    if ratio < 2.0:
+                        buried += remaining
+                        if worst is None or ratio < worst[0]:
+                            worst = (ratio, bg_hex, None, "w20_bg")
+                except Exception:
+                    pass
+        if unknown / area >= min_cover:
             if skipped is not None:
                 skipped["w20_fill_unknown"] += 1
             continue
-        exposed = 1.0 - min(blocked / area, 1.0)
-        if exposed < min_cover:
+        if worst is None:
             continue
-        bg_hex = slide_bg
-        if page is not None:
-            if tz <= page[1]:
-                continue        # text underneath a full-bleed overlay is not visible
-            bg_hex = page[0]
-        if bg_hex is _BG_UNKNOWN:
-            if skipped is not None:
-                skipped["w20_fill_unknown"] += 1
-            continue
-        if not bg_hex:
-            continue
-        try:
-            bgt = (int(bg_hex[0:2], 16), int(bg_hex[2:4], 16), int(bg_hex[4:6], 16))
-        except Exception:
-            continue
-        lt, lb = _luma(rgb), _luma(bgt)
-        ratio = (max(lt, lb) + 0.05) / (min(lt, lb) + 0.05)
-        if ratio < 2.0:
-            hits.append(("w20_bg", ratio, exposed, gb, rgb, bg_hex, None))
+        cover = min(buried / area, 1.0)
+        if cover >= min_cover:
+            hits.append((worst[0], cover, gb, rgb, worst[1], worst[2], worst[3]))
     if skipped is not None and len(hits) > 2:
         skipped["w20_capped"] += len(hits) - 2
-    for reason, ratio, cover, gb, rgb, fill, bsp in sorted(hits, key=lambda h: h[1])[:2]:
+    for ratio, cover, gb, rgb, fill, bel, reason in sorted(hits, key=lambda h: h[0])[:2]:
         loc = shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0],
                         cell=gb.cell, paragraph=gb.para, field=gb.field) or {}
-        if bsp is not None:
-            rel = shape_loc(bsp)
-            if rel:
-                loc["related"] = rel
         data = {"contrast_ratio": round(ratio, 2),
                 "bg_hex": fill,
                 "fg_hex": "%02X%02X%02X" % rgb,
@@ -675,6 +672,242 @@ def underlying_contrast_check(slide, si, sw_in, sh_in, warns, boxes=None, styler
                              "bg=#%s fg=%s text=%r"
                              % (fill, data["fg_hex"], (gb.rep or "")[:24]),
                              data=data, loc=loc or None))
+
+
+_SVG_NS = "{http://www.w3.org/2000/svg}"
+_SVGBLIP_NS = "{http://schemas.microsoft.com/office/drawing/2016/SVG/main}"
+_R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+# Mean advance width as a fraction of font size, for the em-box estimate of an SVG
+# text run. The deck engine's glyph model uses per-script tables; inside an SVG we
+# know only the string and the size, so one factor covers the mixed case.
+_SVG_CHAR_W = 0.6
+
+
+def _svg_style(el):
+    out = {}
+    for part in (el.get("style") or "").split(";"):
+        if ":" in part:
+            k, v = part.split(":", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def _svg_hex(value):
+    """'#rrggbb' -> RGB tuple; None for no paint; _BG_UNKNOWN for url()/named paint."""
+    if not value or value == "none":
+        return None
+    v = value.strip()
+    if v.startswith("#") and len(v) == 7:
+        try:
+            return (int(v[1:3], 16), int(v[3:5], 16), int(v[5:7], 16))
+        except ValueError:
+            return _BG_UNKNOWN
+    if v.startswith("#") and len(v) == 4:
+        try:
+            return tuple(int(c * 2, 16) for c in v[1:])
+        except ValueError:
+            return _BG_UNKNOWN
+    return _BG_UNKNOWN
+
+
+def _svg_path_bbox(d):
+    """Bbox of an M/L/z-only path (matplotlib emits rectangles this way). A path with
+    curves (C/Q/A/S/T) returns None: it is a line or a marker, not the kind of flat
+    panel that buries a caption, and pretending to know its footprint would be a
+    guess."""
+    tokens = (d or "").replace(",", " ").split()
+    xs, ys = [], []
+    i = 0
+    cur = None
+    while i < len(tokens):
+        t = tokens[i]
+        if t in ("M", "L"):
+            cur = t
+            i += 1
+            continue
+        if t in ("z", "Z"):
+            i += 1
+            continue
+        if t in ("C", "Q", "A", "S", "T", "H", "V", "m", "l", "c", "q", "a",
+                 "s", "t", "h", "v"):
+            return None
+        if cur in ("M", "L"):
+            try:
+                xs.append(float(t))
+                ys.append(float(tokens[i + 1]))
+            except (ValueError, IndexError):
+                return None
+            i += 2
+            continue
+        return None
+    if not xs:
+        return None
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def _svg_parts_of(slide):
+    """(shape, svg-bytes) for every picture whose blip carries an svgBlip extension."""
+    out = []
+    for sp in slide.shapes:
+        if not _is_pic(sp):
+            continue
+        try:
+            blip = sp._element.blipFill.find(NS + "blip")
+            if blip is None:
+                continue
+            svg = blip.find(NS + "extLst/" + NS + "ext/" + _SVGBLIP_NS + "svgBlip")
+            if svg is None:
+                continue
+            rid = svg.get(_R_NS + "embed")
+            if not rid:
+                continue
+            out.append((sp, slide.part.rels[rid].target_part.blob))
+        except Exception:
+            continue
+    return out
+
+
+def svg_buried_text_check(slide, si, warns, skipped=None, min_cover=0.5):
+    """W20 inside a vector picture (reason w20_svg): text buried on a shape in an SVG.
+
+    A chart exported as a PNG erases its own text; the same chart carried as an
+    svgBlip keeps every string and fill as XML, so the buried-caption judgment that
+    W20 makes on the slide can be made inside the picture too. Scope is the SVG that
+    tools actually emit (measured against matplotlib output before writing this):
+    solid style/attribute fills in hex, axis-aligned M/L/z rectangle paths and rect
+    elements, unrotated text with x/y/font-size. Paint order is document order, so
+    only shapes before the text are under it. A shape whose paint is not a solid hex
+    (gradients, url() references) abstains as w20_fill_unknown when it covers the
+    text, and a path with curves is ignored as a line rather than a panel. Text
+    outlined to paths (svg.fonttype="path", the matplotlib default) contains no text
+    elements at all, and this gate stays honestly silent -- preserving text is the
+    exporter's side of the contract."""
+    try:
+        from lxml import etree
+    except ImportError:
+        return
+    for sp, blob in _svg_parts_of(slide):
+        try:
+            root = etree.fromstring(blob)
+        except Exception:
+            continue
+        shapes = []      # (x0, y0, x1, y1, rgb-or-unknown) in document order
+        texts = []       # (x0, y0, x1, y1, rgb, rep, order)
+        order = 0
+        for el in root.iter():
+            tag = el.tag if isinstance(el.tag, str) else ""
+            order += 1
+            if tag == _SVG_NS + "path" or tag == _SVG_NS + "rect":
+                style = _svg_style(el)
+                fill = _svg_hex(style.get("fill") or el.get("fill"))
+                if fill is None:
+                    continue
+                if tag == _SVG_NS + "rect":
+                    try:
+                        x, y = float(el.get("x", 0)), float(el.get("y", 0))
+                        w, h = float(el.get("width")), float(el.get("height"))
+                    except (TypeError, ValueError):
+                        continue
+                    box = (x, y, x + w, y + h)
+                else:
+                    box = _svg_path_bbox(el.get("d"))
+                if box is None or box[2] <= box[0] or box[3] <= box[1]:
+                    continue
+                shapes.append((box[0], box[1], box[2], box[3], fill, order))
+            elif tag == _SVG_NS + "text":
+                style = _svg_style(el)
+                fill = _svg_hex(style.get("fill") or el.get("fill"))
+                if fill is None or fill is _BG_UNKNOWN:
+                    continue
+                rep = "".join(el.itertext()).strip()
+                if not rep:
+                    continue
+                tr = el.get("transform") or ""
+                if "rotate" in tr:
+                    ang = tr.split("rotate(", 1)[1].split()[0].lstrip("(")
+                    try:
+                        if abs(float(ang)) > 0.5:
+                            continue        # rotated text: out of scope, same as W15-17
+                    except ValueError:
+                        continue
+                try:
+                    x, y = float(el.get("x", 0)), float(el.get("y", 0))
+                except (TypeError, ValueError):
+                    continue
+                size = 12.0
+                fs = (style.get("font-size") or el.get("font-size") or "").rstrip("px")
+                try:
+                    size = float(fs)
+                except ValueError:
+                    pass
+                w = len(rep) * size * _SVG_CHAR_W
+                anchor_ = style.get("text-anchor") or el.get("text-anchor") or "start"
+                x0 = x - w / 2 if anchor_ == "middle" else (x - w if anchor_ == "end" else x)
+                texts.append((x0, y - 0.75 * size, x0 + w, y + 0.25 * size,
+                              fill, rep, order))
+        hits = []
+        for (tx0, ty0, tx1, ty1, rgb, rep, torder) in texts:
+            area = (tx1 - tx0) * (ty1 - ty0)
+            if area <= 0:
+                continue
+            # SVG paint order is document order, and the visible background of a
+            # glyph is the LAST shape painted beneath it, so layers are consumed
+            # from the top down -- the same greedy the slide-side check uses, and
+            # for the same reason: judging against every lower layer independently
+            # flagged a readable label on a bright bar for the page behind the bar.
+            layers = []
+            for (sx0, sy0, sx1, sy1, fill, sorder) in shapes:
+                if sorder >= torder:
+                    continue
+                ix = min(tx1, sx1) - max(tx0, sx0)
+                iy = min(ty1, sy1) - max(ty0, sy0)
+                if ix <= 0 or iy <= 0:
+                    continue
+                layers.append((sorder, ix * iy, fill))
+            layers.sort(key=lambda l: l[0], reverse=True)
+            remaining = area
+            buried = 0.0
+            unknown = 0.0
+            worst = None
+            for (_o, ov, fill) in layers:
+                take = min(ov, remaining)
+                if take <= 0:
+                    continue
+                if fill is _BG_UNKNOWN:
+                    unknown += take
+                else:
+                    lt, lb = _luma(rgb), _luma(fill)
+                    ratio = (max(lt, lb) + 0.05) / (min(lt, lb) + 0.05)
+                    if ratio < 2.0:
+                        buried += take
+                        if worst is None or ratio < worst[0]:
+                            worst = (ratio, fill)
+                remaining -= take
+                if remaining <= 0:
+                    break
+            if unknown / area >= min_cover:
+                if skipped is not None:
+                    skipped["w20_fill_unknown"] += 1
+                continue
+            if worst is None:
+                continue
+            cover = min(buried / area, 1.0)
+            if cover >= min_cover:
+                hits.append((worst[0], cover, rep, rgb, worst[1], sp))
+        if skipped is not None and len(hits) > 2:
+            skipped["w20_capped"] += len(hits) - 2
+        for ratio, cover, rep, rgb, fill, sp_ in sorted(hits, key=lambda h: h[0])[:2]:
+            warns.append(Finding(
+                si, "W20", "w20_svg", (cover * 100, ratio),
+                "bg=#%02X%02X%02X fg=%02X%02X%02X text=%r"
+                % (fill[0], fill[1], fill[2], rgb[0], rgb[1], rgb[2], rep[:24]),
+                data={"contrast_ratio": round(ratio, 2),
+                      "covered_pct": round(cover * 100, 1),
+                      "bg_hex": "%02X%02X%02X" % fill,
+                      "fg_hex": "%02X%02X%02X" % rgb,
+                      "confidence": "estimate",
+                      "evidence_source": "svg_vector"},
+                loc=shape_loc(sp_) or None))
 
 
 def _paragraph_rgb(gb, slide, styler, thm_colors, skipped):
