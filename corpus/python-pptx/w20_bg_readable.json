@@ -1,0 +1,7 @@
+{
+  "expected": {},
+  "notes": "Same geometry as the ghost fixture with the standard secondary-text gray: #6E6E73 on white is about 4.9:1, far above the 2.0 line. This fixture is what stops the background variant from flagging every well-set caption on a plain slide.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

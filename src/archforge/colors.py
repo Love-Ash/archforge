@@ -164,7 +164,16 @@ def _resolve_run_rgb(run, para, tframe, sp, slide, styler=None, thm_colors=None)
             v = (thm_colors or {}).get(sch.get("val") or "")
             if v:
                 return (int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16))
-        # solidFill present but not a decodable srgb/scheme color: explicit-but-unknown
+        # An EMPTY solidFill is not a color claim. Merely READING run.font.color makes
+        # python-pptx insert a childless <a:solidFill/> into rPr (measured: the element
+        # is absent before the property access and present after), so any resolver that
+        # calls _run_rgb first and then re-reads the same rPr would report its own probe
+        # as explicit-but-unknown. Schema-wise solidFill requires a color child, so a
+        # bare one carries no information: treat it as no-color, not as unknown.
+        if len(fill) == 0:
+            return None
+        # solidFill with a color child we cannot decode (hslClr, sysClr, prstClr...):
+        # explicit-but-unknown, the caller must not guess
         return _COLOR_UNKNOWN
 
     direct = _run_rgb(run)

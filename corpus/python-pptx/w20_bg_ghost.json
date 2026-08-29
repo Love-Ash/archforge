@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W20": 1
+  },
+  "notes": "A transparent text box on the bare default background: no shape under it at all. The template carries no slide-level p:bg, so the color resolves through the stock bgRef-1001 chain to the theme's bg1/lt1 white, and #DDDDDD on #FFFFFF is 1.36:1 -- the same ghost-text ratio the W19 fixture pins, one layer further down. This is the case W19 structurally cannot see (the run's own shape has no fill) and W15 cannot either (nothing overlaps).",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

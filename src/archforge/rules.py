@@ -156,6 +156,7 @@ _REASON_AFFECTED = {
     "w20": ["W20"],
     "w20_capped": ["W20"],
     "w20_color_unknown": ["W20"],
+    "w20_fill_unknown": ["W20"],
     "w9": ["W9"],
     "w6_sig": ["W6"],
     "w6": ["W6"],

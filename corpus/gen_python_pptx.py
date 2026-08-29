@@ -176,6 +176,54 @@ def main():
                   "must stay silent on it; this fixture is what stops W20 from becoming a "
                   "rule against overlapping text as such."})
 
+    def w20_bg_ghost(p):
+        from pptx.dml.color import RGBColor
+        s = p.slides.add_slide(p.slide_layouts[6])
+        box = s.shapes.add_textbox(Inches(2), Inches(3), Inches(8), Inches(0.8))
+        r = box.text_frame.paragraphs[0].add_run()
+        r.text = "Ghost note left on the empty slide"
+        r.font.size = Pt(18)
+        r.font.color.rgb = RGBColor.from_string("DDDDDD")
+    emit("w20_bg_ghost", w20_bg_ghost, {"expected": {"W20": 1},
+         "notes": "A transparent text box on the bare default background: no shape under "
+                  "it at all. The template carries no slide-level p:bg, so the color "
+                  "resolves through the stock bgRef-1001 chain to the theme's bg1/lt1 "
+                  "white, and #DDDDDD on #FFFFFF is 1.36:1 -- the same ghost-text ratio "
+                  "the W19 fixture pins, one layer further down. This is the case W19 "
+                  "structurally cannot see (the run's own shape has no fill) and W15 "
+                  "cannot either (nothing overlaps)."})
+
+    def w20_bg_readable(p):
+        from pptx.dml.color import RGBColor
+        s = p.slides.add_slide(p.slide_layouts[6])
+        box = s.shapes.add_textbox(Inches(2), Inches(3), Inches(8), Inches(0.8))
+        r = box.text_frame.paragraphs[0].add_run()
+        r.text = "Subdued but readable caption on the page"
+        r.font.size = Pt(12)
+        r.font.color.rgb = RGBColor.from_string("6E6E73")
+    emit("w20_bg_readable", w20_bg_readable, {"expected": {},
+         "notes": "Same geometry as the ghost fixture with the standard secondary-text "
+                  "gray: #6E6E73 on white is about 4.9:1, far above the 2.0 line. This "
+                  "fixture is what stops the background variant from flagging every "
+                  "well-set caption on a plain slide."})
+
+    def w20_bg_dark(p):
+        from pptx.dml.color import RGBColor
+        s = p.slides.add_slide(p.slide_layouts[6])
+        s.background.fill.solid()
+        s.background.fill.fore_color.rgb = RGBColor.from_string("0A0B0C")
+        box = s.shapes.add_textbox(Inches(2), Inches(3), Inches(8), Inches(0.8))
+        r = box.text_frame.paragraphs[0].add_run()
+        r.text = "Note lost against the dark page"
+        r.font.size = Pt(18)
+        r.font.color.rgb = RGBColor.from_string("2A2E33")
+    emit("w20_bg_dark", w20_bg_dark, {"expected": {"W20": 1},
+         "notes": "An explicit slide-level solid background (p:bgPr srgbClr, the form "
+                  "the decks this gate was built against actually use) with dark-gray "
+                  "text on the near-black page: roughly 1.4:1. Pins the slide-level "
+                  "branch of the background resolution, where the ghost fixture pins "
+                  "the theme-fallback branch."})
+
     def clean(p):
         s = p.slides.add_slide(p.slide_layouts[6])
         _tb(s, 1, 1, 8, 1, "Quarterly results improved", size=20, ea="맑은 고딕")

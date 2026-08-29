@@ -453,3 +453,57 @@ def test_w19_solid_fill_contrast(tmp_path):
     r_core = run_cli([deck, "--json"], lang="en")
     doc_core = json.loads(r_core.stdout)
     assert not [f for f in doc_core["warnings"] if f["code"] == "W19"]
+
+
+def test_w20_background_contrast(tmp_path):
+    """W20 background variant (unreleased): a transparent text frame judged against the
+    resolved slide background. Ghost text on the bare default page fires; a gradient
+    shape under the text abstains as w20_fill_unknown instead of guessing; and merely
+    resolving colors must not manufacture abstentions -- reading run.font.color makes
+    python-pptx insert an empty <a:solidFill/> into rPr, and before the empty-solidFill
+    guard in colors.py the resolver reported its own probe as w20_color_unknown."""
+    from pptx.enum.shapes import MSO_SHAPE
+
+    # 1) ghost text on the default (theme bg1 -> white) background
+    p = new_prs()
+    s = add_slide(p)
+    tb(s, 2, 3, 8, 0.8, "Ghost note on the empty page", size=18, color="DDDDDD")
+    deck = save(p, tmp_path, "bg_ghost.pptx")
+    r = run_cli([deck, "--profile", "full", "--json", "--schema", "2"], lang="en")
+    doc = json.loads(r.stdout)
+    w20 = [f for f in doc["findings"] if f["code"] == "W20"]
+    assert len(w20) == 1, [f["code"] for f in doc["findings"]]
+    assert w20[0]["data"]["bg_hex"] == "FFFFFF"
+    assert "exposed_pct" in w20[0]["data"], w20[0]["data"]
+    # full-only while the floor soaks
+    r_core = run_cli([deck, "--json"], lang="en")
+    assert not [f for f in json.loads(r_core.stdout)["warnings"] if f["code"] == "W20"]
+
+    # 2) a gradient-filled shape under the text: not decodable, must abstain
+    p2 = new_prs()
+    s2 = add_slide(p2)
+    bar = s2.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(2), Inches(1.5),
+                              Inches(4), Inches(4))
+    bar.fill.gradient()
+    tb(s2, 2.4, 3.0, 3.2, 0.6, "caption over the gradient", size=14, color="8A8A8A")
+    deck2 = save(p2, tmp_path, "bg_gradient.pptx")
+    r2 = run_cli([deck2, "--profile", "full", "--json", "--schema", "2"], lang="en")
+    doc2 = json.loads(r2.stdout)
+    assert not [f for f in doc2["findings"] if f["code"] == "W20"]
+    unk = [a for a in doc2["abstentions"] if a["reason"] == "w20_fill_unknown"]
+    assert unk and unk[0]["count"] >= 1, doc2["abstentions"]
+
+    # 3) observer-artifact regression: a run with no color anywhere must not surface
+    # as w20_color_unknown just because the resolver looked at it
+    p3 = new_prs()
+    s3 = add_slide(p3)
+    box = s3.shapes.add_textbox(Inches(2), Inches(3), Inches(8), Inches(0.8))
+    run = box.text_frame.paragraphs[0].add_run()
+    run.text = "plain text with no explicit color"
+    run.font.size = Pt(18)
+    deck3 = save(p3, tmp_path, "bg_plain.pptx")
+    r3 = run_cli([deck3, "--profile", "full", "--json", "--schema", "2"], lang="en")
+    doc3 = json.loads(r3.stdout)
+    assert not [a for a in doc3["abstentions"]
+                if a["reason"] == "w20_color_unknown"], doc3["abstentions"]
+    assert not [f for f in doc3["findings"] if f["code"] == "W20"]

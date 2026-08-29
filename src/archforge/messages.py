@@ -125,6 +125,10 @@ MESSAGES = {
         "ko": "글자가 아래 도형 위에 %.0f%% 걸쳐 있고 대비가 %.1f:1이라 묻혀서 읽기 어렵습니다. 글자를 도형 밖으로 옮기거나 색을 바꿔 주세요",
         "en": "Text sits on the shape beneath it (%.0f%% covered) at %.1f:1 contrast and is buried (move it off the shape or change the color)",
     },
+    "w20_bg": {
+        "ko": "글자가 슬라이드 배경 위에 그대로 놓여 있는데 배경과의 대비가 %.1f:1이라 사실상 안 보입니다. 글자 색이나 배경색을 바꿔 주세요",
+        "en": "Text sits directly on the slide background at %.1f:1 contrast, close to invisible (change the text or background color)",
+    },
     "w18_page": {
         "ko": "이 페이지의 일부 구간은 손상되거나 비정형인 속성 때문에 검사하지 못했습니다. 결과가 불완전할 수 있습니다",
         "en": "Some spans on this page could not be checked (malformed/atypical attributes); results may be incomplete",

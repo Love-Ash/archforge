@@ -21,7 +21,7 @@ from pptx import Presentation
 
 try:
     from .findings import Finding, shape_loc
-    from .ooxml import EMU_PER_IN, NS
+    from .ooxml import EMU_PER_IN, NS, NS_P
     from .colors import (_is_accent, _luma, _resolve_run_rgb, _shape_fill_hex,
                          _shape_line_hex, _COLOR_UNKNOWN)
     from .geometry import (_geo_rect, _is_pic, iter_shapes, iter_shapes_geo,
@@ -29,7 +29,7 @@ try:
     from .inline import iter_inline_items
 except ImportError:   # standalone execution
     from findings import Finding, shape_loc
-    from ooxml import EMU_PER_IN, NS
+    from ooxml import EMU_PER_IN, NS, NS_P
     from colors import (_is_accent, _luma, _resolve_run_rgb, _shape_fill_hex,
                         _shape_line_hex, _COLOR_UNKNOWN)
     from geometry import (_geo_rect, _is_pic, iter_shapes, iter_shapes_geo,
@@ -386,6 +386,9 @@ def solid_contrast_check(slide, si, warns, styler=None, thm_colors=None, skipped
                                            xf=sp_xf, field=is_fld)))
 
 
+_BG_UNKNOWN = object()   # explicit background present but not decodable from XML
+
+
 def _filled_backdrops(slide, sw_in, sh_in):
     """Solid-fill shapes that can act as the background of text drawn over them.
 
@@ -429,35 +432,137 @@ def _shape_z(slide):
     return {id(sp._element): z for sp, z, _xf in iter_shapes_geo(slide.shapes)}
 
 
+def _slide_bg_hex(slide, thm_colors):
+    """The slide's own background color, resolved the way PowerPoint renders it.
+
+    Walks slide -> layout -> master and takes the first p:bg found, because a lower
+    level's background only shows through when nothing above declares one. Two forms
+    cover what actually ships (measured on this corpus and the decks this gate was
+    built against): an explicit p:bgPr solidFill, srgbClr or schemeClr through the
+    theme, and the stock `p:bgRef idx="1001"` whose color child names the scheme
+    slot. That second form leans on the built-in theme's first background fill style
+    being a solid phClr; a theme that redefines style 1001 gets _BG_UNKNOWN, never a
+    guess, and so does any explicit gradient or picture background or unresolvable
+    scheme name. No p:bg at any level falls through to the theme's bg1/lt1, which is
+    what an untouched deck renders."""
+    parts = [slide._element]
+    try:
+        parts.append(slide.slide_layout._element)
+        parts.append(slide.slide_layout.slide_master._element)
+    except Exception:
+        pass
+    for el in parts:
+        csld = el.find(NS_P + "cSld")
+        bg = csld.find(NS_P + "bg") if csld is not None else None
+        if bg is None:
+            continue
+        bgpr = bg.find(NS_P + "bgPr")
+        if bgpr is not None:
+            solid = bgpr.find(NS + "solidFill")
+            if solid is None:
+                return _BG_UNKNOWN
+            return _bg_color_hex(solid, thm_colors)
+        ref = bg.find(NS_P + "bgRef")
+        if ref is not None:
+            if ref.get("idx") != "1001":
+                return _BG_UNKNOWN
+            return _bg_color_hex(ref, thm_colors)
+        return _BG_UNKNOWN
+    if thm_colors:
+        return thm_colors.get("bg1") or thm_colors.get("lt1")
+    return None
+
+
+def _bg_color_hex(parent, thm_colors):
+    srgb = parent.find(NS + "srgbClr")
+    if srgb is not None and srgb.get("val"):
+        return srgb.get("val").upper()
+    sch = parent.find(NS + "schemeClr")
+    if sch is not None and sch.get("val"):
+        hexv = (thm_colors or {}).get(sch.get("val"))
+        return hexv.upper() if hexv else _BG_UNKNOWN
+    return _BG_UNKNOWN
+
+
+def _bg_exposure_walk(slide, sw_in, sh_in):
+    """Everything standing between a text frame and the page background.
+
+    Returns (blockers, page). blockers are (x0, y0, x1, y1, z, undecodable, element)
+    for every shape that renders ink of its own: pictures, and any shape whose fill
+    python-pptx does not report as the explicit no-fill. Type 5 covers both an
+    a:noFill and an unfilled text box (measured: a bare add_textbox reports 5), and
+    None means the fill is inherited from the shape style, which renders filled, so
+    None blocks too. page is the topmost full-bleed solid textless shape promoted to
+    page background, (hex-or-unknown, z, element): the case where a deck paints its
+    ground with a rectangle instead of p:bg."""
+    blockers = []
+    page = None
+    for sp, z, xf in iter_shapes_geo(slide.shapes):
+        geo = _geo_rect(sp, xf)
+        if geo is None:
+            continue
+        x, y, w, h, _rot = geo
+        if w <= 0 or h <= 0:
+            continue
+        if _is_pic(sp):
+            blockers.append((x, y, x + w, y + h, z, True, sp._element))
+            continue
+        try:
+            ftype = sp.fill.type
+        except Exception:
+            continue
+        if ftype is not None and int(ftype) == 5:
+            continue
+        try:
+            solid = _shape_fill_hex(sp)
+        except Exception:
+            solid = None
+        if w * h >= 0.9 * sw_in * sh_in and not (
+                getattr(sp, "has_text_frame", False) and sp.text_frame.text.strip()):
+            hexv = solid if solid else _BG_UNKNOWN
+            if page is None or z > page[1]:
+                page = (hexv, z, sp._element)
+            continue
+        blockers.append((x, y, x + w, y + h, z, solid is None, sp._element))
+    return blockers, page
+
+
 def underlying_contrast_check(slide, si, sw_in, sh_in, warns, boxes=None, styler=None,
                               thm_colors=None, skipped=None, min_cover=0.5):
-    """W20: a text frame drawn over a filled shape, at a contrast that buries it.
+    """W20: text buried on what is drawn behind it, a filled shape or the page itself.
 
     W19 answers the same question one shape earlier: a run inside its own fill. It stops
     there on purpose, and its docstring says why -- anything underneath "needs occlusion
     logic and belongs to the rendered path". That was true when W19 shipped. It stopped
-    being true once W17 built the z-ordered box list, so the case is now decidable from XML
-    with no render at all, and this gate closes it.
+    being true once W17 built the z-ordered box list, so the case is now decidable from
+    XML with no render at all, and this gate closes it.
 
-    The defect it exists for: a caption laid across a chart's bars, a footnote dropped onto
-    a colored panel, a label that used to sit in the margin and slid onto a card after an
-    edit round. PowerPoint reports nothing, the text is simply hard to read.
+    Two variants share the verdict and the 2.0:1 line. The shape variant (reason w20) is
+    a caption laid across a chart's bars, a footnote dropped onto a colored panel, a
+    label that slid onto a card after an edit round. The background variant (reason
+    w20_bg) is the same defect one layer further down: a transparent text frame sitting
+    on the bare page, judged against the resolved slide background, which is how ghost
+    text left on an empty slide finally gets caught. A background or an underlying fill
+    that cannot be decoded from XML (gradients, picture fills, nonstandard background
+    style references) abstains as w20_fill_unknown instead of guessing.
 
     Coverage is summed across every low-contrast shape under the run, not measured per
-    shape. A caption spanning two bars is buried by both, and scoring them separately lets
-    each fall under the bar while the text is more than half covered -- measured while
-    prototyping this gate against a real deck, where a caption split 27.5%/27.5% across two
-    bars scored zero on a per-shape test.
+    shape. A caption spanning two bars is buried by both, and scoring them separately
+    lets each fall under the bar while the text is more than half covered -- measured
+    while prototyping this gate against a real deck, where a caption split 27.5%/27.5%
+    across two bars scored zero on a per-shape test. The background variant mirrors
+    that with exposure: the glyph area NOT covered by any ink-bearing shape must clear
+    the same floor before the page color is allowed to matter.
 
-    Contrast uses the same 2.0:1 line as W19, because it is the same physical judgment about
-    the same two colors. Coverage defaults to 50% of the glyph box and is the parameter that
-    still needs a corpus sweep; text that merely clips a panel corner is not a defect.
-    Findings cap at 2 per page with a w20_capped disclosure."""
+    Contrast uses the same 2.0:1 line as W19, because it is the same physical judgment
+    about the same two colors. Coverage defaults to 50% of the glyph box and is the
+    parameter that still needs a corpus sweep; text that merely clips a panel corner is
+    not a defect. Findings cap at 2 per page with a w20_capped disclosure."""
     if boxes is None:
         return
     backdrops = _filled_backdrops(slide, sw_in, sh_in)
-    if not backdrops:
-        return
+    blockers, page = _bg_exposure_walk(slide, sw_in, sh_in)
+    slide_bg = _slide_bg_hex(slide, thm_colors)
     zmap = _shape_z(slide)
     hits = []
     for gb in boxes:
@@ -492,29 +597,84 @@ def underlying_contrast_check(slide, si, sw_in, sh_in, warns, boxes=None, styler
             covered += ix * iy
             if worst is None or ratio < worst[0]:
                 worst = (ratio, fill, bsp)
-        if worst is None:
+        if worst is not None:
+            cover = min(covered / area, 1.0)
+            if cover >= min_cover:
+                hits.append(("w20", worst[0], cover, gb, rgb, worst[1], worst[2]))
+                continue
+        # Background variant. Only a transparent text frame sits on the page: an own
+        # solid fill is W19's verdict, and an own style-inherited fill renders as a
+        # color this gate cannot know, so both stay out.
+        try:
+            own = gb.sp.fill.type
+        except Exception:
             continue
-        cover = min(covered / area, 1.0)
-        if cover >= min_cover:
-            hits.append((worst[0], cover, gb, rgb, worst[1], worst[2]))
+        if own is None or int(own) != 5:
+            continue
+        blocked = 0.0
+        unknown_cover = 0.0
+        for (bx0, by0, bx1, by1, bz, undec, bel) in blockers:
+            if bz >= tz or bel is gb.sp._element:
+                continue
+            if page is not None and bel is page[2]:
+                continue
+            ix = min(gb.x1, bx1) - max(gb.x0, bx0)
+            iy = min(gb.y1, by1) - max(gb.y0, by0)
+            if ix <= 0 or iy <= 0:
+                continue
+            blocked += ix * iy
+            if undec:
+                unknown_cover += ix * iy
+        if unknown_cover / area >= min_cover:
+            if skipped is not None:
+                skipped["w20_fill_unknown"] += 1
+            continue
+        exposed = 1.0 - min(blocked / area, 1.0)
+        if exposed < min_cover:
+            continue
+        bg_hex = slide_bg
+        if page is not None:
+            if tz <= page[1]:
+                continue        # text underneath a full-bleed overlay is not visible
+            bg_hex = page[0]
+        if bg_hex is _BG_UNKNOWN:
+            if skipped is not None:
+                skipped["w20_fill_unknown"] += 1
+            continue
+        if not bg_hex:
+            continue
+        try:
+            bgt = (int(bg_hex[0:2], 16), int(bg_hex[2:4], 16), int(bg_hex[4:6], 16))
+        except Exception:
+            continue
+        lt, lb = _luma(rgb), _luma(bgt)
+        ratio = (max(lt, lb) + 0.05) / (min(lt, lb) + 0.05)
+        if ratio < 2.0:
+            hits.append(("w20_bg", ratio, exposed, gb, rgb, bg_hex, None))
     if skipped is not None and len(hits) > 2:
         skipped["w20_capped"] += len(hits) - 2
-    for ratio, cover, gb, rgb, fill, bsp in sorted(hits, key=lambda h: h[0])[:2]:
+    for reason, ratio, cover, gb, rgb, fill, bsp in sorted(hits, key=lambda h: h[1])[:2]:
         loc = shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0],
                         cell=gb.cell, paragraph=gb.para, field=gb.field) or {}
-        rel = shape_loc(bsp)
-        if rel:
-            loc["related"] = rel
-        warns.append(Finding(si, "W20", "w20", (cover * 100, ratio),
-                             "bg=#%s fg=#%02X%02X%02X text=%r"
-                             % (fill, rgb[0], rgb[1], rgb[2], (gb.rep or "")[:24]),
-                             data={"contrast_ratio": round(ratio, 2),
-                                   "covered_pct": round(cover * 100, 1),
-                                   "bg_hex": fill,
-                                   "fg_hex": "%02X%02X%02X" % rgb,
-                                   "confidence": "estimate",
-                                   "evidence_source": "xml_colors_geometry"},
-                             loc=loc or None))
+        if bsp is not None:
+            rel = shape_loc(bsp)
+            if rel:
+                loc["related"] = rel
+        data = {"contrast_ratio": round(ratio, 2),
+                "bg_hex": fill,
+                "fg_hex": "%02X%02X%02X" % rgb,
+                "confidence": "estimate",
+                "evidence_source": "xml_colors_geometry"}
+        if reason == "w20":
+            args = (cover * 100, ratio)
+            data["covered_pct"] = round(cover * 100, 1)
+        else:
+            args = (ratio,)
+            data["exposed_pct"] = round(cover * 100, 1)
+        warns.append(Finding(si, "W20", reason, args,
+                             "bg=#%s fg=%s text=%r"
+                             % (fill, data["fg_hex"], (gb.rep or "")[:24]),
+                             data=data, loc=loc or None))
 
 
 def _paragraph_rgb(gb, slide, styler, thm_colors, skipped):

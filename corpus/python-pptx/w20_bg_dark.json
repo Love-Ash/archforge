@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W20": 1
+  },
+  "notes": "An explicit slide-level solid background (p:bgPr srgbClr, the form the decks this gate was built against actually use) with dark-gray text on the near-black page: roughly 1.4:1. Pins the slide-level branch of the background resolution, where the ghost fixture pins the theme-fallback branch.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

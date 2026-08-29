@@ -162,7 +162,7 @@ WARNs are advisory:
 | `W17` | Text straddling an image ink edge |
 | `W18` | Some spans could not be checked (malformed input): results incomplete. Fails under `--strict` |
 | `W19` | Text color nearly identical to its own shape's solid fill (under 2.0:1 contrast): ghost placeholder text and near-invisible labels. XML colors only, no render needed; runs in the `full` profile while the threshold soaks |
-| `W20` | Text drawn over a filled shape beneath it at under 2.0:1 contrast against that shape: a caption laid across a chart's bars, a footnote dropped onto a colored panel. Coverage is summed across every shape under the run; XML colors and geometry, no render; `full` profile while the coverage floor soaks |
+| `W20` | Text buried on what is drawn behind it, at under 2.0:1 contrast: a caption laid across a chart's bars, a footnote dropped onto a colored panel, or ghost text sitting directly on the slide background. Coverage is summed across every shape under the run; undecodable fills and backgrounds abstain; XML colors and geometry, no render; `full` profile while the coverage floor soaks |
 
 Profiles separate objective defects from style policy, and since 0.4.0 the default is
 `core`: only the mechanical gates (E1/E3/E4, W1/W5/W7/W8, W15-W18) run unless you opt in.
