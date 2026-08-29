@@ -132,6 +132,50 @@ def main():
                   "is roughly 4.9:1, far above the 2.0 threshold; a rule that fires here "
                   "would flag every well-set caption. Must stay silent."})
 
+    def w20(p):
+        from pptx.dml.color import RGBColor
+        from pptx.enum.shapes import MSO_SHAPE
+        s = p.slides.add_slide(p.slide_layouts[6])
+        bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(2), Inches(1.5),
+                                 Inches(3), Inches(4))
+        bar.fill.solid()
+        bar.fill.fore_color.rgb = RGBColor.from_string("2ECC9B")
+        bar.line.fill.background()
+        box = s.shapes.add_textbox(Inches(1.4), Inches(4.6), Inches(4.4), Inches(0.5))
+        r = box.text_frame.paragraphs[0].add_run()
+        r.text = "Footnote dropped onto the bar"
+        r.font.size = Pt(14)
+        r.font.color.rgb = RGBColor.from_string("8A8A8A")
+    emit("w20_text_over_shape", w20, {"expected": {"W20": 1},
+         "notes": "A separate caption box laid across a filled bar below it in z-order. "
+                  "Ground truth by construction: #8A8A8A on #2ECC9B is a 1.53:1 WCAG ratio, "
+                  "under the 2.0 line W19 already uses, and the glyph box sits far enough "
+                  "onto the bar to pass the coverage floor. W19 cannot see this because the "
+                  "text is not inside the filled shape, and W15 cannot because the bar holds "
+                  "no text of its own: the defect falls between them, which is why W20 "
+                  "exists."})
+
+    def w20_neg(p):
+        from pptx.dml.color import RGBColor
+        from pptx.enum.shapes import MSO_SHAPE
+        s = p.slides.add_slide(p.slide_layouts[6])
+        bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(2), Inches(1.5),
+                                 Inches(3), Inches(4))
+        bar.fill.solid()
+        bar.fill.fore_color.rgb = RGBColor.from_string("2ECC9B")
+        bar.line.fill.background()
+        box = s.shapes.add_textbox(Inches(1.4), Inches(4.6), Inches(4.4), Inches(0.5))
+        r = box.text_frame.paragraphs[0].add_run()
+        r.text = "Label deliberately set on the bar"
+        r.font.size = Pt(14)
+        r.font.color.rgb = RGBColor.from_string("0B0B0B")
+    emit("w20_over_shape_negative", w20_neg, {"expected": {},
+         "notes": "Same geometry as the positive fixture, near-black text instead of gray. "
+                  "#0B0B0B on #2ECC9B is about 8.4:1, so the label reads cleanly. A caption "
+                  "deliberately placed on a colored panel is a normal layout and the gate "
+                  "must stay silent on it; this fixture is what stops W20 from becoming a "
+                  "rule against overlapping text as such."})
+
     def clean(p):
         s = p.slides.add_slide(p.slide_layouts[6])
         _tb(s, 1, 1, 8, 1, "Quarterly results improved", size=20, ea="맑은 고딕")

@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W20": 1
+  },
+  "notes": "A separate caption box laid across a filled bar below it in z-order. Ground truth by construction: #8A8A8A on #2ECC9B is a 1.53:1 WCAG ratio, under the 2.0 line W19 already uses, and the glyph box sits far enough onto the bar to pass the coverage floor. W19 cannot see this because the text is not inside the filled shape, and W15 cannot because the bar holds no text of its own: the defect falls between them, which is why W20 exists.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

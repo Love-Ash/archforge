@@ -1,0 +1,7 @@
+{
+  "expected": {},
+  "notes": "Same geometry as the positive fixture, near-black text instead of gray. #0B0B0B on #2ECC9B is about 8.4:1, so the label reads cleanly. A caption deliberately placed on a colored panel is a normal layout and the gate must stay silent on it; this fixture is what stops W20 from becoming a rule against overlapping text as such.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

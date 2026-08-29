@@ -384,3 +384,171 @@ def solid_contrast_check(slide, si, warns, styler=None, thm_colors=None, skipped
                                    "evidence_source": "xml_colors"},
                              loc=shape_loc(sp, paragraph=pi, run=ri, cell=cell_rc,
                                            xf=sp_xf, field=is_fld)))
+
+
+def _filled_backdrops(slide, sw_in, sh_in):
+    """Solid-fill shapes that can act as the background of text drawn over them.
+
+    Close cousin of the occluder list W17 builds, but kept separate because the question is
+    different: W17 asks whether a card hides a photo, this asks what color is behind a run.
+    So the fill hex travels with the box, and the same exclusions apply for the same reasons.
+    Pictures are out (their color is not knowable from XML, that is W7's job), shapes that
+    carry their own text are out (a run inside its own fill is W19, and two texts colliding
+    is W15), and a shape covering almost the whole page is the background rather than an
+    element."""
+    out = []
+    for sp, z, xf in iter_shapes_geo(slide.shapes):
+        if getattr(sp, "shape_type", None) is not None and _is_pic(sp):
+            continue
+        if getattr(sp, "has_text_frame", False) and sp.text_frame.text.strip():
+            continue
+        try:
+            fill = _shape_fill_hex(sp)
+        except Exception:
+            continue
+        if not fill:
+            continue
+        geo = _geo_rect(sp, xf)
+        if geo is None:
+            continue
+        x, y, w, h, _rot = geo
+        if w <= 0 or h <= 0 or w * h >= 0.9 * sw_in * sh_in:
+            continue
+        out.append((x, y, x + w, y + h, z, fill, sp))
+    return out
+
+
+def _shape_z(slide):
+    """Map each shape to its z index, so a run can be compared against what is under it.
+
+    Keyed on the underlying XML element, never on the shape object. python-pptx builds a
+    fresh proxy on every traversal, so two walks over the same slide hand back different
+    objects for the same shape and an id(sp) lookup silently misses every time -- the gate
+    stays quiet and looks like it found nothing. lxml caches its element proxies, so the
+    element is stable across walks (verified on this slide before relying on it)."""
+    return {id(sp._element): z for sp, z, _xf in iter_shapes_geo(slide.shapes)}
+
+
+def underlying_contrast_check(slide, si, sw_in, sh_in, warns, boxes=None, styler=None,
+                              thm_colors=None, skipped=None, min_cover=0.5):
+    """W20: a text frame drawn over a filled shape, at a contrast that buries it.
+
+    W19 answers the same question one shape earlier: a run inside its own fill. It stops
+    there on purpose, and its docstring says why -- anything underneath "needs occlusion
+    logic and belongs to the rendered path". That was true when W19 shipped. It stopped
+    being true once W17 built the z-ordered box list, so the case is now decidable from XML
+    with no render at all, and this gate closes it.
+
+    The defect it exists for: a caption laid across a chart's bars, a footnote dropped onto
+    a colored panel, a label that used to sit in the margin and slid onto a card after an
+    edit round. PowerPoint reports nothing, the text is simply hard to read.
+
+    Coverage is summed across every low-contrast shape under the run, not measured per
+    shape. A caption spanning two bars is buried by both, and scoring them separately lets
+    each fall under the bar while the text is more than half covered -- measured while
+    prototyping this gate against a real deck, where a caption split 27.5%/27.5% across two
+    bars scored zero on a per-shape test.
+
+    Contrast uses the same 2.0:1 line as W19, because it is the same physical judgment about
+    the same two colors. Coverage defaults to 50% of the glyph box and is the parameter that
+    still needs a corpus sweep; text that merely clips a panel corner is not a defect.
+    Findings cap at 2 per page with a w20_capped disclosure."""
+    if boxes is None:
+        return
+    backdrops = _filled_backdrops(slide, sw_in, sh_in)
+    if not backdrops:
+        return
+    zmap = _shape_z(slide)
+    hits = []
+    for gb in boxes:
+        if not (gb.rep or "").strip():
+            continue
+        area = (gb.x1 - gb.x0) * (gb.y1 - gb.y0)
+        if area <= 0:
+            continue
+        tz = zmap.get(id(gb.sp._element))
+        if tz is None:
+            continue
+        rgb = _paragraph_rgb(gb, slide, styler, thm_colors, skipped)
+        if rgb is None:
+            continue
+        covered = 0.0
+        worst = None
+        for (bx0, by0, bx1, by1, bz, fill, bsp) in backdrops:
+            if bz >= tz or bsp._element is gb.sp._element:
+                continue
+            ix = min(gb.x1, bx1) - max(gb.x0, bx0)
+            iy = min(gb.y1, by1) - max(gb.y0, by0)
+            if ix <= 0 or iy <= 0:
+                continue
+            try:
+                bg = (int(fill[0:2], 16), int(fill[2:4], 16), int(fill[4:6], 16))
+            except Exception:
+                continue
+            lt, lb = _luma(rgb), _luma(bg)
+            ratio = (max(lt, lb) + 0.05) / (min(lt, lb) + 0.05)
+            if ratio >= 2.0:
+                continue
+            covered += ix * iy
+            if worst is None or ratio < worst[0]:
+                worst = (ratio, fill, bsp)
+        if worst is None:
+            continue
+        cover = min(covered / area, 1.0)
+        if cover >= min_cover:
+            hits.append((worst[0], cover, gb, rgb, worst[1], worst[2]))
+    if skipped is not None and len(hits) > 2:
+        skipped["w20_capped"] += len(hits) - 2
+    for ratio, cover, gb, rgb, fill, bsp in sorted(hits, key=lambda h: h[0])[:2]:
+        loc = shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0],
+                        cell=gb.cell, paragraph=gb.para, field=gb.field) or {}
+        rel = shape_loc(bsp)
+        if rel:
+            loc["related"] = rel
+        warns.append(Finding(si, "W20", "w20", (cover * 100, ratio),
+                             "bg=#%s fg=#%02X%02X%02X text=%r"
+                             % (fill, rgb[0], rgb[1], rgb[2], (gb.rep or "")[:24]),
+                             data={"contrast_ratio": round(ratio, 2),
+                                   "covered_pct": round(cover * 100, 1),
+                                   "bg_hex": fill,
+                                   "fg_hex": "%02X%02X%02X" % rgb,
+                                   "confidence": "estimate",
+                                   "evidence_source": "xml_colors_geometry"},
+                             loc=loc or None))
+
+
+def _paragraph_rgb(gb, slide, styler, thm_colors, skipped):
+    """The color of the paragraph a glyph box stands for, or None when it is not knowable.
+
+    A box is a paragraph, so it can hold runs of different colors. The darkest-against-its-
+    backdrop case is what a reader notices, but mixing colors inside one verdict would make
+    the report lie about which run is buried, so a paragraph whose runs disagree is skipped
+    rather than guessed. Undecodable colors surface as an abstention, matching W19."""
+    tf = getattr(gb.sp, "text_frame", None)
+    if tf is None:
+        return None
+    try:
+        paras = list(tf.paragraphs)
+    except Exception:
+        return None
+    if gb.para is None or gb.para >= len(paras):
+        return None
+    para = paras[gb.para]
+    seen = set()
+    for run_like, _rix, _is_fld in iter_inline_items(para):
+        if run_like is None or not (run_like.text or "").strip():
+            continue
+        try:
+            rgb = _resolve_run_rgb(run_like, para, tf, gb.sp, slide, styler, thm_colors)
+        except Exception:
+            return None
+        if rgb is None:
+            continue
+        if rgb is _COLOR_UNKNOWN:
+            if skipped is not None:
+                skipped["w20_color_unknown"] += 1
+            return None
+        seen.add(rgb)
+    if len(seen) != 1:
+        return None
+    return seen.pop()

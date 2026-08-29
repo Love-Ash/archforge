@@ -193,7 +193,8 @@ try:
                      _diagram_clone_marks,
                      slide_layout_sig,
                      contrast_check,
-                     solid_contrast_check)
+                     solid_contrast_check,
+                     underlying_contrast_check)
 except ImportError:   # standalone execution
     from detectors_visual import (_EFFECT_TAGS,
                     _3D_TAGS,
@@ -206,7 +207,8 @@ except ImportError:   # standalone execution
                     _diagram_clone_marks,
                     slide_layout_sig,
                     contrast_check,
-                    solid_contrast_check)
+                    solid_contrast_check,
+                    underlying_contrast_check)
 try:
     from .inline import iter_inline_items
     from .detectors_geometry import (_FldRun,
@@ -508,6 +510,14 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
         except Exception as e:
             skipped["w16_w17"] += 1
             print("W16/W17 skipped p%02d: %s" % (si, e), file=sys.stderr)
+        if "W20" not in excl and tboxes is not None:
+            try:
+                underlying_contrast_check(slide, si, sw_in, sh_in, warns, boxes=tboxes,
+                                          styler=styler, thm_colors=thm_colors,
+                                          skipped=skipped)
+            except Exception as e:
+                skipped["w20"] += 1
+                print("W20 skipped p%02d: %s" % (si, e), file=sys.stderr)
         # Core-line gates (E1-E4, W1/W5/W8). The guard is per run: a per-frame guard let one
         # run's garbage attribute swallow a real violation in a neighboring run of the same
         # frame, producing a false pass (reproduced and measured in the adversarial panel,
