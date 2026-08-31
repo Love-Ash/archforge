@@ -39,6 +39,9 @@ _DATA_FIELDS = {
     "w15": ("overlap_pct",),
     "w16": ("overflow_in",),
     "w17": ("inside_pct",),
+    # The two hex strings are skipped: this map exists so consumers key on numbers
+    # rather than on parsing a sentence, and the colors are already in the detail.
+    "w21": (None, "stray_uses", None, "dominant_uses"),
 }
 
 

@@ -572,3 +572,50 @@ def test_w20_svg_buried_text(tmp_path):
     r2 = run_cli([deck2, "--profile", "full", "--json", "--schema", "2"], lang="en")
     doc2 = json.loads(r2.stdout)
     assert not [f for f in doc2["findings"] if f["code"] == "W20"], doc2["findings"]
+
+
+def test_w21_stray_color_beside_dominant(tmp_path):
+    """The positive control: one rect painted a hex step off the dominant fill. Without a
+    firing here the rule is dead code, which is how W7 sat unnoticed for a release."""
+    p = new_prs()
+    s = add_slide(p)
+    for i in range(12):
+        rect(s, 0.4 + i * 0.8, 1.0, 0.6, 0.6, "8C8C8C")
+    rect(s, 0.4, 3.0, 0.6, 0.6, "888888")
+    rect(s, 1.2, 3.0, 0.6, 0.6, "888888")
+    _e, warns = lint_full(save(p, tmp_path, "stray.pptx"))
+    assert "W21" in codes(warns)
+    _si, msg, _d = by_code(warns, "W21")[0]
+    assert "888888" in msg and "8C8C8C" in msg
+
+
+def test_w21_gradient_ramp_is_not_drift(tmp_path):
+    """Negative control for the false-positive class the corpus surfaced: a ramp of stacked
+    rectangles is many near-identical colors used evenly, and reads as design, not typo."""
+    p = new_prs()
+    s = add_slide(p)
+    for i in range(8):
+        shade = "%02X%02X%02X" % (32 + i * 3, 34 + i * 3, 36 + i * 3)
+        for j in range(4):
+            rect(s, 0.4 + j * 0.8, 1.0 + i * 0.5, 0.6, 0.4, shade)
+    _e, warns = lint_full(save(p, tmp_path, "ramp.pptx"))
+    assert "W21" not in codes(warns)
+
+
+def test_w21_balanced_pair_is_not_drift(tmp_path):
+    """Two near colors used about as often as each other is a decision, not a slip. This is
+    the ratio guard: without it the rule fires on every duotone."""
+    p = new_prs()
+    s = add_slide(p)
+    for i in range(6):
+        rect(s, 0.4 + i * 0.8, 1.0, 0.6, 0.6, "44483F")
+        rect(s, 0.4 + i * 0.8, 2.0, 0.6, 0.6, "45473F")
+    _e, warns = lint_full(save(p, tmp_path, "duo.pptx"))
+    assert "W21" not in codes(warns)
+
+
+def test_w21_absent_from_core_profile(tmp_path):
+    """W21 ships full-only while its thresholds soak, the way W19 and W20 did."""
+    from archforge.rules import PROFILES
+    assert "W21" in PROFILES["core"] and "W21" in PROFILES["editorial"]
+    assert "W21" not in PROFILES["full"]

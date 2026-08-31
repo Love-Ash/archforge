@@ -19,6 +19,27 @@ Two versions below never shipped. 0.2.1 and 0.3.1 have entries here but were sup
 same day they were written: 0.2.1 has no tag, 0.3.1 has a tag but no GitHub release, and
 neither reached PyPI. Every other version in this file is installable.
 
+## Unreleased
+
+### W21: a stray color beside the one the deck actually uses
+
+Counting distinct colors would only measure genre, since an infographic legitimately
+carries many and a minimal deck few. So W21 measures the shape of the mistake instead:
+`#8C8C8C` painted 116 times next to `#888888` painted 3 times is not a decision anyone
+made. Deck-level like W13, because a stray is only visible against the whole palette.
+
+The first corpus sweep flagged deliberate gradients, where a ramp of stacked rectangles
+yields many near-identical colors used evenly (one deck: 24 pairs, every pair 26-vs-26 or
+17-vs-17). Two guards drop that class -- the pair must be lopsided, and neither member may
+carry more than two near neighbours -- and the gradient deck then reports nothing while the
+four real strays survive.
+
+Thresholds are measured, not chosen: on 148 decks at redmean distance 16 and a 6x use
+ratio, 95% report nothing and the worst reports two. Colors come from the same resolution
+chain W19 uses, read out of the XML, so linting never writes to the file it is reading.
+Runs in the `full` profile only while the thresholds soak; the suite carries one positive
+fixture and three negative controls, including the gradient case the corpus surfaced.
+
 ## 0.10.0 (2026-08-10)
 
 A new gate, and the last count-only abstention grew a location. Both close #13.

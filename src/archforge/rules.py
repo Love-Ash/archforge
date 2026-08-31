@@ -30,6 +30,7 @@ RULES = {
     "W18": ("warning", "meta",      "w18_page"),
     "W19": ("warning", "render",    "w19"),
     "W20": ("warning", "render",    "w20"),
+    "W21": ("warning", "render",    "w21"),
 }
 
 ALL_CODES = frozenset(RULES)
@@ -59,6 +60,7 @@ TITLES = {
     "W18": "Some spans could not be checked (incomplete result)",
     "W19": "Low text contrast on a solid fill",
     "W20": "Low text contrast on an underlying filled shape",
+    "W21": "A rare color painted beside a dominant near-identical one",
 }
 
 # Profile = engine execution policy (since 0.3.1, excluded rules simply do not run).
@@ -71,8 +73,8 @@ PROFILES = {
     # private set (7 firings, all defensible: two same-color ghost placeholders, five
     # white-on-bright-green watermarks; everything >= 2.3 was intentional design).
     "core": frozenset({"E2", "W6", "W9", "W10", "W11", "W12", "W13", "W14", "W19",
-                       "W20"}),
-    "editorial": frozenset({"W6", "W14", "W19", "W20"}),
+                       "W20", "W21"}),
+    "editorial": frozenset({"W6", "W14", "W19", "W20", "W21"}),
 }
 
 DEFAULT_PROFILE = "core"
@@ -126,7 +128,7 @@ _CAPABILITY_OF_RULE = {
     "W15": "geometry", "W16": "geometry", "W17": "geometry",
     "W6": "structure", "W10": "structure", "W12": "structure",
     "W9": "structure", "W11": "structure", "W13": "structure", "W14": "structure",
-    "W7": "render", "W19": "render", "W20": "render",
+    "W7": "render", "W19": "render", "W20": "render", "W21": "render",
 }
 
 _REASON_AFFECTED = {
@@ -157,6 +159,7 @@ _REASON_AFFECTED = {
     "w20_capped": ["W20"],
     "w20_color_unknown": ["W20"],
     "w20_fill_unknown": ["W20"],
+    "w21": ["W21"],
     "w9": ["W9"],
     "w6_sig": ["W6"],
     "w6": ["W6"],

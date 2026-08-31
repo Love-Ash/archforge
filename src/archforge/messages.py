@@ -121,6 +121,10 @@ MESSAGES = {
         "ko": "글자 색과 상자 배경색의 명암 대비가 %.1f:1로, 거의 안 보이는 수준입니다. 글자 색이나 배경색을 바꿔 주세요",
         "en": "Text-on-fill contrast %.1f:1, close to invisible (change the text or fill color)",
     },
+    "w21": {
+        "ko": "#%s를 %d번만 쓰는데 거의 같은 #%s가 %d번 쓰였습니다. 색을 잘못 입력한 자리로 보이니 많이 쓰는 쪽으로 맞춰 주세요",
+        "en": "#%s is painted just %d times next to a near-identical #%s painted %d times (likely a mistyped color: unify on the dominant one)",
+    },
     "w20": {
         "ko": "글자가 아래 도형 위에 %.0f%% 걸쳐 있고 대비가 %.1f:1이라 묻혀서 읽기 어렵습니다. 글자를 도형 밖으로 옮기거나 색을 바꿔 주세요",
         "en": "Text sits on the shape beneath it (%.0f%% covered) at %.1f:1 contrast and is buried (move it off the shape or change the color)",

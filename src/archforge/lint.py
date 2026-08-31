@@ -195,7 +195,9 @@ try:
                      contrast_check,
                      solid_contrast_check,
                      underlying_contrast_check,
-                     svg_buried_text_check)
+                     svg_buried_text_check,
+                     collect_palette,
+                     palette_drift_check)
 except ImportError:   # standalone execution
     from detectors_visual import (_EFFECT_TAGS,
                     _3D_TAGS,
@@ -210,7 +212,9 @@ except ImportError:   # standalone execution
                     contrast_check,
                     solid_contrast_check,
                     underlying_contrast_check,
-                    svg_buried_text_check)
+                    svg_buried_text_check,
+                    collect_palette,
+                    palette_drift_check)
 try:
     from .inline import iter_inline_items
     from .detectors_geometry import (_FldRun,
@@ -376,6 +380,7 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
     toks = {}
     page_texts = {}
     foot_tops = {}
+    palette = Counter()      # W21: every color the deck actually paints, deck-wide
     fx_pp = {}
     titles = {}
     excl = PROFILES.get(profile, frozenset())
@@ -526,6 +531,15 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
             except Exception as e:
                 skipped["w20"] += 1
                 print("W20 svg skipped p%02d: %s" % (si, e), file=sys.stderr)
+        if "W21" not in excl:
+            # Collected per page, judged once for the deck: a stray color is only
+            # visible against the whole palette, not against one page.
+            try:
+                collect_palette(slide, palette, styler=styler,
+                                thm_colors=thm_colors)
+            except Exception as e:
+                skipped["w21"] += 1
+                print("W21 skipped p%02d: %s" % (si, e), file=sys.stderr)
         # Core-line gates (E1-E4, W1/W5/W8). The guard is per run: a per-frame guard let one
         # run's garbage attribute swallow a real violation in a neighboring run of the same
         # frame, producing a false pass (reproduced and measured in the adversarial panel,
@@ -804,6 +818,15 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
     except Exception as e:
         deck_skipped["w11_w14"] += 1
         print("W11/W12/W13/W14 skipped: %s" % e, file=sys.stderr)
+
+    # W21 palette drift: deck-level, but guarded on its own. Sharing the W11-W14
+    # guard would let an abstention there claim W21 had run.
+    if "W21" not in excl:
+        try:
+            palette_drift_check(palette, warns)
+        except Exception as e:
+            deck_skipped["w21"] += 1
+            print("W21 skipped: %s" % e, file=sys.stderr)
 
     # W10: clone recycling of a hand-drawn diagram (e.g. cross-section). Specialized to the
     # decorative-texture (marks) path so that three-column card layouts are left to W6 and

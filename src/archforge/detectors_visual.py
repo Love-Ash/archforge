@@ -5,6 +5,7 @@
   W9   accent bars repeated as list markers
   W12  footer baselines drifting from the dominant baseline
   W13  native PowerPoint shadow, glow and 3D effects
+  W21  a rare color sitting next to a dominant near-identical one
 
 Plus the two signature helpers the repetition rules read, the layout skeleton and the
 fill-token set, which W6 and W10 compare across pages.
@@ -14,6 +15,7 @@ touches the filesystem, because it reads the PNGs the caller exported; everythin
 works off the shape tree. Re-exported from lint for backward compatibility.
 """
 import glob
+import math
 import os
 from collections import Counter
 
@@ -22,16 +24,16 @@ from pptx import Presentation
 try:
     from .findings import Finding, shape_loc
     from .ooxml import EMU_PER_IN, NS, NS_P
-    from .colors import (_is_accent, _luma, _resolve_run_rgb, _shape_fill_hex,
-                         _shape_line_hex, _COLOR_UNKNOWN)
+    from .colors import (_hex_rgb, _is_accent, _luma, _resolve_run_rgb,
+                         _shape_fill_hex, _shape_line_hex, _COLOR_UNKNOWN)
     from .geometry import (_geo_rect, _is_pic, iter_shapes, iter_shapes_geo,
                            collect_frames as _collect_frames)
     from .inline import iter_inline_items
 except ImportError:   # standalone execution
     from findings import Finding, shape_loc
     from ooxml import EMU_PER_IN, NS, NS_P
-    from colors import (_is_accent, _luma, _resolve_run_rgb, _shape_fill_hex,
-                        _shape_line_hex, _COLOR_UNKNOWN)
+    from colors import (_hex_rgb, _is_accent, _luma, _resolve_run_rgb,
+                        _shape_fill_hex, _shape_line_hex, _COLOR_UNKNOWN)
     from geometry import (_geo_rect, _is_pic, iter_shapes, iter_shapes_geo,
                           collect_frames as _collect_frames)
     from inline import iter_inline_items
@@ -945,3 +947,82 @@ def _paragraph_rgb(gb, slide, styler, thm_colors, skipped):
     if len(seen) != 1:
         return None
     return seen.pop()
+
+
+# W21 thresholds, from the 148-deck corpus sweep (archforge corpus + a private deck set).
+# At these values 95% of decks report nothing and the worst reports two.
+_W21_DIST = 16.0        # redmean distance below which two colors read as the same one
+_W21_RATIO = 6.0        # dominant uses / stray uses
+_W21_NEIGHBORS = 2      # more near neighbours than this reads as a deliberate ramp
+_W21_MIN_USES = 2       # a color painted once is not yet a pattern
+
+
+def _redmean(a, b):
+    """Cheap perceptual distance between two RGB triples (0 = identical). Closer to the eye
+    than plain sRGB Euclid and needs no LAB conversion, which matters because this runs over
+    every pair of colors in the deck."""
+    rm = (a[0] + b[0]) / 2.0
+    dr, dg, db = a[0] - b[0], a[1] - b[1], a[2] - b[2]
+    return math.sqrt((2 + rm / 256.0) * dr * dr + 4.0 * dg * dg
+                     + (2 + (255 - rm) / 256.0) * db * db)
+
+
+def collect_palette(slide, palette, styler=None, thm_colors=None):
+    """Tallies the colors this slide actually paints into a deck-wide Counter.
+
+    Fill and line come from the XML and run color from the same resolution chain W19 uses,
+    so W21 judges what gets painted rather than what the theme declares. Reading
+    run.font.color instead would materialize an empty solidFill on the run and change the
+    file being linted."""
+    for sp in iter_shapes(slide.shapes):
+        for hexc in (_shape_fill_hex(sp), _shape_line_hex(sp)):
+            rgb = _hex_rgb(hexc)
+            if rgb:
+                palette[rgb] += 1
+    for tf, _w, sp, _rc, _xf in _collect_frames(slide.shapes):
+        for para in tf.paragraphs:
+            for run in para.runs:
+                if not (run.text or "").strip():
+                    continue
+                rgb = _resolve_run_rgb(run, para, tf, sp, slide, styler=styler,
+                                       thm_colors=thm_colors)
+                if isinstance(rgb, tuple):
+                    palette[rgb] += 1
+
+
+def palette_drift_check(palette, warns, dist=_W21_DIST, ratio=_W21_RATIO,
+                        neighbors=_W21_NEIGHBORS, min_uses=_W21_MIN_USES):
+    """W21: a rare color sitting right beside a dominant near-identical one, which is what a
+    mistyped hex looks like from the outside.
+
+    Counting distinct colors would only measure genre, since an infographic legitimately
+    carries many and a minimal deck few. So this measures the shape of the mistake instead:
+    #8C8C8C painted 116 times next to #888888 painted 3 times is not a decision.
+
+    The first corpus sweep flagged deliberate gradients, where a ramp of stacked rectangles
+    yields many near-identical colors with equal use counts (one deck: 24 pairs, every pair
+    26-vs-26 or 17-vs-17). Two guards drop that class. The pair must be lopsided, and
+    neither member may carry more than `neighbors` near neighbours. Deck-level like W13,
+    because a palette is a property of the deck rather than of a page."""
+    keys = [c for c, n in palette.items() if n >= min_uses]
+    near = {c: [] for c in keys}
+    for i, a in enumerate(keys):
+        for b in keys[i + 1:]:
+            d = _redmean(a, b)
+            if 0 < d <= dist:
+                near[a].append((d, b))
+                near[b].append((d, a))
+
+    for stray, adj in near.items():
+        if not adj or len(adj) > neighbors:
+            continue
+        d, dom = min(adj)
+        if len(near[dom]) > neighbors:
+            continue
+        n_stray, n_dom = palette[stray], palette[dom]
+        if n_stray >= n_dom or n_dom < n_stray * ratio:
+            continue
+        warns.append(Finding(0, "W21", "w21",
+                             ("%02X%02X%02X" % stray, n_stray,
+                              "%02X%02X%02X" % dom, n_dom),
+                             "dC %.1f | %.0fx" % (d, n_dom / float(n_stray))))

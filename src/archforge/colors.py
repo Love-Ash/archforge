@@ -53,6 +53,19 @@ def _shape_line_hex(sp):
     return None
 
 
+def _hex_rgb(hexc):
+    """"RRGGBB" -> (r, g, b) in 0-255, or None when the string is not a hex color.
+    The 0-1 parse inside _is_accent answers a different question (saturation), so this
+    stays separate rather than being folded into it."""
+    h = (hexc or "").lstrip("#")
+    if len(h) != 6:
+        return None
+    try:
+        return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+    except ValueError:
+        return None
+
+
 def _is_accent(hexc):
     """Judges a semantic accent color: HSV saturation >= 0.55 and lightness 0.18-0.78.
     Excludes backgrounds, rule lines, body text, and low-saturation secondary colors."""
