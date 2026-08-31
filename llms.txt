@@ -13,7 +13,7 @@ Quick use for agents: `pip install archforge`, then `archforge deck.pptx --profi
 Ship condition: `summary.error_count == 0` AND `summary.incomplete == false`. Findings carry a
 `location` payload (shape id, absolute bbox in inches, paragraph/run, table cell, `related`
 counterpart) so you can fix the exact shape without text search. Rule codes (E1-E4; W1 and
-W5-W21) are stable language-independent identifiers; message language follows `--lang` (en/ko).
+W5-W22) are stable language-independent identifiers; message language follows `--lang` (en/ko).
 
 ## Docs
 

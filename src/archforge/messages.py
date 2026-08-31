@@ -121,6 +121,10 @@ MESSAGES = {
         "ko": "글자 색과 상자 배경색의 명암 대비가 %.1f:1로, 거의 안 보이는 수준입니다. 글자 색이나 배경색을 바꿔 주세요",
         "en": "Text-on-fill contrast %.1f:1, close to invisible (change the text or fill color)",
     },
+    "w22": {
+        "ko": "글자가 가는 궘선을 관통하고 있습니다(글자 폭의 %.0f%%). 의도한 취소선이 아니라면 글자나 선을 옮겨 주세요",
+        "en": "Text is impaled on a hairline rule (%.0f%% of the run crossed); move the text or the rule unless a strikethrough was intended",
+    },
     "w21": {
         "ko": "#%s를 %d번만 쓰는데 거의 같은 #%s가 %d번 쓰였습니다. 색을 잘못 입력한 자리로 보이니 많이 쓰는 쪽으로 맞춰 주세요",
         "en": "#%s is painted just %d times next to a near-identical #%s painted %d times (likely a mistyped color: unify on the dominant one)",
@@ -441,6 +445,7 @@ MESSAGES = {
     "fix_w19": {"ko": "글자 색이나 상자 배경색을 바꿔 대비를 2:1 이상으로. 같은 색 유령 텍스트는 삭제", "en": "Change the text or fill color to reach at least 2:1; delete same-color ghost text"},
     "fix_w20": {"ko": "글자를 도형 밖으로 옮기거나 글자·도형 색을 바꿔 대비를 2:1 이상으로", "en": "Move the text off the shape, or change either color to reach at least 2:1"},
     "fix_w21": {"ko": "빗나간 색을 바로 옆 지배색으로 통일하세요. 둘 다 의도한 색이면 색 거리를 벌리세요", "en": "Unify the stray color with the dominant one beside it; if both are intentional, move them further apart"},
+    "fix_w22": {"ko": "글자를 선 밖으로 옮기거나, 궘선을 글자 앞에서 끝내세요", "en": "Move the text off the rule, or end the rule before it reaches the text"},
     "fix_w18": {"ko": "검사 못 한 구간이 있습니다. stderr에서 원인을 보고 원본을 고친 뒤 재린트하세요. CI는 --fail-incomplete 권장", "en": "Part of the deck went unchecked; see stderr for why, fix the malformed source, re-lint. Use --fail-incomplete in CI"},
     "subcmd_conflict": {
         "ko": "archforge: 참고: 현재 폴더에 %r 파일이 있지만 서브커맨드를 실행합니다. 그 파일을 린트하려면 `archforge ./%s`",

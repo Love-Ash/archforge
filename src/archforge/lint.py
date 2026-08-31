@@ -226,7 +226,8 @@ try:
                      _pic_boxes,
                      overflow_check,
                      _occluder_boxes,
-                     text_image_straddle_check)
+                     text_image_straddle_check,
+                     text_rule_cross_check)
 except ImportError:   # standalone execution
     from inline import iter_inline_items
     from detectors_geometry import (_FldRun,
@@ -238,7 +239,8 @@ except ImportError:   # standalone execution
                     _pic_boxes,
                     overflow_check,
                     _occluder_boxes,
-                    text_image_straddle_check)
+                    text_image_straddle_check,
+                    text_rule_cross_check)
 try:
     from .ooxml import EMU_PER_IN, NS, NS_P
     from .colors import (_shape_fill_hex, _shape_line_hex, _is_accent,
@@ -517,6 +519,13 @@ def lint(path, hard_min=5.0, body_min=9.0, small_min=7.5, render_dir=None, ghost
         except Exception as e:
             skipped["w16_w17"] += 1
             print("W16/W17 skipped p%02d: %s" % (si, e), file=sys.stderr)
+        if "W22" not in excl and tboxes is not None:
+            try:
+                text_rule_cross_check(slide, si, sw_in, sh_in, warns, boxes=tboxes,
+                                      skipped=skipped)
+            except Exception as e:
+                skipped["w22"] += 1
+                print("W22 skipped p%02d: %s" % (si, e), file=sys.stderr)
         if "W20" not in excl and tboxes is not None:
             try:
                 underlying_contrast_check(slide, si, sw_in, sh_in, warns, boxes=tboxes,

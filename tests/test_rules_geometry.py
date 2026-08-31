@@ -273,3 +273,55 @@ def test_geometry_findings_carry_confidence(tmp_path):
     assert w16["data"]["confidence"] == "estimate"
     assert w16["data"]["evidence_source"] == "xml_geometry"
     assert w16["data"]["render_confirmed"] is False
+
+
+def test_w22_text_crossed_by_rule(tmp_path):
+    """W22 (unreleased): a glyph run crossed by a hairline rule. The impaled-arrow
+    geometry fires with the rule attached as the related location; the same divider
+    beside the text and an underline below it stay silent; and the rule is full-only
+    while its thresholds soak."""
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.dml.color import RGBColor
+
+    def vline(s, x, y, w, h):
+        r = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(x), Inches(y),
+                               Inches(w), Inches(h))
+        r.fill.solid()
+        r.fill.fore_color.rgb = RGBColor.from_string("444444")
+        r.line.fill.background()
+        return r
+
+    p = new_prs()
+    s = add_slide(p)
+    vline(s, 6.65, 1.9, 0.012, 4.4)
+    box = s.shapes.add_textbox(Inches(6.6), Inches(6.0), Inches(0.5), Inches(0.3))
+    box.text_frame.margin_left = 0
+    box.text_frame.margin_right = 0
+    r = box.text_frame.paragraphs[0].add_run()
+    r.text = chr(0x2192)
+    r.font.size = Pt(14)
+    deck = save(p, tmp_path, "impaled.pptx")
+    out = run_cli([deck, "--profile", "full", "--json", "--schema", "2"], lang="en")
+    doc = json.loads(out.stdout)
+    w22 = [f for f in doc["findings"] if f["code"] == "W22"]
+    assert len(w22) == 1, [f["code"] for f in doc["findings"]]
+    assert w22[0]["data"]["cross_axis"] == "vertical"
+    assert w22[0]["data"]["crossed_pct"] >= 50.0
+    assert "related" in w22[0]["location"], w22[0]["location"]
+    # full-only while soaking
+    core = json.loads(run_cli([deck, "--json"], lang="en").stdout)
+    assert not [f for f in core["warnings"] if f["code"] == "W22"]
+
+    p2 = new_prs()
+    s2 = add_slide(p2)
+    vline(s2, 6.65, 1.9, 0.012, 4.4)
+    box2 = s2.shapes.add_textbox(Inches(6.8), Inches(6.0), Inches(2.5), Inches(0.3))
+    box2.text_frame.margin_left = 0
+    r2 = box2.text_frame.paragraphs[0].add_run()
+    r2.text = "label beside the divider"
+    r2.font.size = Pt(14)
+    vline(s2, 6.8, 6.42, 2.2, 0.01)     # underline below the glyph box
+    deck2 = save(p2, tmp_path, "beside.pptx")
+    doc2 = json.loads(run_cli([deck2, "--profile", "full", "--json", "--schema", "2"],
+                              lang="en").stdout)
+    assert not [f for f in doc2["findings"] if f["code"] == "W22"], doc2["findings"]

@@ -1,0 +1,7 @@
+{
+  "expected": {},
+  "notes": "The same hairline vocabulary used legitimately: the divider sits beside the text and an underline rule sits below the glyph box. Neither centerline enters a glyph box, so the gate must stay silent -- this is what keeps W22 from becoming a rule against dividers as such.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

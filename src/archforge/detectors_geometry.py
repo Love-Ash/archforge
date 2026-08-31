@@ -4,6 +4,7 @@
   W15  two text frames whose effective glyph areas overlap
   W16  text glyphs or picture ink past the canvas edge
   W17  text straddling a picture's ink edge
+  W22  a glyph run crossed by a hairline rule shape
 
 They share one model of where a glyph actually is, built here rather than per rule: the
 estimated ink box of a run after the effective size, the autofit scale and any group
@@ -593,3 +594,83 @@ def text_image_straddle_check(slide, si, sw_in, sh_in, warns, skipped=None,
                              data={"confidence": "estimate",
                                    "evidence_source": "xml_geometry",
                                    "render_confirmed": False}))
+
+
+def text_rule_cross_check(slide, si, sw_in, sh_in, warns, boxes=None, skipped=None):
+    """W22: a glyph run crossed by a hairline rule (a thin solid divider shape).
+
+    The evidence case: two lone arrow glyphs placed flush against a vertical divider,
+    the upper one impaled on the rule's lower end. Readability gates stay silent there
+    -- W20 sees high contrast, W15 needs two texts, W17 needs a picture -- but the
+    page still looks broken, the same way a strikethrough nobody asked for would.
+
+    A rule is a textless, unrotated solid shape whose thin side is at most 0.06in
+    (a 0.8pt hairline is ~0.011in, a heavy 4pt divider ~0.056in) and whose long side
+    is at least 0.8in at a 15:1 aspect -- shorter or stubbier shapes are ticks and
+    list markers, W9's neighbourhood, not dividers. The gate fires when the rule's
+    centerline passes through the interior of a glyph box (not merely grazing its
+    edge) and the rule covers at least half of the glyph run along its own axis.
+    Underlines and section dividers sit outside the glyph box and never intersect it,
+    so they stay silent by geometry rather than by exception. Thresholds come from
+    the evidence deck and the engine's own stroke conventions; the corpus soak is
+    what will harden them, so the rule runs in the full profile only. At most 2
+    findings per page with a w22_capped disclosure."""
+    if boxes is None:
+        boxes = _text_glyph_boxes(slide)
+    rules = []
+    for sp, _z, xf in iter_shapes_geo(slide.shapes):
+        if getattr(sp, "has_text_frame", False) and sp.text_frame.text.strip():
+            continue
+        try:
+            if sp.fill.type is None or "SOLID" not in str(sp.fill.type):
+                continue
+        except Exception:
+            continue
+        geo = _geo_rect(sp, xf)
+        if geo is None:
+            continue
+        x, y, w, h, rot = geo
+        if rot:
+            continue
+        thin, long_side = min(w, h), max(w, h)
+        if thin <= 0 or thin > 0.06 or long_side < 0.8 or long_side / thin < 15:
+            continue
+        rules.append((x, y, x + w, y + h, w >= h, sp))
+    if not rules:
+        return
+    hits = []
+    for gb in boxes:
+        gw, gh = gb.x1 - gb.x0, gb.y1 - gb.y0
+        if gw <= 0 or gh <= 0:
+            continue
+        for (rx0, ry0, rx1, ry1, horiz, rsp) in rules:
+            if horiz:
+                center = (ry0 + ry1) / 2.0
+                if not (gb.y0 + 0.01 < center < gb.y1 - 0.01):
+                    continue
+                ov = min(gb.x1, rx1) - max(gb.x0, rx0)
+                frac = ov / gw
+            else:
+                center = (rx0 + rx1) / 2.0
+                if not (gb.x0 + 0.01 < center < gb.x1 - 0.01):
+                    continue
+                ov = min(gb.y1, ry1) - max(gb.y0, ry0)
+                frac = ov / gh
+            if frac < 0.5:
+                continue
+            hits.append((frac, gb, (rx0, ry0, rx1, ry1), horiz, rsp))
+            break
+    if skipped is not None and len(hits) > 2:
+        skipped["w22_capped"] += len(hits) - 2
+    for frac, gb, rb, horiz, rsp in sorted(hits, key=lambda h: h[0], reverse=True)[:2]:
+        loc = shape_loc(gb.sp, bbox=[gb.x0, gb.y0, gb.x1 - gb.x0, gb.y1 - gb.y0],
+                        cell=gb.cell, paragraph=gb.para, field=gb.field) or {}
+        rel = shape_loc(rsp, bbox=[rb[0], rb[1], rb[2] - rb[0], rb[3] - rb[1]])
+        if rel:
+            loc["related"] = rel
+        warns.append(Finding(si, "W22", "w22", (min(frac, 1.0) * 100,),
+                             "%r" % gb.rep, loc=loc or None,
+                             data={"confidence": "estimate",
+                                   "evidence_source": "xml_geometry",
+                                   "cross_axis": "horizontal" if horiz else "vertical",
+                                   "crossed_pct": round(min(frac, 1.0) * 100, 1)}))

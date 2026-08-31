@@ -1,0 +1,9 @@
+{
+  "expected": {
+    "W22": 1
+  },
+  "notes": "A vertical hairline (0.012in wide, 4.4in tall) whose lower end passes through a lone arrow glyph placed flush against it -- the geometry lifted from the deck this rule was written against. The rule's centerline runs through the glyph box interior and covers the full run height, so the gate must fire; W15/W17/W20 all stay silent here by scope, which is why W22 exists.",
+  "generator": "python-pptx",
+  "profile": "full",
+  "ground_truth": "by construction (defect deliberately seeded)"
+}

@@ -293,6 +293,60 @@ def main():
                   "A label deliberately set on a colored bar is normal chart design "
                   "and the gate must stay silent on it."})
 
+    def w22_rule_cross(p):
+        from pptx.dml.color import RGBColor
+        from pptx.enum.shapes import MSO_SHAPE
+        s = p.slides.add_slide(p.slide_layouts[6])
+        # The evidence geometry: a vertical hairline whose lower end impales a lone
+        # arrow glyph sitting flush against it. Contrast is fine and nothing else
+        # overlaps, so every earlier gate stays silent by design.
+        vline = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(6.65), Inches(1.9),
+                                   Inches(0.012), Inches(4.4))
+        vline.fill.solid()
+        vline.fill.fore_color.rgb = RGBColor.from_string("444444")
+        vline.line.fill.background()
+        box = s.shapes.add_textbox(Inches(6.6), Inches(6.0), Inches(0.5), Inches(0.3))
+        box.text_frame.margin_left = 0
+        box.text_frame.margin_right = 0
+        r = box.text_frame.paragraphs[0].add_run()
+        r.text = chr(0x2192)
+        r.font.size = Pt(14)
+    emit("w22_rule_cross", w22_rule_cross, {"expected": {"W22": 1},
+         "notes": "A vertical hairline (0.012in wide, 4.4in tall) whose lower end "
+                  "passes through a lone arrow glyph placed flush against it -- the "
+                  "geometry lifted from the deck this rule was written against. The "
+                  "rule's centerline runs through the glyph box interior and covers "
+                  "the full run height, so the gate must fire; W15/W17/W20 all stay "
+                  "silent here by scope, which is why W22 exists."})
+
+    def w22_rule_negative(p):
+        from pptx.dml.color import RGBColor
+        from pptx.enum.shapes import MSO_SHAPE
+        s = p.slides.add_slide(p.slide_layouts[6])
+        # Same hairline vocabulary used the way decks legitimately use it: a divider
+        # beside the text, and an underline below the glyph box. Neither crosses.
+        vline = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(6.65), Inches(1.9),
+                                   Inches(0.012), Inches(4.4))
+        vline.fill.solid()
+        vline.fill.fore_color.rgb = RGBColor.from_string("444444")
+        vline.line.fill.background()
+        box = s.shapes.add_textbox(Inches(6.8), Inches(6.0), Inches(2.5), Inches(0.3))
+        box.text_frame.margin_left = 0
+        r = box.text_frame.paragraphs[0].add_run()
+        r.text = "label beside the divider"
+        r.font.size = Pt(14)
+        under = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(6.8), Inches(6.42),
+                                   Inches(2.2), Inches(0.01))
+        under.fill.solid()
+        under.fill.fore_color.rgb = RGBColor.from_string("444444")
+        under.line.fill.background()
+    emit("w22_rule_negative", w22_rule_negative, {"expected": {},
+         "notes": "The same hairline vocabulary used legitimately: the divider sits "
+                  "beside the text and an underline rule sits below the glyph box. "
+                  "Neither centerline enters a glyph box, so the gate must stay "
+                  "silent -- this is what keeps W22 from becoming a rule against "
+                  "dividers as such."})
+
     def clean(p):
         s = p.slides.add_slide(p.slide_layouts[6])
         _tb(s, 1, 1, 8, 1, "Quarterly results improved", size=20, ea="맑은 고딕")
