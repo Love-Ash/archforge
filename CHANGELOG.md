@@ -21,6 +21,45 @@ neither reached PyPI. Every other version in this file is installable.
 
 ## Unreleased
 
+### W20 reaches the page, and the inside of vector charts
+
+W20 shipped judging only the shape directly beneath a run. Two extensions close what
+that left open. A transparent text frame is now judged against the resolved slide
+background -- an explicit solid p:bg at any level, the stock bgRef-1001 style through
+the theme, or a full-bleed rectangle painted as the ground -- which is how ghost text
+left on an empty slide finally gets caught. And a chart carried as an svgBlip keeps its
+strings and fills as XML, so a caption buried on a shape inside the picture is judged
+the same way; a PNG chart erases its text and stays honestly out of reach.
+
+Writing the readable fixture exposed a defect in all variants as first cut: each lower
+layer was judged independently, so a label reading fine on a bright bar was flagged
+against the dark page behind the bar. Layers are now consumed in descending paint
+order -- an upper card claims its overlap first -- and the corpus keeps the fixture
+that caught it.
+
+Extending the reach also surfaced an observer artifact in the resolver: merely reading
+`run.font.color` makes python-pptx insert an empty `<a:solidFill/>` into rPr, which the
+resolver then reported as an explicit-but-unknown color of its own making. An empty
+solidFill now resolves as no-color, since the schema requires a color child for it to
+claim anything.
+
+### W22: text impaled on a hairline rule
+
+Two lone arrow glyphs sat flush against a vertical divider, the upper one crossed by
+the rule's lower end. Every existing gate was silent by scope -- contrast was fine, no
+second text, no picture -- yet the page read like an uninvited strikethrough. A rule
+shape is a textless, unrotated solid at most 0.06in thick, at least 0.8in long at a
+15:1 aspect; the gate fires when its centerline passes through a glyph box's interior
+and covers at least half the run. Underlines and section dividers never enter the
+glyph box, so they pass by geometry rather than by exception.
+
+Validated against the deck that produced the evidence, in both directions: the arrow
+case had been repaired upstream and stays silent, while page 18 of the same deck
+carried a live instance -- a two-line footnote overflowing into the divider below --
+confirmed against the PowerPoint render before the finding was trusted. Findings
+attach the rule as a related location. Full profile only while the thresholds soak.
+
+
 ### W21: a stray color beside the one the deck actually uses
 
 Counting distinct colors would only measure genre, since an infographic legitimately
