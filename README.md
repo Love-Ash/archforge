@@ -28,7 +28,10 @@ gated the same way; every other gate is script-independent.
 
 PowerPoint opens both of these decks without a single warning. One of them is broken:
 
-![before / after](docs/assets/before-after-en.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/before-after-en-dark.png">
+  <img src="docs/assets/before-after-en.png" alt="before / after: broken.pptx flagged, fixed.pptx clean">
+</picture>
 
 Code review cannot see any of it, because the defects live in font slots, autofit
 scales, and coordinates that only materialize at render time. Archforge reads the
