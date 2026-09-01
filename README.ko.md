@@ -4,8 +4,8 @@
 
 **AI가 만든 파워포인트를 배포 전에 검사하는 프리플라이트 린터**
 
-조용한 한글 폰트 폴백, 판독 불가 크기, 프레임 충돌, 화면 밖 잘림, AI 티 문장부호를
-사람이 렌더를 보기 전에 `.pptx` 파일에서 잡아냅니다.
+조용한 한글 폰트 폴백, 판독 불가 크기, 프레임 충돌, 화면 밖 잘림, 배경색에 묻힌
+글자, AI 티 문장부호를 사람이 렌더를 보기 전에 `.pptx` 파일에서 잡아냅니다.
 
 **설치 없이 브라우저에서 바로 검사할 수 있습니다(파일은 전송되지 않습니다):** [love-ash.github.io/archforge](https://love-ash.github.io/archforge/)
 
@@ -57,6 +57,8 @@ archforge scan decks/ --profile full   # 파일·디렉터리·글롭 여러 개
 - 자간(tracking)은 한글 낱자 사이를 소리 없이 벌려 놓습니다.
 - autofit은 글자를 판독 불가 크기까지 줄여 놓습니다.
 - 텍스트 프레임이 충돌하고, 글리프가 캔버스 밖으로 나갑니다.
+- 글자 색이 뒤에 깔린 것과 거의 같아져 사실상 안 보이게 됩니다. 유령 플레이스홀더,
+  차트 패널에 묻힌 캡션, 슬라이드 배경에 스며든 라벨이 이 부류입니다.
 
 기계가 만든 덱이 내는 결함이 정확히 이것들이고, LLM이 자기 산출물에서 못 보는 것도
 정확히 이것들입니다. Archforge는 "빌드 성공"과 "사람이 렌더를 보고 서명"의 사이를
@@ -69,8 +71,8 @@ PptxGenJS든 OfficeCLI든 PowerPoint 자체든, 같은 파일이 들어가면 �
 ```bash
 archforge deck.pptx --profile full --fail-incomplete --json   # 에이전트·CI 표준 명령
 archforge scan decks/ --profile full         # 파일·디렉터리·글롭 여러 개를 한 번에
-archforge fix deck.pptx -o fixed.pptx        # E1/E2/E4 자동 수정 (0.8.1 신규)
-archforge deck.pptx --html report.html       # 주석 시각 리포트 (0.8.1 신규)
+archforge fix deck.pptx -o fixed.pptx        # 기계적 수정 셋: 폰트 슬롯, 자간, 대시
+archforge deck.pptx --html report.html       # 주석 시각 리포트
 archforge deck.pptx --sarif o.sarif          # SARIF / --junit o.xml (CI 연동)
 archforge rules                              # 규칙 목록, 개별 설명은 `archforge explain W15`
 ```
@@ -172,6 +174,13 @@ repos:
 `summary.incomplete`), `--fail-incomplete` 하의 `summary.pass`가 정직한 게이트입니다. 폰트
 커버리지는 한글 심층·CJK 인지 수준이고 다른 스크립트는 오탐하지 않으며, 타겟 렌더러는
 PowerPoint for Windows입니다.
+
+가시성 게이트(W19~W22)도 렌더 없이 XML의 색과 기하만 읽습니다. 글자 뒤에 실제로
+무엇이 그려지는지는 페인트 순서를 위에서부터 소진하며 판정하므로, 위에 얹힌 카드가
+먼저 자기 겹침을 가져가고 그다음에야 슬라이드 배경을 봅니다. svgBlip 벡터 그림으로
+들어간 차트는 내부를 열어 같은 기준으로 판정하고, 해석이 안 되는 채움은 추측하는
+대신 기권합니다. 임계값은 폰트 모델과 같은 방식의 실측입니다. 대비 2.0:1은 실덱
+29개의 후보 전수 확인에서, W21의 색 오타 판정 형태는 148덱에서 나왔습니다.
 
 전체 모델·캘리브레이션 방법·렌더러 매트릭스·범위:
 **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)**,

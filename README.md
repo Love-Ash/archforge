@@ -5,8 +5,8 @@
 **The preflight linter for AI-generated PowerPoint.**
 
 Catches silent font fallback, unreadable sizes, colliding frames,
-off-canvas text, and AI-tell punctuation in built `.pptx` files,
-before a human ever sees a render. Font-fallback and letter-tracking
+off-canvas text, text buried in same-color fills, and AI-tell
+punctuation in built `.pptx` files, before a human ever sees a render. Font-fallback and letter-tracking
 detection (E1/E4) is CJK-specific by design -- deepest for Hangul --
 and does not fire on Latin-only decks, and the small-text rule W8 is
 gated the same way; every other gate is script-independent.
@@ -63,6 +63,9 @@ The worst pptx defects are silent. No error is raised when:
 - positive letter-spacing quietly wrecks CJK character spacing
 - autofit shrinks text below readable size
 - text frames collide, or glyphs run off the canvas
+- text ends up nearly the same color as whatever is drawn behind it: ghost
+  placeholder text, a caption buried on a chart panel, a label lost against
+  the slide background
 
 These are exactly the defects machine-generated decks produce, and exactly the ones
 an LLM cannot see in its own output. Archforge is the gate between "the build
@@ -76,8 +79,8 @@ or PowerPoint itself, the same file goes in and the same exit code comes out, an
 ```bash
 archforge deck.pptx --profile full --fail-incomplete --json   # the agent/CI command
 archforge scan decks/ --profile full         # many files, dirs, or globs at once
-archforge fix deck.pptx -o fixed.pptx        # auto-fix E1/E2/E4 (new in 0.8.1)
-archforge deck.pptx --html report.html       # annotated visual report (new in 0.8.1)
+archforge fix deck.pptx -o fixed.pptx        # the three mechanical fixes: font slot, tracking, dashes
+archforge deck.pptx --html report.html       # annotated visual report
 archforge deck.pptx --sarif o.sarif          # SARIF / --junit o.xml for CI systems
 archforge rules                              # rule list; `archforge explain W15` for one
 ```
@@ -185,6 +188,14 @@ areas with insets, group transforms, and merged cells; incompleteness is a first
 output (`W18` / `summary.incomplete`), so `summary.pass` under `--fail-incomplete` is
 the honest gate. Font-coverage knowledge is Hangul-deep and CJK-aware; other scripts are
 never falsely flagged; the target renderer is PowerPoint for Windows.
+
+The visibility gates (W19-W22) read colors and geometry straight from the XML too.
+What actually sits behind a run is resolved in descending paint order, so an upper
+card claims its overlap before the page background is consulted; a chart carried as
+an svgBlip vector picture is opened and judged inside; anything undecodable abstains
+instead of guessing. Their thresholds were set the way the font model was: the 2.0:1
+contrast line came from pulling every candidate across 29 real decks, and W21's
+stray-color shape from 148.
 
 Full model, calibration method, renderer-coverage matrix, and scope:
 **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)** and
