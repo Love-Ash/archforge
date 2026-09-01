@@ -22,15 +22,19 @@ gated the same way; every other gate is script-independent.
 
 **AI agents / LLMs:** read [llms.txt](llms.txt), or `pip install archforge` then `archforge skill --install` to teach your agent the build-lint-fix loop.
 
-![demo](docs/assets/demo-en.gif)
+![demo](docs/assets/showcase-en.gif)
+
+<sub>The README assets use purpose-built showcase decks, not the decks produced by
+`archforge demo` or an `archforge fix` run; reproduce the exact decks, renders, and
+animation with `python scripts/make_readme_assets.py`.</sub>
 
 </div>
 
 PowerPoint opens both of these decks without a single warning. One of them is broken:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/before-after-en-dark.png">
-  <img src="docs/assets/before-after-en.png" alt="before / after: broken.pptx flagged, fixed.pptx clean">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/showcase-en-dark.png">
+  <img src="docs/assets/showcase-en.png" alt="before / after: the broken deck flagged with E3, W20, W15, W22; the patched deck clean">
 </picture>
 
 Code review cannot see any of it, because the defects live in font slots, autofit

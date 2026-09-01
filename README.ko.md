@@ -18,15 +18,19 @@
 
 **AI 에이전트 / LLM:** [llms.txt](llms.txt)를 읽히거나, `pip install archforge` 후 `archforge skill --install` 이면 에이전트가 빌드-린트-수정 루프를 배웁니다.
 
-![demo](docs/assets/demo-ko.gif)
+![demo](docs/assets/showcase-ko.gif)
+
+<sub>이 문서의 데모 자산은 전시용으로 따로 만든 쇼케이스 덱입니다. `archforge demo`가
+만드는 덱이나 `archforge fix` 산출물이 아니며, 덱·렌더·애니메이션 전부
+`python scripts/make_readme_assets.py`로 재현됩니다.</sub>
 
 </div>
 
 파워포인트는 이 두 덱을 아무 경고 없이 엽니다. 하나는 망가져 있습니다:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/before-after-ko-dark.png">
-  <img src="docs/assets/before-after-ko.png" alt="before / after: 왼쪽은 차단, 오른쪽은 통과">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/showcase-ko-dark.png">
+  <img src="docs/assets/showcase-ko.png" alt="before / after: 왼쪽은 E3·W20·W15·W22로 차단, 오른쪽은 통과">
 </picture>
 
 코드 리뷰로는 이걸 볼 수 없습니다. 결함이 폰트 슬롯, autofit 배율, 좌표처럼 렌더
