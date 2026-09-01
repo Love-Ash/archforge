@@ -44,6 +44,12 @@ PowerPoint installation and runs anywhere your agent or CI runs.
 
 ## 30 seconds
 
+```text
+▄▀█ █▀█ █▀▀ █ █ █▀▀ █▀█ █▀█ █▀▀ █▀▀
+█▀█ █▀▄ █▄▄ █▀█ █▀  █▄█ █▀▄ █▄█ ██▄
+the deck ships only when it is clean
+```
+
 ```bash
 pip install archforge
 archforge demo        # builds broken.pptx + fixed.pptx and lints both, in front of you
@@ -57,6 +63,10 @@ archforge deck.pptx --profile full  # + AI-tell / style rules: machine-made deck
 archforge deck.pptx --json          # machine-readable JSON (agents / CI)
 archforge scan decks/ --profile full   # many files, directories, or globs in one run
 ```
+
+This is what comes back (the showcase deck from the animation above):
+
+![lint output](docs/assets/terminal-en.png)
 
 The decks in [examples/](examples/) demonstrate the flagship defects and the profile
 split, each with expected outputs.
@@ -95,6 +105,11 @@ archforge deck.pptx --html report.html       # annotated visual report
 archforge deck.pptx --sarif o.sarif          # SARIF / --junit o.xml for CI systems
 archforge rules                              # rule list; `archforge explain W15` for one
 ```
+
+The `--html` report draws the linter's own finding boxes onto wireframes of every
+page, so you see where each finding sits without opening PowerPoint:
+
+![html report](docs/assets/report-en.png)
 
 Every flag (thresholds, baseline, severity overrides, schema 2.0, timeout), the config
 file, and the JSON contract: **[docs/USAGE.md](docs/USAGE.md)**. Recipes:
@@ -202,8 +217,13 @@ recorded in the JSON summary, so nothing is silently bypassed.
 ## How it works
 
 The E1 font-resolution model is measured, not guessed from the OOXML spec: probe decks
-rendered through PowerPoint COM pinned the actual priority (run `a:ea` > paragraph
-defRPr > lstStyle chain > theme ea > `a:latin` on an empty theme slot > OS fallback).
+rendered through PowerPoint COM pinned the actual priority, highest first:
+
+```mermaid
+flowchart LR
+    A["run a:ea"] --> B["paragraph defRPr"] --> C["lstStyle chain"] --> D["theme ea"]
+    D --> E["a:latin<br/>(only on an empty theme slot)"] --> F["OS fallback"]
+```
 Effective sizes walk the same chain; geometry approximates real glyph and image-ink
 areas with insets, group transforms, and merged cells; incompleteness is a first-class
 output (`W18` / `summary.incomplete`), so `summary.pass` under `--fail-incomplete` is

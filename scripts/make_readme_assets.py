@@ -523,6 +523,65 @@ def compose_gif(lang, rb, rf, out_path):
     return out_path
 
 
+# ---------------------------------------------------------------- terminal card
+def compose_terminal(lang, deck_path, out_path):
+    """Render the actual CLI output as a dark terminal card. The text is captured
+    from a real run, not typed in, so the card cannot drift from the product."""
+    out = subprocess.run(
+        [sys.executable, "-m", "archforge", deck_path, "--profile", "full",
+         "--lang", lang],
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
+    cmd = "archforge showcase.pptx --profile full"
+    lines = [ln for ln in out.stdout.rstrip().split("\n") if ln.strip()]
+    lines[0] = "=== ARCHFORGE LINT: showcase.pptx ==="   # hide the build path
+
+    body_f = _kfont(24) if lang == "ko" else _font(24)
+    mono = _font(24)
+    probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+
+    # fold long finding lines at their " | " payload separator so the card stays
+    # readable at README width instead of stretching into a ribbon
+    wrapped = []
+    for ln in lines:
+        if int(probe.textlength(ln, font=body_f)) > 1440 and " | " in ln:
+            head, tail = ln.split(" | ", 1)
+            wrapped.append((head, ln))
+            wrapped.append(("        | " + tail, ln))
+        else:
+            wrapped.append((ln, ln))
+    lines = wrapped
+    maxw = max(int(probe.textlength(txt, font=body_f)) for txt, _ in lines)
+    W = max(1360, maxw + 120)
+    lh = 42
+    H = 96 + 46 + lh * len(lines) + 40
+
+    im = Image.new("RGB", (W, H), TERM_BG)
+    d = ImageDraw.Draw(im)
+    d.rectangle([0, 0, W, 64], fill=(24, 28, 35))
+    for i, c in enumerate([(228, 96, 84), (222, 176, 74), (98, 186, 116)]):
+        d.ellipse([28 + i * 34, 24, 44 + i * 34, 40], fill=c)
+    tw = int(d.textlength(cmd, font=mono))
+    d.text(((W - tw) // 2, 18), cmd, font=mono, fill=(150, 158, 168))
+
+    y = 96
+    d.text((48, y), "$ " + cmd, font=mono, fill=TERM_INK)
+    y += 46
+    for txt, src in lines:
+        if src.startswith("---"):
+            col = RED
+        elif "ERROR" in src.split("[")[0]:
+            col = (226, 118, 104)
+        elif src.lstrip().startswith("WARN"):
+            col = (217, 172, 96)
+        else:
+            col = (168, 176, 186)
+        d.text((48, y), txt, font=body_f, fill=col)
+        y += lh
+    d.rectangle([0, 0, W - 1, H - 1], outline=(52, 58, 66), width=1)
+    im.save(out_path)
+    return out_path
+
+
 # ---------------------------------------------------------------- main
 def main():
     os.makedirs(WORK, exist_ok=True)
@@ -540,6 +599,8 @@ def main():
         compose_ba(lang, rb, rf, dark=True,
                    out_path=os.path.join(ASSETS, "showcase-%s-dark.png" % lang))
         compose_gif(lang, rb, rf, os.path.join(ASSETS, "showcase-%s.gif" % lang))
+        compose_terminal(lang, broken,
+                         os.path.join(ASSETS, "terminal-%s.png" % lang))
         print(lang, "assets done")
     print("all showcase assets rebuilt")
 

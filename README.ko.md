@@ -40,6 +40,12 @@
 
 ## 30초
 
+```text
+▄▀█ █▀█ █▀▀ █ █ █▀▀ █▀█ █▀█ █▀▀ █▀▀
+█▀█ █▀▄ █▄▄ █▀█ █▀  █▄█ █▀▄ █▄█ ██▄
+깨끗해진 덱만 배포됩니다
+```
+
 ```bash
 pip install archforge
 archforge demo        # broken.pptx + fixed.pptx 를 만들어 눈앞에서 바로 린트
@@ -53,6 +59,10 @@ archforge deck.pptx --profile full  # + AI 티·스타일 규칙: 기계 생성 
 archforge deck.pptx --json          # 기계 판독용 JSON (에이전트·CI)
 archforge scan decks/ --profile full   # 파일·디렉터리·글롭 여러 개를 한 번에
 ```
+
+돌리면 이렇게 돌아옵니다(위 애니메이션의 쇼케이스 덱):
+
+![린트 출력](docs/assets/terminal-ko.png)
 
 [examples/](examples/)의 덱들이 대표 결함과 프로파일 분리를 기대 출력과 함께 보여줍니다.
 
@@ -87,6 +97,11 @@ archforge deck.pptx --html report.html       # 주석 시각 리포트
 archforge deck.pptx --sarif o.sarif          # SARIF / --junit o.xml (CI 연동)
 archforge rules                              # 규칙 목록, 개별 설명은 `archforge explain W15`
 ```
+
+`--html` 리포트는 페이지 와이어프레임 위에 린터의 판정 박스를 그대로 그려서,
+파워포인트를 열지 않고도 각 판정이 어디 있는지 보여줍니다:
+
+![html 리포트](docs/assets/report-ko.png)
 
 전체 플래그(임계값, baseline, severity 오버라이드, 스키마 2.0, timeout)와 설정 파일,
 JSON 계약: **[docs/USAGE.md](docs/USAGE.md)** (영문). 레시피:
@@ -191,8 +206,13 @@ W1과 W8 사이에는 의도된 공백이 있습니다. 본문급도 아니고 �
 ## 작동 방식
 
 `E1`의 폰트 해석은 규격 추정이 아니라 실측입니다. PowerPoint COM으로 프로브 덱을 렌더해
-우선순위를 확정했습니다(run `a:ea` > 문단 defRPr > lstStyle 체인 > 테마 ea > 빈 테마일 때만
-`a:latin` > OS 폴백). 실효 크기도 같은 체인을 해석하고, 기하는 인셋·그룹 변환·병합 셀까지
+실제 우선순위를 확정했습니다(높은 쪽부터):
+
+```mermaid
+flowchart LR
+    A["run a:ea"] --> B["문단 defRPr"] --> C["lstStyle 체인"] --> D["테마 ea"]
+    D --> E["a:latin<br/>(테마 슬롯이 빌 때만)"] --> F["OS 폴백"]
+``` 실효 크기도 같은 체인을 해석하고, 기하는 인셋·그룹 변환·병합 셀까지
 반영해 실효 글리프·잉크 영역을 근사합니다. 검사 불완전성은 일급 출력이라(`W18` /
 `summary.incomplete`), `--fail-incomplete` 하의 `summary.pass`가 정직한 게이트입니다. 폰트
 커버리지는 한글 심층·CJK 인지 수준이고 다른 스크립트는 오탐하지 않으며, 타겟 렌더러는
