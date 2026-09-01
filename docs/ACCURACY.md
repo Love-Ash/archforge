@@ -13,7 +13,7 @@ so this is regression verification, not independent ground truth. Second, the
 per-gate samples are tiny; the exact one-sided 95% lower bound below shows how
 little a small perfect score proves (1/1 -> 5%, 3/3 -> 37%).
 
-Measured with archforge 0.10.0. Corpus: 47 decks, 5 generator families, 15 clean
+Measured with archforge 0.11.0. Corpus: 47 decks, 5 generator families, 15 clean
 negatives, 75 slides, all synthetic (no field decks yet). Observed false
 positives across the whole corpus: 0 (0.00 per 10 slides on this corpus).
 
