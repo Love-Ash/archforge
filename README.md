@@ -8,8 +8,8 @@ Catches silent font fallback, unreadable sizes, colliding frames,
 off-canvas text, and AI-tell punctuation in built `.pptx` files,
 before a human ever sees a render. Font-fallback and letter-tracking
 detection (E1/E4) is CJK-specific by design -- deepest for Hangul --
-and does not fire on Latin-only decks; every other gate is
-script-independent.
+and does not fire on Latin-only decks, and the small-text rule W8 is
+gated the same way; every other gate is script-independent.
 
 **Try it in your browser -- no install, the deck never leaves the page:** [love-ash.github.io/archforge](https://love-ash.github.io/archforge/)
 
@@ -168,9 +168,10 @@ WARNs are advisory:
 
 Profiles separate objective defects from style policy, and since 0.4.0 the default is
 `core`: only the mechanical gates (E1/E3/E4, W1/W5/W7/W8, W15-W18) run unless you opt in.
-`full` adds the AI-tell and convention rules (E2 dashes, W6 repetition, W9-W14) and is the
-right mode for agent build-loops linting machine-generated decks; `editorial` drops W6/W14
-for editorial and portfolio decks. Excluded rules are not merely hidden, they are not
+`full` adds the AI-tell and convention rules (E2 dashes, W6 repetition, W9-W14) and the
+render rules still soaking their thresholds (W19-W22), and is the right mode for agent
+build-loops linting machine-generated decks; `editorial` drops W6/W14 and the soaking
+W19-W22 for editorial and portfolio decks. Excluded rules are not merely hidden, they are not
 executed, and every choice is recorded in the JSON summary, so nothing is silently
 bypassed.
 
