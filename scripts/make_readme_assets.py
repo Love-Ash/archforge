@@ -17,7 +17,11 @@ Design decisions (2026-09-01, external design review):
   the story false.
 - The animation uses hard match cuts on identical coordinates instead of
   crossfades (double exposure was blurring the very contrast it should show),
-  plus a 170% inset on the two defects too small to read at README width.
+  plus magnified insets, cropped from the full-resolution render, for the two
+  defects too small to read at README width. The stage shares the banner's
+  palette (near-black, bronze, a terminal bar), defects get a spotlight dim
+  and a filled code badge, and each match cut is confirmed by green
+  code-fixed badges on the patched regions.
 
 Requires PowerPoint for Windows (COM render). Output goes to docs/assets/.
 """
@@ -77,7 +81,7 @@ T = {
             "cut1": "same coordinates, patched",
             "p2": "page 2: W15 frames collided, W22 rule through the label",
             "inset2": "the impaled label, magnified",
-            "end": "4 found  >  4 patched  >  CLEAN, exit 0",
+            "end": "4 found  >  4 patched  >  CLEAN",
         },
         "ba_caption": "PowerPoint renders both without a single error message. "
                       "archforge reads the .pptx and blocks the left one.",
@@ -112,7 +116,7 @@ T = {
             "cut1": "같은 좌표, 교정본",
             "p2": "2쪽: W15 프레임 충돌, W22 괘선이 라벨 관통",
             "inset2": "관통당한 라벨, 확대",
-            "end": "4 found  >  4 patched  >  CLEAN, exit 0",
+            "end": "4 found  >  4 patched  >  CLEAN",
         },
         "ba_caption": "파워포인트는 둘 다 에러 없이 엽니다. archforge는 pptx를 읽어 왼쪽을 차단합니다.",
     },
@@ -121,7 +125,7 @@ T = {
 # defect geometry shared by the deck builder and the marker/inset composer (inches)
 GEO = {
     "e3": (0.8, 6.95, 8.6, 0.28),
-    "e3_inset": (0.8, 6.88, 3.2, 0.4),
+    "e3_inset": (0.85, 6.985, 2.4, 0.1),
     "buried_card": (9.05, 4.7, 3.4, 1.9),
     "buried_label": (9.25, 6.05, 3.0, 0.35),
     "kpi_a": (1.0, 2.6, 5.0, 0.9),
@@ -271,7 +275,7 @@ def selfcheck(path, lang, fixed):
 
 
 # ---------------------------------------------------------------- rendering
-def render(pptx_path, out_dir, width=2200):
+def render(pptx_path, out_dir, width=4200):
     import win32com.client
     os.makedirs(out_dir, exist_ok=True)
     app = win32com.client.Dispatch("PowerPoint.Application")
@@ -361,44 +365,128 @@ def compose_ba(lang, renders_broken, renders_fixed, dark, out_path):
     return out_path
 
 
-def _frame(base_size, slide_png, term_line, kf, marks=None, inset=None, badge=None):
+# The animation stage borrows the banner's look: a near-black canvas with faint
+# bronze blueprint lines, the slide floated as a lit card, and a terminal bar that
+# carries the narration. Defects get a spotlight (everything else dims), a filled
+# code badge, and after each match cut the patched region flashes a green check so
+# the change itself is pointed at, not merely present.
+STAGE_BG = (11, 13, 17)
+STAGE_LINE = (176, 141, 87)
+TERM_BG = (17, 20, 26)
+TERM_INK = (214, 220, 228)
+RED = (206, 74, 58)
+GREEN = (86, 176, 128)
+
+
+def _stage(base_size):
     W, H = base_size
-    im = Image.new("RGB", (W, H), (250, 250, 251))
+    im = Image.new("RGB", (W, H), STAGE_BG)
+    d = ImageDraw.Draw(im)
+    faint = (34, 30, 24)
+    d.ellipse([W - 260, -140, W + 120, 240], outline=faint, width=2)
+    d.rectangle([-120, H - 300, 140, H - 40], outline=faint, width=2)
+    return im
+
+
+def _card_box(base_size):
+    W, H = base_size
+    card_h = H - 66 - 52 - 10          # terminal bar, top margin, breathing room
+    card_w = int(card_h * 13.333 / 7.5)
+    return (W - card_w) // 2, 52, card_w, card_h
+
+
+def _badge(d, x, y, text, fill, fnt):
+    tw = int(d.textlength(text, font=fnt))
+    d.rectangle([x, y, x + tw + 22, y + 38], fill=fill)
+    d.text((x + 11, y + 6), text, font=fnt, fill=(255, 255, 255))
+
+
+def _frame(base_size, slide_png, term_line, kf, marks=None, inset=None,
+           fixed_marks=None, verdict="exit 1"):
+    W, H = base_size
+    im = _stage(base_size)
     s = Image.open(slide_png).convert("RGB")
-    card_w = W - 64
-    card_h = int(card_w * 7.5 / 13.333)
+    sx, sy, card_w, card_h = _card_box(base_size)
     s = s.resize((card_w, card_h), Image.LANCZOS)
-    sx, sy = 32, 20
+
+    if marks:
+        dim = Image.new("L", s.size, 84)          # spotlight: dim all but the defects
+        dd = ImageDraw.Draw(dim)
+        for _, geo in marks:
+            x0, y0, x1, y1 = _slide_xy(geo, (0, 0, card_w, card_h))
+            dd.rectangle([x0 - 14, y0 - 10, x1 + 14, y1 + 10], fill=0)
+        s = Image.composite(Image.new("RGB", s.size, (24, 26, 31)), s,
+                            dim.point(lambda v: v))
+        s = Image.blend(Image.open(slide_png).convert("RGB").resize(s.size, Image.LANCZOS),
+                        s, 0.72)
+
     im.paste(s, (sx, sy))
     d = ImageDraw.Draw(im)
-    d.rectangle([sx - 1, sy - 1, sx + card_w, sy + card_h],
-                outline=(205, 209, 215), width=1)
-    red = (196, 60, 46)
+    d.rectangle([sx - 2, sy - 2, sx + card_w + 1, sy + card_h + 1],
+                outline=(107, 87, 63), width=2)
+    d.text((sx, sy - 34), "showcase.pptx", font=_font(21), fill=(150, 128, 96))
+
+    code_f = _font(24)
     if marks:
         for code, geo in marks:
             x0, y0, x1, y1 = _slide_xy(geo, (sx, sy, card_w, card_h))
-            d.rectangle([x0 - 8, y0 - 6, x1 + 8, y1 + 6], outline=red, width=3)
-            d.text((x0 - 6, y0 - 30), code, font=_font(22), fill=red)
+            d.rectangle([x0 - 14, y0 - 10, x1 + 14, y1 + 10], outline=RED, width=4)
+            _badge(d, x0 - 14, max(sy + 4, y0 - 54), code, RED, code_f)
+    if fixed_marks:
+        for code, geo in fixed_marks:
+            x0, y0, x1, y1 = _slide_xy(geo, (sx, sy, card_w, card_h))
+            d.rectangle([x0 - 14, y0 - 10, x1 + 14, y1 + 10], outline=GREEN, width=4)
+            _badge(d, x0 - 14, max(sy + 4, y0 - 54), code + " fixed", (47, 122, 84), code_f)
     if inset:
-        geo, scale = inset
+        geo, scale, code, pad = inset
         x0, y0, x1, y1 = _slide_xy(geo, (sx, sy, card_w, card_h))
-        pad = 26
-        crop = im.crop((x0 - pad, y0 - pad, x1 + pad, y1 + pad))
-        cw = int(crop.size[0] * scale)
-        ch = int(crop.size[1] * scale)
+        # crop from the full-resolution render, not the resized card, so the
+        # magnified region enlarges real pixels instead of card-size ones
+        src = Image.open(slide_png).convert("RGB")
+        fx = src.size[0] / card_w
+        crop = src.crop((int((x0 - sx - pad) * fx), int((y0 - sy - pad) * fx),
+                         int((x1 - sx + pad) * fx), int((y1 - sy + pad) * fx)))
+        cw = int((x1 - x0 + 2 * pad) * scale)
+        ch = int((y1 - y0 + 2 * pad) * scale)
         crop = crop.resize((cw, ch), Image.LANCZOS)
-        px = (W - cw) // 2
-        py = sy + card_h - ch - 60
+        px, py = (W - cw) // 2, sy + card_h - ch - 44
+        d.rectangle([px - 8, py - 8, px + cw + 7, py + ch + 7], fill=STAGE_BG)
         im.paste(crop, (px, py))
-        d.rectangle([px - 2, py - 2, px + cw + 1, py + ch + 1], outline=red, width=3)
-    if badge:
-        bf = _font(34)
-        tw = d.textlength(badge, font=bf)
-        bx = (W - int(tw)) // 2
-        by = sy + card_h // 2 - 30
-        d.rectangle([bx - 26, by - 18, bx + int(tw) + 26, by + 52], fill=(18, 22, 28))
-        d.text((bx, by), badge, font=bf, fill=(235, 238, 242))
-    d.text((sx, H - 40), term_line, font=kf, fill=(60, 66, 76))
+        d.rectangle([px - 3, py - 3, px + cw + 2, py + ch + 2], outline=RED, width=4)
+        _badge(d, px - 3, py - 54, code, RED, code_f)
+
+    # terminal bar
+    ty = H - 66
+    d.rectangle([0, ty, W, H], fill=TERM_BG)
+    d.line([0, ty, W, ty], fill=(45, 50, 58), width=1)
+    d.text((40, ty + 18), "$", font=_font(26), fill=STAGE_LINE)
+    d.text((72, ty + 18), term_line, font=kf, fill=TERM_INK)
+    vcol = GREEN if "0" in verdict else RED
+    vw = int(d.textlength(verdict, font=_font(24)))
+    d.text((W - vw - 44, ty + 19), verdict, font=_font(24), fill=vcol)
+    return im
+
+
+def _end_card(base_size, g, lang):
+    W, H = base_size
+    im = _stage(base_size)
+    d = ImageDraw.Draw(im)
+    big = _font(52)
+    txt = g["end"]
+    tw = int(d.textlength(txt, font=big))
+    d.text(((W - tw) // 2, H // 2 - 88), txt, font=big, fill=(232, 226, 210))
+    ok = "exit 0"
+    of = _font(34)
+    ow = int(d.textlength(ok, font=of))
+    d.text(((W - ow) // 2, H // 2), ok, font=of, fill=GREEN)
+    try:
+        serif = ImageFont.truetype(
+            os.path.join(os.environ["WINDIR"], "Fonts", "georgia.ttf"), 40)
+    except Exception:
+        serif = _font(40)
+    name = "Archforge"
+    nw = int(d.textlength(name, font=serif))
+    d.text(((W - nw) // 2, H // 2 + 110), name, font=serif, fill=(150, 128, 96))
     return im
 
 
@@ -411,22 +499,26 @@ def compose_gif(lang, rb, rf, out_path):
     def add(n, img):
         frames.extend([img] * n)
 
-    add(4, _frame(size, rb[0], g["open"], kf))
-    add(3, _frame(size, rb[0], g["p1"], kf,
-                  marks=[("E3", GEO["e3"]), ("W20", GEO["buried_label"])]))
-    add(3, _frame(size, rb[0], g["inset1"], kf, inset=(GEO["e3_inset"], 3.2)))
-    add(1, _frame(size, rb[0], g["cut1"], kf))
-    add(2, _frame(size, rf[0], g["cut1"], kf))
-    add(4, _frame(size, rb[1], g["p2"], kf))
-    add(3, _frame(size, rb[1], g["p2"], kf,
-                  marks=[("W15", GEO["kpi_b_broken"]), ("W22", GEO["impaled"])]))
-    add(3, _frame(size, rb[1], g["inset2"], kf, inset=(GEO["impaled"], 2.2)))
-    add(1, _frame(size, rb[1], g["cut1"], kf))
-    add(2, _frame(size, rf[1], g["cut1"], kf))
-    add(2, _frame(size, rf[0], g["end"], kf, badge=g["end"]))
+    p1_marks = [("E3", GEO["e3"]), ("W20", GEO["buried_label"])]
+    p1_fixed = [("E3", GEO["e3"]), ("W20", GEO["buried_label"])]
+    p2_marks = [("W15", GEO["kpi_b_broken"]), ("W22", GEO["impaled"])]
+    p2_fixed = [("W15", GEO["kpi_b_fixed"]), ("W22", GEO["impaled"])]
 
-    q = [f.quantize(colors=64, dither=Image.Dither.NONE) for f in frames]
-    q[0].save(out_path, save_all=True, append_images=q[1:], duration=320, loop=0,
+    add(3, _frame(size, rb[0], g["open"], kf))
+    add(3, _frame(size, rb[0], g["p1"], kf, marks=p1_marks))
+    add(3, _frame(size, rb[0], g["inset1"], kf, inset=(GEO["e3_inset"], 3.8, "E3", 12)))
+    add(1, _frame(size, rb[0], g["p1"], kf, marks=p1_marks))
+    add(3, _frame(size, rf[0], g["cut1"], kf, fixed_marks=p1_fixed, verdict="exit 0"))
+    add(1, _frame(size, rf[0], g["cut1"], kf, verdict="exit 0"))
+    add(3, _frame(size, rb[1], g["p2"], kf, marks=p2_marks))
+    add(3, _frame(size, rb[1], g["inset2"], kf, inset=(GEO["impaled"], 2.2, "W22", 26)))
+    add(1, _frame(size, rb[1], g["p2"], kf, marks=p2_marks))
+    add(3, _frame(size, rf[1], g["cut1"], kf, fixed_marks=p2_fixed, verdict="exit 0"))
+    add(1, _frame(size, rf[1], g["cut1"], kf, verdict="exit 0"))
+    add(3, _end_card(size, g, lang))
+
+    q = [f.quantize(colors=128, dither=Image.Dither.NONE) for f in frames]
+    q[0].save(out_path, save_all=True, append_images=q[1:], duration=340, loop=0,
               optimize=True)
     return out_path
 
