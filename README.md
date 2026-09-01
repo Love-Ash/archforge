@@ -54,6 +54,10 @@ archforge scan decks/ --profile full   # many files, directories, or globs in on
 The decks in [examples/](examples/) demonstrate the flagship defects and the profile
 split, each with expected outputs.
 
+> [!TIP]
+> No terminal handy? Drop a deck on [love-ash.github.io/archforge](https://love-ash.github.io/archforge/)
+> and every gate runs in your browser. The file never leaves the page.
+
 ## Why
 
 The worst pptx defects are silent. No error is raised when:
@@ -135,48 +139,58 @@ repos:
 
 ## What it catches
 
-ERRORs block shipping (exit 1):
+Every code links to its full story: what fires, what deliberately passes, and where
+the threshold came from.
 
-| Code | Meaning |
+**ERRORs** block shipping (exit 1):
+
+| Code | Catches |
 |:----:|---------|
-| `E1` | The font that will actually render Hangul text is Latin-only: silent Malgun fallback. Resolution follows a measured PowerPoint model (see below) |
-| `E2` | Dash-family characters used as sentence punctuation (the top AI-generated-deck tell). Numeric ranges (2020 to 2024 with an en dash, Q1 to Q3, 5% to 10%) and minus signs pass by default; `--strict` blocks everything |
-| `E3` | Effective size below 5pt after autofit and the full placeholder inheritance chain: unreadable |
-| `E4` | Positive tracking on consecutive Hangul/Hanja: letter-spacing damage (kana-containing runs are exempt; tracked kana is legitimate Japanese practice) |
+| [`E1`](docs/rules/E1.md) | The font that will actually render Hangul is Latin-only: silent Malgun fallback, resolved through a measured PowerPoint model |
+| [`E2`](docs/rules/E2.md) | Dash-family characters as sentence punctuation, the top AI-deck tell. Numeric ranges and minus signs pass; `--strict` blocks all |
+| [`E3`](docs/rules/E3.md) | Effective size below 5pt after autofit and the full inheritance chain |
+| [`E4`](docs/rules/E4.md) | Positive tracking on consecutive Hangul/Hanja (tracked kana is exempt) |
 
-WARNs are advisory:
+**WARNs** are advisory:
 
-| Code | Meaning |
+| Code | Catches |
 |:----:|---------|
-| `W1` | Body-class frame below 9pt |
-| `W5` | No font size anywhere in the inheritance chain |
-| `W6` | Same layout skeleton on 4+ pages (tunable; template systems: tune or skip) |
-| `W7` | Low text-over-image contrast (needs `--render`) |
-| `W8` | Small CJK in narrow frames, no wider than 4in (device mockups, cards) |
-| | Between the gates: text at 5.0-9.0pt in a frame that is neither body-class (W1) nor narrow (W8) is deliberately not judged. Measured across 29 real decks (2026-08-10): every one of the 1,231 runs in that band was page furniture -- copyright lines, template watermarks, page numbers, running footers -- and zero were content meant to be read. A gate there would trade hundreds of false positives for no measured catch. The measurement is re-runnable; an outside report of a real miss in this band is exactly the fixture #8 asks for. |
-| `W9` | Accent vertical bars repeated as list markers |
-| `W10` | Hand-drawn diagram cloned across pages |
-| `W11` | AI-tell copy: buzzwords, stock openings |
-| `W12` | Footer baseline drift |
-| `W13` | Native PowerPoint shadow/glow/3D effects |
-| `W14` | Titles are nominal phrases, not claims (Korean heuristic; numeric titles count as claims) |
-| `W15` | Estimated text-on-text overlap |
-| `W16` | Text glyphs or picture ink off-canvas |
-| `W17` | Text straddling an image ink edge |
-| `W18` | Some spans could not be checked (malformed input): results incomplete. Fails under `--strict` |
-| `W19` | Text color nearly identical to its own shape's solid fill (under 2.0:1 contrast): ghost placeholder text and near-invisible labels. XML colors only, no render needed; runs in the `full` profile while the threshold soaks |
-| `W20` | Text buried on what is drawn behind it, at under 2.0:1 contrast: a caption laid across a chart's bars, a footnote dropped onto a colored panel, ghost text sitting directly on the slide background, or a caption buried inside an svgBlip vector chart. Coverage is summed across every shape under the run; undecodable fills and backgrounds abstain; XML colors and geometry, no render; `full` profile while the coverage floor soaks |
-| `W21` | A color painted a handful of times right beside a near-identical one used throughout the deck: what a mistyped hex looks like from outside. Judged deck-wide rather than per page, on redmean distance at or under 16 with the dominant color painted at least 6x more often. Deliberate ramps are excluded by requiring that neither color carry more than two near neighbours, which is what separates a gradient from a slip. Measured on 148 decks, where 95% report nothing and the worst reports two; `full` profile while the thresholds soak |
-| `W22` | Text crossed by a hairline rule: a thin divider passing through the glyph box and covering at least half the run, what an unintended strikethrough looks like. Underlines and section dividers sit outside the glyph box and pass by geometry; `full` profile while the thresholds soak |
+| [`W1`](docs/rules/W1.md) | Body-class frame below 9pt |
+| [`W5`](docs/rules/W5.md) | No font size anywhere in the inheritance chain |
+| [`W6`](docs/rules/W6.md) | Same layout skeleton on 4+ pages |
+| [`W7`](docs/rules/W7.md) | Low text-over-image contrast (needs `--render`) |
+| [`W8`](docs/rules/W8.md) | Small CJK in narrow frames (device mockups, cards) |
+| [`W9`](docs/rules/W9.md) | Accent vertical bars repeated as list markers |
+| [`W10`](docs/rules/W10.md) | Hand-drawn diagram cloned across pages |
+| [`W11`](docs/rules/W11.md) | AI-tell copy: buzzwords, stock openings |
+| [`W12`](docs/rules/W12.md) | Footer baseline drift |
+| [`W13`](docs/rules/W13.md) | Native PowerPoint shadow/glow/3D effects |
+| [`W14`](docs/rules/W14.md) | Titles that are nominal phrases, not claims |
+| [`W15`](docs/rules/W15.md) | Text-on-text overlap |
+| [`W16`](docs/rules/W16.md) | Text glyphs or picture ink off-canvas |
+| [`W17`](docs/rules/W17.md) | Text straddling an image ink edge |
+| [`W18`](docs/rules/W18.md) | Spans that could not be checked: results incomplete, fails under `--strict` |
+| [`W19`](docs/rules/W19.md) | Text nearly the color of its own fill: ghost placeholder text |
+| [`W20`](docs/rules/W20.md) | Text buried on whatever is drawn behind it, down to the slide background and the inside of vector charts |
+| [`W21`](docs/rules/W21.md) | A stray color painted right beside a near-identical dominant one: a mistyped hex |
+| [`W22`](docs/rules/W22.md) | Text impaled on a hairline rule: an unintended strikethrough |
 
-Profiles separate objective defects from style policy, and since 0.4.0 the default is
-`core`: only the mechanical gates (E1/E3/E4, W1/W5/W7/W8, W15-W18) run unless you opt in.
-`full` adds the AI-tell and convention rules (E2 dashes, W6 repetition, W9-W14) and the
-render rules still soaking their thresholds (W19-W22), and is the right mode for agent
-build-loops linting machine-generated decks; `editorial` drops W6/W14 and the soaking
-W19-W22 for editorial and portfolio decks. Excluded rules are not merely hidden, they are not
-executed, and every choice is recorded in the JSON summary, so nothing is silently
-bypassed.
+Between W1 and W8 sits a deliberate gap: text at 5.0-9.0pt in a frame that is neither
+body-class nor narrow is not judged. Across 29 real decks, all 1,231 runs in that band
+were page furniture and none were content, so a gate there would trade hundreds of
+false positives for no measured catch. The measurement is re-runnable, and an outside
+report of a real miss in that band is the most valuable fixture you can send.
+
+### Profiles
+
+| Profile | Runs | Built for |
+|:--------|:-----|:----------|
+| `core` (default) | the mechanical gates: E1/E3/E4, W1/W5/W7/W8, W15-W18 | any deck, zero style policy |
+| `full` | everything: adds E2 dashes, W6 repetition, W9-W14, and the visibility gates W19-W22 while their thresholds soak | machine-generated decks and agent loops |
+| `editorial` | `full` minus W6/W14 and the soaking W19-W22 | editorial and portfolio decks |
+
+Excluded rules are not merely hidden, they are not executed, and every choice is
+recorded in the JSON summary, so nothing is silently bypassed.
 
 ## How it works
 
@@ -207,14 +221,17 @@ Full model, calibration method, renderer-coverage matrix, and scope:
 
 Designed for LLM-agent build-lint-fix loops:
 
+```mermaid
+flowchart LR
+    A["build deck.pptx"] --> B["archforge deck.pptx<br/>--profile full --fail-incomplete --json"]
+    B -->|"findings<br/>(shape id + bbox)"| C["archforge fix,<br/>agent patches the rest"]
+    C --> A
+    B -->|"summary.pass"| D["review WARNs<br/>against renders"]
 ```
-build deck.pptx
-loop:
-    result = archforge deck.pptx --profile full --fail-incomplete --json   # machine-made decks
-    if result.summary.pass: break   # pass reflects the active policy (summary.policy)
-    fix listed defects (location payloads point at the exact shape/run), rebuild
-review WARNs against renders
-```
+
+`summary.pass` reflects the active policy (`summary.policy`), and every finding's
+location payload points at the exact shape and run, so the fixing side never has to
+search for what the linter meant.
 
 The Agent Skills pack (standard SKILL.md + YAML frontmatter) teaches this loop and
 per-code fixes to any supporting agent (Claude Code, Codex, ...). It ships inside the
